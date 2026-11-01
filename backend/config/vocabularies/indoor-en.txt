@@ -1,353 +1,200 @@
+wall
 chair
-armchair
-office chair
-dining chair
-folding chair
-rocking chair
-bar stool
-stool
-bench
-sofa
-loveseat
-sectional sofa
-ottoman
-bean bag chair
-recliner
-footstool
-dining table
-coffee table
-side table
-bedside table
-console table
-desk
-standing desk
-dressing table
-workbench
-tabletop
-bed
-bunk bed
-crib
-mattress
-headboard
-pillow
-cushion
-blanket
-duvet
-bed sheet
-quilt
-bedspread
-sleeping bag
-wardrobe
-closet door
-chest of drawers
-dresser
-cabinet
-wall cabinet
-filing cabinet
-display cabinet
-bookshelf
-bookcase
-shelf
-shoe rack
-coat rack
-clothes rail
-drawer
-storage box
-storage bin
-basket
-laundry basket
-hamper
-suitcase
-backpack
-handbag
-tote bag
-shopping bag
-briefcase
-trunk
-safe
-television
-computer monitor
-laptop
-desktop computer
-keyboard
-computer mouse
-mouse pad
-tablet
-mobile phone
-telephone
-printer
-scanner
-router
-speaker
-soundbar
-headphones
-earbuds
-microphone
-webcam
-camera
-projector
-projection screen
-remote control
-game console
-game controller
-charging cable
-power strip
-power adapter
-battery
-wall clock
-alarm clock
-digital clock
-ceiling fan
-floor fan
-desk fan
-air conditioner
-air purifier
-humidifier
-dehumidifier
-space heater
-radiator
-thermostat
-vacuum cleaner
-robot vacuum
-broom
-dustpan
-mop
-bucket
-cleaning cloth
-sponge
-spray bottle
-detergent bottle
-trash can
-recycling bin
-ashtray
-floor lamp
-table lamp
-desk lamp
-ceiling light
-pendant light
-chandelier
-wall light
-light bulb
-lampshade
-light switch
-electrical outlet
-candle
-candle holder
-lantern
-flashlight
-window
-window frame
-window blind
-curtain
-curtain rod
-window shutter
+floor
+table
 door
-door frame
-door handle
-sliding door
-glass door
-room divider
-mirror
-wall mirror
-standing mirror
-picture frame
-painting
-poster
-photograph
-wall art
-tapestry
-calendar
-whiteboard
-notice board
-cork board
-map
-wall shelf
-rug
-carpet
-doormat
-floor mat
-yoga mat
-exercise mat
-vase
-flower pot
-potted plant
-flower arrangement
-artificial plant
-watering can
-plant stand
-statue
-sculpture
-figurine
-ornament
-decorative bowl
-book
-magazine
-newspaper
-notebook
-folder
-binder
-document
-paper stack
-envelope
-pen
-pencil
-marker
-highlighter
-eraser
-ruler
-scissors
-stapler
-tape dispenser
-pencil case
-pen holder
-paperweight
-calculator
-refrigerator
-freezer
-oven
-microwave oven
-stove
-cooktop
-range hood
-dishwasher
-kitchen sink
-faucet
-coffee maker
-espresso machine
-kettle
-toaster
-blender
-food processor
-rice cooker
-slow cooker
-air fryer
-electric grill
-water dispenser
-water filter
-mixing bowl
-plate
-saucer
-bowl
-cup
-mug
-drinking glass
-wine glass
-bottle
-water bottle
-thermos
-pitcher
-jug
-teapot
-pot
-frying pan
-saucepan
-wok
-baking tray
-cutting board
-knife
-knife block
-fork
-spoon
-chopsticks
-spatula
-ladle
-whisk
-tongs
-colander
-strainer
-grater
-peeler
-measuring cup
-measuring spoon
-food container
-jar
-can
-spice rack
-salt shaker
-pepper shaker
-fruit bowl
-bread box
-paper towel roll
-napkin holder
-dish rack
-dish towel
-oven mitt
-apron
-tablecloth
-placemat
-coaster
+couch
+cabinet
+shelf
+desk
+office chair
+bed
+pillow
+sink
+picture
+window
 toilet
-toilet seat
-bathtub
-shower head
-shower curtain
-bathroom sink
-bath mat
+bookshelf
+monitor
+curtain
+book
+armchair
+coffee table
+box
+refrigerator
+lamp
+kitchen cabinet
 towel
-towel rack
-toilet paper roll
-toilet brush
-soap dish
-soap dispenser
-toothbrush
-toothbrush holder
-toothpaste tube
-hairbrush
-comb
-hair dryer
-shampoo bottle
-lotion bottle
-tissue box
-washing machine
-clothes dryer
-drying rack
-ironing board
-clothes iron
-clothes hanger
-shirt
-jacket
-coat
-trousers
-dress
-hat
+clothes
+tv
+nightstand
+counter
+dresser
+stool
+cushion
+plant
+ceiling
+bathtub
+end table
+dining table
+keyboard
+bag
+backpack
+toilet paper
+printer
+tv stand
+whiteboard
+blanket
+shower curtain
+trash can
+closet
+stairs
+microwave
+stove
 shoe
-slipper
-boot
-umbrella
-umbrella stand
-guitar
+computer tower
+bottle
+bin
+ottoman
+bench
+board
+washing machine
+mirror
+copier
+basket
+sofa chair
+file cabinet
+fan
+laptop
+shower
+paper
+person
+paper towel dispenser
+oven
+blinds
+rack
+plate
+blackboard
 piano
-electronic keyboard
-violin
-drum
-music stand
-toy car
-toy truck
-toy block
-stuffed animal
-doll
-board game
-puzzle box
-ball
+suitcase
+rail
+radiator
+recycling bin
+container
+wardrobe
+soap dispenser
+telephone
+bucket
+clock
+stand
+light
+laundry basket
+pipe
+clothes dryer
+guitar
+toilet paper holder
+seat
+speaker
+column
 bicycle
-exercise bike
-treadmill
-dumbbell
-kettlebell
-resistance band
-pet bed
-pet bowl
-cat tree
-aquarium
-bird cage
-fire extinguisher
-smoke detector
-first aid kit
-toolbox
 ladder
-step ladder
-wall vent
+bathroom stall
+shower wall
+cup
+jacket
+storage bin
+coffee maker
+dishwasher
+paper towel roll
+machine
+mat
+windowsill
+bar
+toaster
+bulletin board
+ironing board
 fireplace
-mantelpiece
-staircase
-handrail
+soap dish
+kitchen counter
+doorframe
+toilet paper dispenser
+mini fridge
+fire extinguisher
+ball
+hat
+shower curtain rod
+water cooler
+paper cutter
+tray
+shower door
+pillar
+ledge
+toaster oven
+mouse
+toilet seat cover dispenser
+furniture
+cart
+storage container
+scale
+tissue box
+light switch
+crate
+power outlet
+decoration
+sign
+projector
+closet door
+vacuum cleaner
+candle
+plunger
+stuffed animal
+headphones
+dish rack
+broom
+guitar case
+range hood
+dustpan
+hair dryer
+water bottle
+handicap bar
+purse
+vent
+shower floor
+water pitcher
+mailbox
+bowl
+paper bag
+alarm clock
+music stand
+projector screen
+divider
+laundry detergent
+bathroom counter
+object
+bathroom vanity
+closet wall
+laundry hamper
+bathroom stall door
+ceiling light
+trash bin
+dumbbell
+stair rail
+tube
+bathroom cabinet
+cd case
+closet rod
+coffee kettle
+structure
+shower head
+keyboard piano
+case of water bottles
+coat rack
+storage organizer
+folded chair
+fire alarm
+power strip
+calendar
+poster
+potted plant
+luggage
+mattress
