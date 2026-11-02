@@ -18,7 +18,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run ty check
 uv run pytest                      # CPU suite; `-m gpu` = GPU smoke tests (Colab only)
 npm --prefix frontend run lint && npm --prefix frontend run typecheck && npm --prefix frontend run build
-SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app   # local backend, fake Pipeline
+SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001   # local backend, fake Pipeline
 ```
 
 ### Definition of Done

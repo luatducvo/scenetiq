@@ -13,7 +13,7 @@ export function loadConfig(): BackendConfig {
   } catch {
     /* ignore */
   }
-  return { url: 'http://localhost:8000', token: '' }
+  return { url: 'http://localhost:8001', token: '' }
 }
 
 export function saveConfig(cfg: BackendConfig): void {

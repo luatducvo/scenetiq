@@ -7,7 +7,7 @@ Upload 10–300 photos of a static scene to get a metric 3D point cloud of it. T
 ## 1. One-time setup
 
 1. **Push this repo to GitHub.** The notebook clones `luatducvo/scenetiq@main`, so the repo must be public or the clone step adapted to use a token.
-2. **Create a Cloudflare named tunnel:** in Zero Trust, open **Networks → Tunnels → Create → Cloudflared**, add a public hostname (for example `scenetiq.example.com`) pointing to `http://localhost:8000`, and copy the tunnel token.
+2. **Create a Cloudflare named tunnel:** in Zero Trust, open **Networks → Tunnels → Create → Cloudflared**, add a public hostname (for example `scenetiq.example.com`) pointing to `http://localhost:8001`, and copy the tunnel token.
 3. **Add two Colab secrets** (🔑 sidebar), and give the notebook access to both:
    - `SCENETIQ_TOKEN`: any long random string.
    - `CLOUDFLARE_TUNNEL_TOKEN`: the token from step 2.
@@ -27,7 +27,7 @@ npm --prefix frontend install
 npm --prefix frontend run dev
 ```
 
-1. Open http://localhost:5173.
+1. Open http://localhost:3000.
 2. In **Settings**, enter `https://<your tunnel hostname>` and your `SCENETIQ_TOKEN`.
 
 ## 4. Use it
@@ -50,10 +50,10 @@ npm --prefix frontend run dev
 The fake pipeline returns a small fixed scene. It ignores the uploaded photos and answers `red chair`, `table`, `lamp` and `chair`.
 
 ```bash
-SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8000
+SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001
 ```
 
-Run the frontend as in step 3, using the URL `http://localhost:8000` and the token `dev`.
+Run the frontend as in step 3, using the URL `http://localhost:8001` and the token `dev`.
 
 ## License note
 
