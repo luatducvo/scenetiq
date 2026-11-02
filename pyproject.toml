@@ -7,7 +7,13 @@ authors = [
     { name = "luatducvo", email = "lvo017205@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.162.0",
+    "numpy>=1.26",
+    "pillow>=13.0.0",
+    "python-multipart>=0.0.33",
+    "uvicorn[standard]>=0.54.0",
+]
 
 [project.scripts]
 scenetiq = "scenetiq:main"

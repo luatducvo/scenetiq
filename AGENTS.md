@@ -26,6 +26,24 @@ Python 3.12, managed with uv. Use the vocabulary in `GLOSSARY.md` (Scene, Captur
 | Type check | `uv run ty check` |
 | Tests (CPU, default) | `uv run pytest` |
 | GPU tests (Colab only) | `uv run pytest -m gpu` |
+| Run backend locally | `SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8000` |
+| Frontend install | `npm --prefix frontend install` |
+| Frontend dev server | `npm --prefix frontend run dev` (http://localhost:5173) |
+| Frontend lint | `npm --prefix frontend run lint` |
+| Frontend type check | `npm --prefix frontend run typecheck` |
+| Frontend build | `npm --prefix frontend run build` |
+
+### Configuration
+
+The backend reads environment variables (see `scenetiq.config.Settings`):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SCENETIQ_TOKEN` | (required) | Shared bearer token every request must send |
+| `SCENETIQ_STORAGE_ROOT` | `./data` | SQLite database plus one directory per Scene |
+| `SCENETIQ_MATCH_THRESHOLD` | `0.5` | Minimum relevance score for a Match |
+| `SCENETIQ_PIPELINE` | `fake` | `fake` (no models) or `real` (GPU model stack) |
+| `SCENETIQ_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated browser origins |
 
 ### Docstrings
 
@@ -33,7 +51,15 @@ Google convention, enforced by ruff's `D` rules. Every public module, class, fun
 
 ### Layout
 
-- `src/scenetiq/`: first-party package (pipeline library and HTTP API).
+- `src/scenetiq/`: first-party package.
+  - `domain.py`: the Capture, View, Camera, Instance, Reconstruction and Stage types, plus the `Pipeline` and `TextEncoder` protocols.
+  - `api.py`: the FastAPI app factory `create_app(settings, pipeline, text_encoder)`.
+  - `server.py`: the process entry point, which reads env config and picks the Pipeline.
+  - `storage.py`: SQLite metadata and per-Scene directories.
+  - `artifacts.py`: the on-disk Reconstruction format.
+  - `jobs.py`: the single-slot background job runner.
+  - `fakes.py`: the deterministic fake Pipeline and text encoder.
+- `frontend/`: React + Vite + TypeScript client. It has no router; `App.tsx` switches between screens.
 - `src/scenetiq/vendor/`: vendored third-party code. Excluded from ruff and ty. Every subdirectory needs a `PROVENANCE.md` with the upstream URL, pinned commit, licence and local modifications. First-party wrappers around vendored code live outside `vendor/` and are fully checked.
 - `tests/unit/`: pure functions (coordinate and unit adapters, geometry, metrics).
 - `tests/api/`: **Seam A**. The HTTP API driven through FastAPI's TestClient, with a fake Pipeline and a fake text encoder on a temporary storage root. This is the main suite and must pass on CPU.
@@ -47,4 +73,5 @@ Test only at these seams. Do not test internal stage functions directly.
 2. `uv run ty check` passes with zero diagnostics.
 3. Every new public first-party symbol has a Google-style docstring.
 4. Tests are added at the right seam, and `uv run pytest` passes.
-5. AGENTS.md is updated whenever the ticket adds a command, directory, convention or configuration value that a future agent needs to know.
+5. If the ticket touches `frontend/`: `npm --prefix frontend run lint`, `run typecheck` and `run build` pass.
+6. AGENTS.md is updated whenever the ticket adds a command, directory, convention or configuration value that a future agent needs to know.

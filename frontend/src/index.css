@@ -1,0 +1,64 @@
+:root {
+  --bg: #f7f7f8;
+  --fg: #1d1d1f;
+  --muted: #6b6b73;
+  --panel: #ffffff;
+  --border: #dcdce0;
+  --accent: #2563eb;
+  --error: #c62828;
+  --done: #2e7d32;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --fg: #ececf0;
+    --muted: #9a9aa3;
+    --panel: #1f1f23;
+    --border: #34343a;
+    --accent: #60a5fa;
+    --error: #ef5350;
+    --done: #66bb6a;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+}
+header h1 { margin: 0; font-size: 1.2rem; }
+nav { display: flex; gap: 0.5rem; }
+main { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem; max-width: 640px; width: 100%; display: flex; flex-direction: column; gap: 0.75rem;
+}
+.panel h2 { margin: 0; font-size: 1.05rem; }
+label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+input {
+  padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font: inherit;
+}
+button {
+  padding: 0.45rem 0.9rem; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--fg); cursor: pointer; font: inherit;
+}
+button[type='submit'], button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.danger { color: var(--error); }
+
+.muted { color: var(--muted); margin: 0; }
+.error { color: var(--error); margin: 0; }
+
+.stages { margin: 0; padding-left: 1.2rem; }
+.stages li { color: var(--muted); }
+.stages li.active { color: var(--accent); font-weight: 600; }
+.stages li.done { color: var(--done); }
