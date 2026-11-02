@@ -59,6 +59,8 @@ Google convention, enforced by ruff's `D` rules. Every public module, class, fun
   - `artifacts.py`: the on-disk Reconstruction format.
   - `jobs.py`: the single-slot background job runner.
   - `fakes.py`: the deterministic fake Pipeline and text encoder.
+  - `query.py`: scores Instances against a Query embedding, applies the Match threshold, and returns the Low-confidence Match fallback.
+  - `geometry.py`: Instance centroid and bounding-box computation, plus L2 normalisation.
 - `frontend/`: React + Vite + TypeScript client. It has no router; `App.tsx` switches between screens.
 - `src/scenetiq/vendor/`: vendored third-party code. Excluded from ruff and ty. Every subdirectory needs a `PROVENANCE.md` with the upstream URL, pinned commit, licence and local modifications. First-party wrappers around vendored code live outside `vendor/` and are fully checked.
 - `tests/unit/`: pure functions (coordinate and unit adapters, geometry, metrics).

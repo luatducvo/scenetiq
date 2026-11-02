@@ -82,3 +82,44 @@ export async function getPointCloud(cfg: BackendConfig, sceneId: string): Promis
 export async function deleteScene(cfg: BackendConfig, sceneId: string): Promise<void> {
   await request(cfg, `/scenes/${sceneId}`, { method: 'DELETE' })
 }
+
+export interface InstanceInfo {
+  instance_id: number
+  centroid: [number, number, number]
+  bbox_min: [number, number, number]
+  bbox_max: [number, number, number]
+}
+
+export interface MatchInfo {
+  instance_id: number
+  score: number
+}
+
+export interface QueryResult {
+  matches: MatchInfo[]
+  low_confidence: boolean
+}
+
+/** Per-point Instance ids (-1 = none), in the same order as the point cloud. */
+export async function getInstanceIds(cfg: BackendConfig, sceneId: string): Promise<Int32Array> {
+  const buf = await (await request(cfg, `/scenes/${sceneId}/instance-ids`)).arrayBuffer()
+  return new Int32Array(buf)
+}
+
+export async function getInstances(cfg: BackendConfig, sceneId: string): Promise<InstanceInfo[]> {
+  return (await request(cfg, `/scenes/${sceneId}/instances`)).json()
+}
+
+export async function queryScene(
+  cfg: BackendConfig,
+  sceneId: string,
+  text: string,
+): Promise<QueryResult> {
+  return (
+    await request(cfg, `/scenes/${sceneId}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+  ).json()
+}

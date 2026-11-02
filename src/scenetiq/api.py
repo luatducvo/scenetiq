@@ -13,11 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, Field
 
-from scenetiq.artifacts import POINTS_FILE
+from scenetiq.artifacts import INSTANCE_IDS_FILE, POINTS_FILE, load_instances
 from scenetiq.config import Settings
 from scenetiq.domain import Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
+from scenetiq.query import MissingEmbeddingsError, run_query
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore
 
 logger = logging.getLogger(__name__)
@@ -141,7 +143,74 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         return FileResponse(directory / POINTS_FILE, media_type="application/octet-stream")
 
+    @app.get("/scenes/{scene_id}/instance-ids")
+    def get_instance_ids(request: Request, scene_id: str) -> FileResponse:
+        """Return the Instance id of every point (little-endian int32, PLY order, -1 = none)."""
+        directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
+        return FileResponse(directory / INSTANCE_IDS_FILE, media_type="application/octet-stream")
+
+    @app.get("/scenes/{scene_id}/instances")
+    def get_instances(request: Request, scene_id: str) -> list[InstanceOut]:
+        """List the Scene's Instances with centroid and bounding box in metres."""
+        directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
+        return [
+            InstanceOut(
+                instance_id=inst.instance_id,
+                centroid=inst.centroid.tolist(),
+                bbox_min=inst.bbox_min.tolist(),
+                bbox_max=inst.bbox_max.tolist(),
+            )
+            for inst in load_instances(directory)
+        ]
+
+    @app.post("/scenes/{scene_id}/query")
+    def query_scene(request: Request, scene_id: str, body: QueryIn) -> QueryOut:
+        """Find the Instances that match a free-text Query."""
+        directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
+        text = body.text.strip()
+        if not text:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
+        try:
+            result = run_query(
+                load_instances(directory), text_encoder.encode(text), settings.match_threshold
+            )
+        except MissingEmbeddingsError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        return QueryOut(
+            matches=[MatchOut(instance_id=m.instance_id, score=m.score) for m in result.matches],
+            low_confidence=result.low_confidence,
+        )
+
     return app
+
+
+class InstanceOut(BaseModel):
+    """An Instance's position and extent, in metres."""
+
+    instance_id: int
+    centroid: list[float]
+    bbox_min: list[float]
+    bbox_max: list[float]
+
+
+class QueryIn(BaseModel):
+    """A free-text Query."""
+
+    text: str = Field(max_length=500)
+
+
+class MatchOut(BaseModel):
+    """One Match: an Instance id and its relevance score."""
+
+    instance_id: int
+    score: float
+
+
+class QueryOut(BaseModel):
+    """The Matches for a Query, flagged when only a Low-confidence Match was found."""
+
+    matches: list[MatchOut]
+    low_confidence: bool
 
 
 def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:
