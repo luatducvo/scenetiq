@@ -7,7 +7,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_MATCH_THRESHOLD = 0.5
-"""Default relevance threshold for a Match; replaced by the evaluation harness result."""
+"""Default relevance threshold for a Match.
+
+With the real Pipeline this is a SigLIP2 match probability. Replace it with the
+``recommended_threshold`` of an accepted evaluation-harness run (see AGENTS.md).
+"""
 
 
 @dataclass(frozen=True)

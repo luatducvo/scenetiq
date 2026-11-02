@@ -98,3 +98,13 @@ Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells
 - Tuning knobs live in the stage option dataclasses (`DA3Options`, `FusionOptions`). Defaults: process at 504 px, drop depth below the 30th confidence percentile or beyond 12 m, 2 cm TSDF voxels.
 - Relevance scores: `TextEncoder.to_score` maps cosine similarity to the score that the Match threshold applies to. SigLIP2 uses its own `sigmoid(scale * cos + bias)`, a match probability in [0, 1]. The fake encoder uses cosine similarity as is. Instances that no View sees well enough get no embedding and are dropped.
 - `SCENETIQ_SMOKE_QUERY=<object in the smoke Capture>` turns on the end-to-end Query smoke test.
+
+### Evaluation harness (Seam B, GPU)
+
+`python -m scenetiq.evaluation --scans-dir <scannet>/scans --frames-dir <exported frames> --scenes <id,id,...> --out <dir> [--baseline <earlier report.json>] [--tolerance 0.02]`
+
+- Data: ScanNet v2 `scans/<scene>/` (`_vh_clean_2.ply`, `.aggregation.json`, `_vh_clean_2.0.010000.segs.json`) plus 2D frames exported from the `.sens` files with ScanNet's SensReader (`<scene>/color/<i>.jpg`, `<scene>/pose/<i>.txt`). Put them on Google Drive or local Colab disk. **Never commit or redistribute ScanNet data**; it is under the ScanNet Terms of Use.
+- Per scene: sample ≤300 valid frames evenly, run the real Pipeline on RGB only, align the Reconstruction to ScanNet with a Umeyama similarity on camera centres, transfer Instances to GT vertices (nearest neighbour ≤10 cm), and compute class-agnostic AP / AP50 / AP25. Walls, floors and ceilings are ignored. Then run one Query per GT label; a Match counts as right at IoU ≥ 0.5 with a GT instance of that label.
+- Output: `report.json` and `report.md` with per-scene and aggregate metrics and the F1-optimal threshold. With `--baseline` the command exits 1 if any metric drops more than `--tolerance`. Keep the last accepted `report.json` as the baseline.
+- **Updating the threshold:** after an accepted run, set `DEFAULT_MATCH_THRESHOLD` in `src/scenetiq/config.py` (or `SCENETIQ_MATCH_THRESHOLD` on Colab) to `recommended_threshold`, and note the report it came from in the commit message. Until a run has been made, the default is 0.5 on SigLIP2's sigmoid match probability.
+- The pure parts (`sampling`, `alignment`, `transfer`, `metrics`, `scannet` loaders) have CPU unit tests in `tests/unit/test_evaluation.py`.

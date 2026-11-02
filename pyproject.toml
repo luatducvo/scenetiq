@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.26",
     "pillow>=13.0.0",
     "python-multipart>=0.0.33",
+    "scipy>=1.11",
     "uvicorn[standard]>=0.54.0",
 ]
 
