@@ -1,7 +1,7 @@
 [project]
 name = "scenetiq"
 version = "0.1.0"
-description = "Add your description here"
+description = "Reconstruct a static Scene from 2D photos and find its Instances with open-vocabulary Queries."
 readme = "README.md"
 authors = [
     { name = "luatducvo", email = "lvo017205@gmail.com" }
@@ -12,6 +12,50 @@ dependencies = []
 [project.scripts]
 scenetiq = "scenetiq:main"
 
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=8.3",
+    "ruff>=0.12",
+    "ty>=0.0.1a20",
+]
+
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "C4",  # flake8-comprehensions
+    "RUF", # ruff-specific
+    "PT",  # flake8-pytest-style
+    "PTH", # flake8-use-pathlib
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ty.src]
+exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: needs a CUDA GPU and the real model stack (run on Colab)"]
+addopts = "-m 'not gpu'"
