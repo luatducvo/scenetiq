@@ -67,3 +67,10 @@ button.danger { color: var(--error); }
 .canvas-wrap {
   flex: 1; min-height: 60vh; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
 }
+
+.scene-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.scene-table th, .scene-table td { text-align: left; padding: 0.4rem; border-bottom: 1px solid var(--border); }
+.scene-table .actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.status-succeeded { color: var(--done); }
+.status-failed { color: var(--error); }
+.status-running, .status-queued { color: var(--accent); }

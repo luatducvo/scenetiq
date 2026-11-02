@@ -124,6 +124,17 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         """List every Scene, newest first."""
         return [_scene_summary(r) for r in request.app.state.store.list_scenes()]
 
+    @app.delete("/scenes/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_scene(request: Request, scene_id: str) -> None:
+        """Delete a Scene and all its data; refused while its job is unfinished."""
+        store: SceneStore = request.app.state.store
+        record = store.get_scene(scene_id)
+        if record is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Scene")
+        if record.status in (JobStatus.QUEUED, JobStatus.RUNNING):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Scene job still running")
+        store.delete_scene(scene_id)
+
     @app.get("/scenes/{scene_id}/points")
     def get_points(request: Request, scene_id: str) -> FileResponse:
         """Return the Reconstruction's point cloud as binary PLY (xyz metres, rgb)."""

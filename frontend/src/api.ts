@@ -78,3 +78,7 @@ export async function listScenes(cfg: BackendConfig): Promise<SceneSummary[]> {
 export async function getPointCloud(cfg: BackendConfig, sceneId: string): Promise<ArrayBuffer> {
   return (await request(cfg, `/scenes/${sceneId}/points`)).arrayBuffer()
 }
+
+export async function deleteScene(cfg: BackendConfig, sceneId: string): Promise<void> {
+  await request(cfg, `/scenes/${sceneId}`, { method: 'DELETE' })
+}
