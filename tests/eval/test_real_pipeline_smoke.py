@@ -73,6 +73,7 @@ SMOKE_QUERY_ENV = "SCENETIQ_SMOKE_QUERY"
 SMOKE_QUERY_BOX_ENV = "SCENETIQ_SMOKE_QUERY_BOX"
 SMOKE_ABSENT_QUERY_ENV = "SCENETIQ_SMOKE_ABSENT_QUERY"
 MIN_POINTS_IN_BOX = 0.5
+MIN_POINTS_IN_PHOTO = 0.2
 
 
 def _configured_threshold() -> float:
@@ -85,7 +86,7 @@ def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, fl
     """The View index and its box (left, top, right, bottom; original-photo pixels)."""
     raw = os.environ.get(SMOKE_QUERY_BOX_ENV)
     if not raw:
-        pytest.skip(
+        pytest.fail(
             f"set {SMOKE_QUERY_BOX_ENV}='view,left,top,right,bottom': the queried object's "
             "box in that photo (view = index in the sorted smoke Capture)"
         )
@@ -94,8 +95,8 @@ def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, fl
     return int(view), (left, top, right, bottom)
 
 
-def _fraction_inside_box(points, camera, box, photo_size) -> float:
-    """Share of the points that project into the image and land inside ``box``."""
+def _box_overlap(points, camera, box, photo_size) -> tuple[float, float]:
+    """``(share of points projecting into the photo, share of those inside box)``."""
     from scenetiq.pipeline.adapters import c2w_to_w2c
 
     w2c = c2w_to_w2c(camera.cam_to_world)
@@ -108,12 +109,13 @@ def _fraction_inside_box(points, camera, box, photo_size) -> float:
     u = (k[0, 0] * cam[:, 0] / cam[:, 2] + k[0, 2]) * sx
     v = (k[1, 1] * cam[:, 1] / cam[:, 2] + k[1, 2]) * sy
     in_image = (u >= 0) & (u < photo_size[0]) & (v >= 0) & (v < photo_size[1])
+    in_photo = float(np.count_nonzero(in_image)) / max(len(points), 1)
     if not np.any(in_image):
-        return 0.0
+        return in_photo, 0.0
     left, top, right, bottom = box
     u, v = u[in_image], v[in_image]
     inside = (u >= left) & (u < right) & (v >= top) & (v < bottom)
-    return float(np.mean(inside))
+    return in_photo, float(np.mean(inside))
 
 
 def test_query_for_a_present_object_matches_that_object(
@@ -145,11 +147,14 @@ def test_query_for_a_present_object_matches_that_object(
     best = result.matches[0].instance_id
     with Image.open(smoke_capture.views[view].path) as photo:
         photo_size = photo.size
-    share = _fraction_inside_box(
+    in_photo, share = _box_overlap(
         rec.points[rec.instance_ids == best], rec.cameras[view], box, photo_size
     )
+    assert in_photo >= MIN_POINTS_IN_PHOTO, (
+        f"best Match (Instance {best}) is mostly outside photo {view} ({in_photo:.0%} inside)"
+    )
     assert share >= MIN_POINTS_IN_BOX, (
-        f"best Match (Instance {best}) has only {share:.0%} of its points inside the box"
+        f"best Match (Instance {best}): only {share:.0%} of its in-photo points are in the box"
     )
 
 

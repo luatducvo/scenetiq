@@ -39,7 +39,7 @@ class HarnessConfig:
         frames_dir: Exported 2D frames (``<scene>/color/*.jpg``, ``<scene>/pose/*.txt``).
         scene_ids: Scenes to evaluate.
         out_dir: Where the report is written.
-        max_views: Frames sampled per scene (the Capture limit).
+        max_views: Views sampled per scene, from its valid ScanNet frames (the Capture limit).
         transfer_distance: Max metres between a GT vertex and its nearest predicted point.
         query_iou: IoU with a GT instance of the queried class for a Match to count as right.
         ignore_labels: GT categories left out of both AP and Queries (e.g. walls, floors).

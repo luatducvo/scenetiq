@@ -104,7 +104,7 @@ Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells
 - The end-to-end Query smoke tests use these variables:
   - `SCENETIQ_SMOKE_QUERY=<object clearly visible in the smoke Capture>`.
   - `SCENETIQ_SMOKE_QUERY_BOX=view,left,top,right,bottom`: the object's box, in original-photo pixels, in one photo. `view` is the photo's index in the Capture sorted by file name.
-  - With both set, the test requires a confident Match (no Low-confidence fallback) at the configured threshold, and at least half of the best Match's points must project inside the box.
+  - With `SCENETIQ_SMOKE_QUERY` set, the box is required: the test fails without it. The test requires a confident Match (no Low-confidence fallback) at the configured threshold. Of the best Match's points, at least 20% must project into that photo, and at least half of those must land inside the box. There is no occlusion test.
   - Optionally, `SCENETIQ_SMOKE_ABSENT_QUERY=<object not in the Capture>` requires that Query to come back Low-confidence.
 
 ### Evaluation harness (Seam B, GPU)
