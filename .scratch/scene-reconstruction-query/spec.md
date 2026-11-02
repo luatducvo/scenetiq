@@ -58,7 +58,8 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 ## Implementation Decisions
 
 **Runtime and packaging**
-- The whole project targets Python 3.12. `requires-python` changes from `>=3.14` to `>=3.12,<3.13`. DA3 needs ≤3.13, and Colab runs 3.12.
+- The whole project targets Python 3.12 (`.python-version` 3.12, `requires-python >=3.12`). DA3 needs ≤3.13, and Colab runs 3.12.
+- Every ticket must meet the Definition of Done in AGENTS.md: ruff lint and format pass, ty passes, docstrings (Google style) on all public first-party code, tests at the right seam in the pytest test tree, and AGENTS.md updated when conventions change.
 - It is a monorepo. The Python package holds the pipeline library and the FastAPI app. MV3DIS and the ScanNet Segmentator are vendored inside the package. A separate React frontend (Vite + react-three-fiber/three.js) runs on localhost. A Colab notebook only bootstraps the backend; all logic lives in the package.
 - DA3 is a pip dependency, called through its Python API (`DepthAnything3.from_pretrained(...).inference(...)`).
 
