@@ -7,7 +7,7 @@ from scene_core.registry import Registry
 
 def test_every_configured_algorithm_is_installed_and_no_relation_rule_is():
     available = set(Registry().available())
-    for name in ("pipeline.yaml", "pipeline.fake.yaml", "pipeline.fake-gpu.yaml"):
+    for name in ("pipeline.yaml", "pipeline.fake.yaml"):
         pipeline = PipelineConfig.load(f"backend/config/{name}")
         assert {stage.algorithm for stage in pipeline.stages.values()} <= available, name
     assert not list(Registry("scene_relations").available())

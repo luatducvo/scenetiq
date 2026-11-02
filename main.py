@@ -11,13 +11,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 BACKEND = ROOT / "backend"
-ENV_FILE = BACKEND / ".env"
 TEST_DB = "scene-test-db"
 TEST_DB_PORT = "15432"
 TEST_DATABASE_URL = f"postgresql://scene:scene@127.0.0.1:{TEST_DB_PORT}/scene"
-# Profiles of compose.yaml; `up` starts PARTS unless told which.
-PARTS = ("backend", "frontend")
-PROFILES = (*PARTS, "local-gpu")
 
 COMMANDS = {}
 
@@ -37,9 +33,6 @@ def command(help_text, *arguments, name=None, passthrough=False):
     return register
 
 
-IMAGE_ARGUMENTS = ((["--image"], {}), (["--extras"], {"default": "", "choices": ["", "gpu"]}))
-
-
 # Processes
 
 
@@ -48,33 +41,8 @@ def run(*argv, env=None, check=True):
     return subprocess.run(argv, cwd=ROOT, env={**os.environ, **(env or {})}, check=check)
 
 
-def output(*argv):
-    return subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, check=True).stdout
-
-
 def python(*arguments, env=None, check=True):
     return run(sys.executable, "-m", *arguments, env=env, check=check)
-
-
-def env_values():
-    """backend/.env as a dict, created from .env.example on first use."""
-    if not ENV_FILE.exists():
-        shutil.copyfile(BACKEND / ".env.example", ENV_FILE)
-        print(f"Created {ENV_FILE.relative_to(ROOT)} from .env.example; fill in the keys you need.")
-    values = {}
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.split(" #", 1)[0].strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            values[key.strip()] = value.strip()
-    return values
-
-
-def compose(*arguments, profiles=PROFILES):
-    env_values()
-    flags = [flag for profile in profiles for flag in ("--profile", profile)]
-    files = ["-f", str(ROOT / "compose.yaml"), "--env-file", str(ENV_FILE)]
-    return run("docker", "compose", *files, *flags, *arguments)
 
 
 def require_docker():
@@ -87,60 +55,6 @@ def require_docker():
             "Docker is not running. Start Docker Desktop (or the Docker daemon) and try again; "
             "`uv run main.py test-unit` runs the tests that need no database."
         )
-
-
-def models_dir():
-    return (BACKEND / env_values().get("HOST_MODELS_DIR", "./models")).resolve()
-
-
-# Stack
-
-
-@command("create the host model cache folder")
-def init_storage(_=None):
-    folder = models_dir()
-    folder.mkdir(parents=True, exist_ok=True)
-    print(f"Model cache: {folder}")
-
-
-@command(
-    "start the backend (Postgres, scene-api, scene-worker) and the frontend",
-    (["parts"], {"nargs": "*", "choices": PARTS, "help": "start only these profiles"}),
-)
-def up(args):
-    init_storage()
-    compose("up", "-d", "--build", profiles=args.parts or PARTS)
-
-
-@command("also start scene-compute on the local GPU")
-def up_local_gpu(_):
-    init_storage()
-    compose("up", "-d", "--build")
-
-
-@command("stop every service, keeping all data")
-def down(_):
-    compose("down")
-
-
-@command("delete all Scenes and the database, keep model weights")
-def reset(_):
-    compose("down", "-v")
-
-
-@command("fetch model weights into the host cache")
-def download_models(_):
-    init_storage()
-    module = ["python", "-m", "scene_compute.download_models"]
-    compose("run", "--rm", "scene-compute", *module, profiles=["local-gpu"])
-
-
-@command("show Docker volume and model cache sizes")
-def disk_usage(_):
-    run("docker", "system", "df", "-v", check=False)
-    folder = models_dir()
-    size = sum(p.stat().st_size for p in folder.rglob("*") if p.is_file()) if folder.exists() else 0
-    print(f"Model cache {folder}: {size / 2**30:.2f} GiB")
 
 
 # Checks
@@ -281,38 +195,6 @@ def clean(args):
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         sys.exit(f"Could not finish cleaning {args.target}: {error}")
     print(f"Cleaned {removed} {args.target} artifact locations.")
-
-
-# GPU image
-
-
-def image_name(args):
-    """`--image` wins; otherwise COMPUTE_IMAGE_REPO:<variant>-<git short sha>, so live checks name an exact build."""
-    if args.image:
-        return args.image
-    repository = env_values().get("COMPUTE_IMAGE_REPO")
-    if not repository or "<" in repository:
-        sys.exit("Pass --image or set COMPUTE_IMAGE_REPO in backend/.env")
-    revision = output("git", "rev-parse", "--short", "HEAD").strip()
-    return f"{repository}:{args.extras or 'fake'}-{revision}"
-
-
-@command("build the GPU image", *IMAGE_ARGUMENTS)
-def compute_image(args):
-    dockerfile = str(ROOT / "Dockerfile.compute")
-    platform = ["--platform", "linux/amd64", "--build-arg", f"EXTRAS={args.extras}"]
-    run("docker", "build", *platform, "-f", dockerfile, "-t", image_name(args), str(ROOT))
-
-
-@command("build and push the GPU image", *IMAGE_ARGUMENTS)
-def push_compute_image(args):
-    compute_image(args)
-    image = image_name(args)
-    run("docker", "push", image)
-    template = "{{range .RepoDigests}}{{println .}}{{end}}"
-    digests = output("docker", "image", "inspect", "--format", template, image).split()
-    digest = next((d for d in digests if d.startswith(image.rsplit(":", 1)[0] + "@")), "unknown")
-    print(f"Pushed {image}\nDigest {digest}")
 
 
 def main():

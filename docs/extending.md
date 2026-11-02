@@ -19,7 +19,7 @@ Each recipe lists every file the change touches. Finish with the done check in [
 
 ## A new database column or table
 
-Change `backend/migrations/001_init.sql`, the one schema file, and the `SceneStore` writes and the API reads that use it. Existing databases do not pick the change up: reset yours with `uv run main.py reset` (this deletes every Scene); the test database is recreated on each `main.py test`.
+Change `backend/migrations/001_init.sql`, the one schema file, and the `SceneStore` writes and the API reads that use it. The Colab notebook's backend cell creates the database from it on every run, and the test database is recreated on each `main.py test`.
 
 ## A new viewer layer
 
@@ -29,10 +29,10 @@ Change `backend/migrations/001_init.sql`, the one schema file, and the `SceneSto
 
 ## A new Target or Provider
 
-1. Add the Target to `backend/config/compute.yaml` with `backend: http`, `url: ${<PROVIDER>_URL}`, `token: ${COMPUTE_TOKEN}` and timeouts suited to its cold start.
-2. Add `<PROVIDER>_URL` to `backend/.env.example`.
-3. Write `backend/deploy/<provider>/README.md`: how to run the GPU image there, which port and URL to use, and how to check `/ping` and `/info`.
-4. Check it with `GPU_TARGET=<target>` and `pipeline.fake-gpu.yaml` before the real pipeline.
+A Provider hosts the whole backend, as Colab does ([ADR 0002](adr/0002-the-backend-runs-on-one-colab-runtime.md)).
+
+1. Add the Target to `backend/config/compute.yaml` with `backend: http` and the URL scene-compute listens on. Add `token: ${COMPUTE_TOKEN}` and a `<PROVIDER>_URL` variable in `backend/.env.example` only if scene-compute is reachable beyond the host.
+2. Write `backend/deploy/<provider>/README.md` and its setup: how to install and start Postgres with pgvector, scene-api, scene-worker and scene-compute there, how the frontend reaches scene-api, and how to check `/ping` and `/info`.
 
 ## A new Stage
 

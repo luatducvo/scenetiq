@@ -6,13 +6,13 @@ A user creates a Scene, uploads photos or one video of a room, and starts a Job.
 
 | Process | Code | Role |
 | --- | --- | --- |
-| frontend | `frontend/` | React SPA; talks only to scene-api |
+| frontend | `frontend/` | React SPA on the user's machine (`npm run dev`); talks only to scene-api |
 | scene-api | `backend/services/scene-api` | REST and SSE API; stores uploads on the Target; serves Publication files; Search |
 | scene-worker | `backend/services/scene-worker` | claims queued Jobs, runs every Stage on the Target, publishes |
 | Postgres + pgvector | `backend/migrations/001_init.sql` | Scenes, Jobs, Stage Runs, Objects with embeddings, events |
-| scene-compute | `backend/services/scene-compute` | optional; runs Algorithms on a GPU host behind an HTTP contract |
+| scene-compute | `backend/services/scene-compute` | runs Algorithms on the GPU behind an HTTP contract; the `colab` Target |
 
-Compose (`compose.yaml`) runs these under three profiles: `backend` (Postgres, scene-api, scene-worker), `frontend`, and `local-gpu` (scene-compute on this machine). `uv run main.py up` starts the first two.
+Every backend process runs on one Google Colab runtime, started by `backend/deploy/colab/GPU.ipynb`; a Cloudflare Tunnel exposes scene-api alone. Nothing on the runtime survives it, so a Scene lasts one session. [ADR 0002](../adr/0002-the-backend-runs-on-one-colab-runtime.md) records why.
 
 ## Data flow
 
@@ -36,7 +36,7 @@ Progress reaches the browser as `scene_events` rows that the store writes with e
 | `backend/services/scene-worker/` | `runner.py` the Job loop |
 | `backend/services/scene-compute/` | `server.py` the compute contract · `download_models.py` |
 | `backend/config/` | pipeline and compute YAML, Vocabularies |
-| `backend/deploy/` | the Colab notebook and README; the local GPU README |
+| `backend/deploy/colab/` | the Colab notebook that runs the backend, and its README |
 | `backend/tests/` | pytest suite |
 | `frontend/src/pages/` | route screens |
 | `frontend/src/components/` | screens and panels; `viewer/` for the 3D canvas |
@@ -46,7 +46,7 @@ Progress reaches the browser as `scene_events` rows that the store writes with e
 ## Further reading
 
 - [pipeline.md](pipeline.md): Stages, Workspace layout, Jobs, publishing
-- [compute.md](compute.md): Targets, the compute contract, the GPU image, Providers
+- [compute.md](compute.md): Targets, the compute contract, installing scene-compute, Providers
 - [api.md](api.md): endpoints, lifecycle, events, Search, database, membership format
 - [frontend.md](frontend.md): routes, screens, viewer
 - [../extending.md](../extending.md): recipes for common additions

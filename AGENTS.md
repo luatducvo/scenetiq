@@ -6,6 +6,7 @@ Turns photos or one short video of a room into a metric 3D Scene whose Objects c
 
 - Python is one uv workspace rooted at the repository root. Run backend commands from the root as `uv run main.py <command>`, never from `backend/`; `uv run main.py --help` lists them.
 - The frontend uses npm, run inside `frontend/`.
+- The backend runs only on a Google Colab runtime, started by `backend/deploy/colab/GPU.ipynb`; locally you run the tests, the linters and the frontend.
 
 | Command | Does |
 | --- | --- |

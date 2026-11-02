@@ -284,7 +284,7 @@ def test_an_unreachable_target_is_compute_unavailable(tmp_path):
 
 def test_configuration_errors_name_what_to_set(tmp_path, monkeypatch):
     monkeypatch.delenv("GPU_TARGET", raising=False)
-    pipeline = PipelineConfig.load(CONFIG / "pipeline.fake-gpu.yaml")
+    pipeline = PipelineConfig.load(CONFIG / "pipeline.yaml")
     compute = ComputeConfig(targets={"cpu": TargetConfig(), "colab": TargetConfig(backend="http")})
     with pytest.raises(ValueError, match="GPU_TARGET"):
         open_target_workspace(tmp_path, pipeline, compute)

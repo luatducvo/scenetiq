@@ -1,7 +1,6 @@
 # Requires real adapters and their optional dependencies; use pipeline.fake.yaml for the skeleton.
 # Every Stage runs on GPU_TARGET, the compute Target running the single GPU image;
-# set it in backend/.env.
-# No provider is the default.
+# the Colab notebook sets it to colab.
 target: "${GPU_TARGET}"
 stages:
   ingest:

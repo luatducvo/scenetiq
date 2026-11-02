@@ -55,11 +55,11 @@ _Avoid_: label list, prompts, classes
 ### Compute
 
 **Target**:
-The one place where every Stage of the Pipeline executes: in-process on the worker, or a GPU host running scene-compute.
+The one place where every Stage of the Pipeline executes: in-process on the worker, or scene-compute on the GPU.
 _Avoid_: GPU worker, backend, provider
 
 **Provider**:
-A service that hosts the machine behind a Target; Google Colab is the only one.
+A service that hosts the machine the backend and its Target run on; Google Colab is the only one.
 _Avoid_: target, cloud
 
 **Target Workspace**:

@@ -53,7 +53,7 @@ The query is embedded on the Target with the embed Stage's Algorithm and compare
 
 ## Database
 
-`backend/migrations/001_init.sql` is the whole schema. Postgres runs it once, when its data volume is created (Compose mounts the folder as `docker-entrypoint-initdb.d`); the API and the worker never change the schema. A schema change edits this file and resets the database (`uv run main.py reset`).
+`backend/migrations/001_init.sql` is the whole schema. The Colab notebook's backend cell runs it on a new, empty database each time it starts the backend; the test command does the same for its disposable container. The API and the worker never change the schema. A schema change edits this file and takes effect when the backend cell runs again.
 
 | Table | Holds |
 | --- | --- |

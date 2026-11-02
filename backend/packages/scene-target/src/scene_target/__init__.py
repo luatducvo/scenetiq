@@ -124,7 +124,7 @@ def open_target_workspace(
     ready_timeout: float | None = None,
     client=None,
 ) -> TargetWorkspace:
-    """Build the TargetWorkspace for the pipeline's Target; ValueError names what to fix in backend/.env.
+    """Build the TargetWorkspace for the pipeline's Target; ValueError names what to set.
 
     ready_timeout caps how long a call waits for a cold Target. client replaces the HTTP client, so
     tests can talk to an in-memory scene-compute app.
@@ -135,7 +135,7 @@ def open_target_workspace(
         compute = compute or defaults[1]
     name = pipeline.target
     if name.startswith("${"):
-        raise ValueError(f"Set {name[2:-1]} in backend/.env to a compute Target name")
+        raise ValueError(f"Set {name[2:-1]} to a compute Target name")
     if name not in compute.targets:
         raise ValueError(f"Pipeline uses unknown compute Target {name}")
     target = compute.targets[name]
@@ -144,7 +144,7 @@ def open_target_workspace(
     if target.backend != "http":
         raise ValueError(f"Unsupported compute backend {target.backend}")
     if target.missing_url:
-        raise ValueError(f"compute Target {name} has no URL; set its URL variable in backend/.env")
+        raise ValueError(f"compute Target {name} has no URL; set its URL variable")
     if ready_timeout is not None:
         target = target.model_copy(
             update={"startup_timeout": min(target.startup_timeout, ready_timeout)}

@@ -293,23 +293,15 @@ def test_delete_removes_the_target_workspace_and_tolerates_an_unreachable_target
 
 
 def test_worker_refuses_to_start_without_configured_gpu_targets(tmp_path, monkeypatch):
-    for name in ("GPU_TARGET", "COLAB_URL"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("GPU_TARGET", raising=False)
     config = Path(__file__).parents[1] / "config"
-
-    def start():
-        return Worker(
+    with pytest.raises(ValueError, match="GPU_TARGET"):
+        Worker(
             os.environ["TEST_DATABASE_URL"],
             tmp_path,
-            PipelineConfig.load(config / "pipeline.fake-gpu.yaml"),
+            PipelineConfig.load(config / "pipeline.yaml"),
             ComputeConfig.load(config / "compute.yaml"),
         )
-
-    with pytest.raises(ValueError, match="GPU_TARGET"):
-        start()
-    monkeypatch.setenv("GPU_TARGET", "colab")
-    with pytest.raises(ValueError, match=r"colab.*URL"):
-        start()
 
 
 def test_whole_pipeline_runs_on_the_gpu_host_and_returns_only_results(tmp_path):
@@ -395,7 +387,7 @@ def test_search_reports_unavailable_compute_target(client, monkeypatch):
     for target in (None, "down"):
         if target:
             monkeypatch.setenv("GPU_TARGET", target)
-        pipeline = PipelineConfig.load(Path(__file__).parents[1] / "config/pipeline.fake-gpu.yaml")
+        pipeline = PipelineConfig.load(Path(__file__).parents[1] / "config/pipeline.yaml")
         with TestClient(
             create_app(
                 database_url=os.environ["TEST_DATABASE_URL"],
