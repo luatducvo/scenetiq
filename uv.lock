@@ -16,8 +16,8 @@ members = [
     "scene-stages",
     "scene-store",
     "scene-target",
-    "scene-understanding",
     "scene-worker",
+    "scenetiq",
 ]
 
 [[package]]
@@ -2461,7 +2461,24 @@ requires-dist = [
 ]
 
 [[package]]
-name = "scene-understanding"
+name = "scene-worker"
+version = "0.1.0"
+source = { editable = "backend/services/scene-worker" }
+dependencies = [
+    { name = "scene-core" },
+    { name = "scene-store" },
+    { name = "scene-target" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "scene-core", editable = "backend/packages/scene-core" },
+    { name = "scene-store", editable = "backend/packages/scene-store" },
+    { name = "scene-target", editable = "backend/packages/scene-target" },
+]
+
+[[package]]
+name = "scenetiq"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
@@ -2499,23 +2516,6 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "ruff", specifier = ">=0.9" },
-]
-
-[[package]]
-name = "scene-worker"
-version = "0.1.0"
-source = { editable = "backend/services/scene-worker" }
-dependencies = [
-    { name = "scene-core" },
-    { name = "scene-store" },
-    { name = "scene-target" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "scene-core", editable = "backend/packages/scene-core" },
-    { name = "scene-store", editable = "backend/packages/scene-store" },
-    { name = "scene-target", editable = "backend/packages/scene-target" },
 ]
 
 [[package]]
