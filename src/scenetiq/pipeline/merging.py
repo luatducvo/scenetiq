@@ -1,7 +1,7 @@
 """Merging stage: MV3DIS 3D-guided mask matching turns Masks into Instances.
 
 The vendored MV3DIS core (``scenetiq.vendor.mv3dis``) runs unchanged on arrays.
-This module adapts SceneTIQ's Frames and Masks to it and its labels back.
+This module adapts SceneTIQ's ViewData and Masks to it and its labels back.
 """
 
 from dataclasses import dataclass
@@ -10,8 +10,8 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.domain import FloatArray
-from scenetiq.pipeline.frames import Frames
 from scenetiq.pipeline.masking import ViewMasks
+from scenetiq.pipeline.view_data import ViewData
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ def labels_to_instance_ids(labels: npt.ArrayLike, min_points: int) -> npt.NDArra
 def merge_instances(
     points: FloatArray,
     primitive_ids: npt.ArrayLike,
-    frames: Frames,
+    view_data: ViewData,
     view_masks: list[ViewMasks],
     options: MergingOptions | None = None,
 ) -> npt.NDArray[np.int32]:
@@ -72,9 +72,9 @@ def merge_instances(
     agent = InMemoryMV3DIS(
         points=np.asarray(points, dtype=np.float32),
         seg_ids=np.asarray(primitive_ids),
-        poses=np.stack([frames.cameras[i].cam_to_world for i in used]).astype(np.float32),
-        intrinsics=np.stack([frames.cameras[i].intrinsics for i in used]).astype(np.float32),
-        depths=frames.depth[used],
+        poses=np.stack([view_data.cameras[i].cam_to_world for i in used]).astype(np.float32),
+        intrinsics=np.stack([view_data.cameras[i].intrinsics for i in used]).astype(np.float32),
+        depths=view_data.depth[used],
         mask_list=[view_masks[i].masks for i in used],
         pred_score=[view_masks[i].scores for i in used],
         thres_dis=opts.visibility_rtol,

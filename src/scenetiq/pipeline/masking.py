@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from scenetiq.pipeline.frames import Frames
+from scenetiq.pipeline.view_data import ViewData
 
 MAX_MASKS_PER_VIEW = 255
 """MV3DIS stores per-pixel mask ranks as uint8, so at most 255 Masks per View."""
@@ -90,16 +90,16 @@ class SAM2Masker:
             )
         return self._generator
 
-    def masks_for(self, frames: Frames) -> list[ViewMasks]:
+    def masks_for(self, view_data: ViewData) -> list[ViewMasks]:
         """Generate Masks for every View, in View order (a View may get none)."""
         import torch
 
         generator = self._load()
-        _, height, width, _ = frames.images.shape
+        _, height, width, _ = view_data.images.shape
         min_area = int(self.options.min_area_fraction * height * width)
         result: list[ViewMasks] = []
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            for image in frames.images:
+            for image in view_data.images:
                 records = generator.generate(np.ascontiguousarray(image))
                 if not records:
                     result.append(

@@ -11,7 +11,7 @@ import numpy as np
 
 from scenetiq.domain import View
 from scenetiq.pipeline.adapters import camera_from_da3, confident_depth
-from scenetiq.pipeline.frames import Frames
+from scenetiq.pipeline.view_data import ViewData
 
 DEFAULT_DA3_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE"
 
@@ -19,7 +19,7 @@ DEFAULT_DA3_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE"
 class Reconstructor(Protocol):
     """Estimates depth and cameras for a set of Views."""
 
-    def reconstruct(self, views: list[View]) -> Frames:
+    def reconstruct(self, views: list[View]) -> ViewData:
         """Return depth, cameras and resized images for ``views``, in order."""
         ...
 
@@ -61,7 +61,7 @@ class DA3Reconstructor:
             self._model = DepthAnything3.from_pretrained(self.options.model_id).to(self.device)
         return self._model
 
-    def reconstruct(self, views: list[View]) -> Frames:
+    def reconstruct(self, views: list[View]) -> ViewData:
         """Run DA3 on every View and return metric depth, cameras and resized images."""
         import torch
 
@@ -86,4 +86,4 @@ class DA3Reconstructor:
                 for i in range(len(views))
             ]
         )
-        return Frames(images=images, depth=filtered, cameras=cameras)
+        return ViewData(images=images, depth=filtered, cameras=cameras)

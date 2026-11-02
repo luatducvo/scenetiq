@@ -69,10 +69,10 @@ class RealPipeline:
         """Run every stage on ``capture``, reporting each one through ``on_stage``."""
         opts = self.options
         on_stage(Stage.RECONSTRUCTING)
-        frames = self.reconstructor.reconstruct(capture.views)
+        view_data = self.reconstructor.reconstruct(capture.views)
 
         on_stage(Stage.FUSING)
-        geometry = fuse(frames, opts.fusion)
+        geometry = fuse(view_data, opts.fusion)
         points = geometry.vertices
 
         on_stage(Stage.SUPERPOINTS)
@@ -84,16 +84,16 @@ class RealPipeline:
             primitive_ids = voxel_primitives(points, opts.primitive_voxel_size)
 
         on_stage(Stage.MASKING)
-        view_masks = self.masker.masks_for(frames)
+        view_masks = self.masker.masks_for(view_data)
 
         on_stage(Stage.MERGING)
-        instance_ids = merge_instances(points, primitive_ids, frames, view_masks, opts.merging)
+        instance_ids = merge_instances(points, primitive_ids, view_data, view_masks, opts.merging)
 
         on_stage(Stage.EMBEDDING)
         embeddings = embed_instances(
             points,
             instance_ids,
-            frames,
+            view_data,
             [v.path for v in capture.views],
             self.image_encoder,
             opts.embedding,
@@ -106,6 +106,6 @@ class RealPipeline:
             points=points,
             colors=geometry.colors,
             instance_ids=instance_ids,
-            cameras=frames.cameras,
+            cameras=view_data.cameras,
             instances=build_instances(points, instance_ids, embeddings),
         )

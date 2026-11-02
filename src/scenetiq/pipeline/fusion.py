@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from scenetiq.pipeline.adapters import c2w_to_w2c
-from scenetiq.pipeline.frames import Frames, FusedGeometry
+from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class FusionOptions:
     max_depth: float = 12.0
 
 
-def fuse(frames: Frames, options: FusionOptions | None = None) -> FusedGeometry:
+def fuse(view_data: ViewData, options: FusionOptions | None = None) -> FusedGeometry:
     """Integrate every View's depth into a TSDF volume and extract its mesh.
 
     Raises:
@@ -41,9 +41,9 @@ def fuse(frames: Frames, options: FusionOptions | None = None) -> FusedGeometry:
         sdf_trunc=opts.voxel_size * opts.sdf_trunc_voxels,
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
     )
-    for i, cam in enumerate(frames.cameras):
-        color = o3d.geometry.Image(np.ascontiguousarray(frames.images[i]))
-        depth = o3d.geometry.Image(np.ascontiguousarray(frames.depth[i]))
+    for i, cam in enumerate(view_data.cameras):
+        color = o3d.geometry.Image(np.ascontiguousarray(view_data.images[i]))
+        depth = o3d.geometry.Image(np.ascontiguousarray(view_data.depth[i]))
         rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
             color,
             depth,

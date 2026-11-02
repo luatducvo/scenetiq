@@ -11,7 +11,7 @@ Spec: `.scratch/scene-reconstruction-query/spec.md` (Pipeline stage 6, Query mod
 - [ ] The **Embedding** stage, for each Instance:
   - [ ] selects the Views where the Instance is visible
   - [ ] crops the Instance from those Views
-  - [ ] encodes the crops with the SigLIP2 (large) image tower
+  - [ ] encodes the crops with the SigLIP2 (giant, `google/siglip2-giant-opt-patch16-384`) image tower
   - [ ] aggregates the results into one L2-normalised embedding, stored with the Scene
 - [ ] The real text encoder (SigLIP2 text tower) replaces the fake on Colab. CPU tests keep the fake.
 - [ ] Instances with no usable View are handled explicitly, either dropped or given a defined embedding. The docstring documents the choice.

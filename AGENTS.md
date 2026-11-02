@@ -59,15 +59,19 @@ Google convention, enforced by ruff's `D` rules. Every public module, class, fun
   - `artifacts.py`: the on-disk Reconstruction format.
   - `jobs.py`: the single-slot background job runner.
   - `fakes.py`: the deterministic fake Pipeline and text encoder.
+  - `config.py`: `Settings` read from `SCENETIQ_*` environment variables, and the default Match threshold.
+  - `colab.py`: helpers the Colab notebook calls (server process, cloudflared tunnel).
+  - `pipeline/`: the real GPU Pipeline (see *Real Pipeline* below).
+  - `evaluation/`: the ScanNet200 evaluation harness (see *Evaluation harness* below).
   - `query.py`: scores Instances against a Query embedding, applies the Match threshold, and returns the Low-confidence Match fallback.
   - `geometry.py`: Instance centroid and bounding-box computation, plus L2 normalisation.
 - `frontend/`: React + Vite + TypeScript client. It has no router; `App.tsx` switches between screens.
 - `src/scenetiq/vendor/`: vendored third-party code. Excluded from ruff and ty. Every subdirectory needs a `PROVENANCE.md` with the upstream URL, pinned commit, licence and local modifications. First-party wrappers around vendored code live outside `vendor/` and are fully checked.
-- `tests/unit/`: pure functions (coordinate and unit adapters, geometry, metrics).
+- `tests/unit/`: deterministic pure functions that need no model and no I/O beyond temporary files: coordinate and unit adapters, geometry, the pure helpers inside stage modules (Mask selection, primitives, superpoints, crop and view selection, label conversion), and evaluation metrics.
 - `tests/api/`: **Seam A**. The HTTP API driven through FastAPI's TestClient, with a fake Pipeline and a fake text encoder on a temporary storage root. This is the main suite and must pass on CPU.
 - `tests/eval/`: **Seam B**. The real Pipeline on a GPU, marked `@pytest.mark.gpu` and deselected by default.
 
-Test only at these seams. Do not test internal stage functions directly.
+Test only at these seams. A pure, model-free function may be unit-tested wherever it lives, including inside a stage module. Do not unit-test anything that loads a model or needs a GPU (DA3, SAM2, SigLIP2, the whole MV3DIS run, `RealPipeline.run`); those are covered only by Seam B. Never mock a model to test a stage's internals.
 
 ### Definition of Done (every ticket)
 
@@ -91,13 +95,17 @@ Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells
 
 ### Real Pipeline (GPU)
 
-- `src/scenetiq/pipeline/` holds the real Pipeline. `real.py` chains the stages. `adapters.py` holds the pure conversions (unit-tested): DA3 world-to-camera ↔ camera-to-world, and confidence filtering of depth. Each stage file holds one stage: `reconstruct.py` (DA3, ADR 0001), `fusion.py` (TSDF, ADR 0002), `superpoints.py` (ScanNet Segmentator ported to Python, on the fused mesh), `primitives.py` (voxel-grid fallback, `RealPipelineOptions.primitives="voxel"`), `masking.py` (SAM2 automatic Masks, ADR 0003, at most 255 per View), `merging.py` (wraps vendored MV3DIS; turns its labels into Instance ids), `embedding.py` (multi-view crops from the original photos at two context scales, averaged) and `siglip.py` (SigLIP2 giant: one model encodes both Instance crops and Query text).
+- `src/scenetiq/pipeline/` holds the real Pipeline. `real.py` chains the stages. `view_data.py` defines `ViewData` (images, depth and cameras of every View at the depth resolution) and `FusedGeometry`, the types passed between stages. `adapters.py` holds the pure conversions (unit-tested): DA3 world-to-camera ↔ camera-to-world, and confidence filtering of depth. Each stage file holds one stage: `reconstruct.py` (DA3, ADR 0001), `fusion.py` (TSDF, ADR 0002), `superpoints.py` (ScanNet Segmentator ported to Python, on the fused mesh), `primitives.py` (voxel-grid fallback, `RealPipelineOptions.primitives="voxel"`), `masking.py` (SAM2 automatic Masks, ADR 0003, at most 255 per View), `merging.py` (wraps vendored MV3DIS; turns its labels into Instance ids), `embedding.py` (multi-view crops from the original photos at two context scales, averaged) and `siglip.py` (SigLIP2 giant: one model encodes both Instance crops and Query text).
 - Model libraries (`torch`, `depth_anything_3`, `open3d`, `sam2`, `transformers`) are **imported lazily inside functions**, so the package still imports and tests on CPU. ty is told to allow these unresolved imports in `[tool.ty.analysis]`.
 - The GPU stack is pinned in `requirements-gpu.txt`, not in `pyproject.toml`, because `uv lock` must stay resolvable on CPU-only machines. The notebook installs it when `PIPELINE = "real"`. On a GPU machine: `pip install -e . -r requirements-gpu.txt`.
 - GPU smoke tests: `SCENETIQ_SMOKE_CAPTURE=/path/to/photos uv run pytest -m gpu`. They are skipped when the variable is unset.
 - Tuning knobs live in the stage option dataclasses (`DA3Options`, `FusionOptions`). Defaults: process at 504 px, drop depth below the 30th confidence percentile or beyond 12 m, 2 cm TSDF voxels.
 - Relevance scores: `TextEncoder.to_score` maps cosine similarity to the score that the Match threshold applies to. SigLIP2 uses its own `sigmoid(scale * cos + bias)`, a match probability in [0, 1]. The fake encoder uses cosine similarity as is. Instances that no View sees well enough get no embedding and are dropped.
-- `SCENETIQ_SMOKE_QUERY=<object in the smoke Capture>` turns on the end-to-end Query smoke test.
+- The end-to-end Query smoke tests use these variables:
+  - `SCENETIQ_SMOKE_QUERY=<object clearly visible in the smoke Capture>`.
+  - `SCENETIQ_SMOKE_QUERY_BOX=view,left,top,right,bottom`: the object's box, in original-photo pixels, in one photo. `view` is the photo's index in the Capture sorted by file name.
+  - With both set, the test requires a confident Match (no Low-confidence fallback) at the configured threshold, and at least half of the best Match's points must project inside the box.
+  - Optionally, `SCENETIQ_SMOKE_ABSENT_QUERY=<object not in the Capture>` requires that Query to come back Low-confidence.
 
 ### Evaluation harness (Seam B, GPU)
 

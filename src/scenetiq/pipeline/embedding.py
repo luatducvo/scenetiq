@@ -17,7 +17,7 @@ import numpy.typing as npt
 from scenetiq.domain import Camera, FloatArray
 from scenetiq.geometry import l2_normalize
 from scenetiq.pipeline.adapters import c2w_to_w2c
-from scenetiq.pipeline.frames import Frames
+from scenetiq.pipeline.view_data import ViewData
 
 
 class ImageEncoder(Protocol):
@@ -106,7 +106,7 @@ def crop_box(
 def embed_instances(
     points: FloatArray,
     instance_ids: npt.NDArray[np.int32],
-    frames: Frames,
+    view_data: ViewData,
     image_paths: Sequence[Path],
     encoder: ImageEncoder,
     options: EmbeddingOptions | None = None,
@@ -120,7 +120,7 @@ def embed_instances(
     Args:
         points: ``(N, 3)`` Reconstruction points.
         instance_ids: ``(N,)`` Instance id per point, -1 for none.
-        frames: Cameras and depth at the depth-map resolution.
+        view_data: Cameras and depth at the depth-map resolution.
         image_paths: Original photo of every View, in View order.
         encoder: Image tower of the embedding model.
         options: Stage settings.
@@ -136,8 +136,8 @@ def embed_instances(
     for iid in ids:
         member = points[instance_ids == iid]
         per_view = [
-            visible_pixels(member, cam, frames.depth[i], opts.visibility_rtol)
-            for i, cam in enumerate(frames.cameras)
+            visible_pixels(member, cam, view_data.depth[i], opts.visibility_rtol)
+            for i, cam in enumerate(view_data.cameras)
         ]
         chosen = select_views(
             [len(u) for u, _ in per_view], opts.views_per_instance, opts.min_visible_pixels
@@ -147,7 +147,7 @@ def embed_instances(
     crops: list = []
     owners: list[int] = []
     for vi in sorted({vi for plan in plans.values() for vi, _, _ in plan}):
-        cam = frames.cameras[vi]
+        cam = view_data.cameras[vi]
         with Image.open(image_paths[vi]) as img:
             photo = img.convert("RGB")
         sx, sy = photo.width / cam.width, photo.height / cam.height

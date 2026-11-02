@@ -9,7 +9,7 @@ from scenetiq.domain import Camera, FloatArray
 
 
 @dataclass
-class Frames:
+class ViewData:
     """Every View of a Capture at the depth-map resolution.
 
     Attributes:

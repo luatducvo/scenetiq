@@ -42,6 +42,7 @@ class HarnessConfig:
         max_views: Frames sampled per scene (the Capture limit).
         transfer_distance: Max metres between a GT vertex and its nearest predicted point.
         query_iou: IoU with a GT instance of the queried class for a Match to count as right.
+        ignore_labels: GT categories left out of both AP and Queries (e.g. walls, floors).
     """
 
     scans_dir: Path

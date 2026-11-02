@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -8,9 +10,17 @@ pytestmark = pytest.mark.gpu
 
 
 @pytest.fixture(scope="module")
-def real_result(smoke_capture: Capture):
+def encoder():
+    """One SigLIP2 model shared by the Pipeline and the Query tests, as on the server."""
+    from scenetiq.pipeline.siglip import SigLIP2Encoder
+
+    return SigLIP2Encoder()
+
+
+@pytest.fixture(scope="module")
+def real_result(smoke_capture: Capture, encoder):
     stages: list[Stage] = []
-    reconstruction = RealPipeline().run(smoke_capture, stages.append)
+    reconstruction = RealPipeline(image_encoder=encoder).run(smoke_capture, stages.append)
     return reconstruction, stages
 
 
@@ -51,8 +61,8 @@ def test_superpoints_cover_every_point_of_the_fused_mesh(smoke_capture: Capture)
     from scenetiq.pipeline.reconstruct import DA3Reconstructor
     from scenetiq.pipeline.superpoints import mesh_superpoints
 
-    frames = DA3Reconstructor().reconstruct(smoke_capture.views)
-    geometry = fuse(frames)
+    view_data = DA3Reconstructor().reconstruct(smoke_capture.views)
+    geometry = fuse(view_data)
     ids = mesh_superpoints(geometry.vertices, geometry.triangles)
     assert len(ids) == len(geometry.vertices)
     assert ids.min() == 0
@@ -60,22 +70,98 @@ def test_superpoints_cover_every_point_of_the_fused_mesh(smoke_capture: Capture)
 
 
 SMOKE_QUERY_ENV = "SCENETIQ_SMOKE_QUERY"
+SMOKE_QUERY_BOX_ENV = "SCENETIQ_SMOKE_QUERY_BOX"
+SMOKE_ABSENT_QUERY_ENV = "SCENETIQ_SMOKE_ABSENT_QUERY"
+MIN_POINTS_IN_BOX = 0.5
 
 
-def test_query_for_a_present_object_finds_a_match(real_result):
-    """Set SCENETIQ_SMOKE_QUERY to an object clearly visible in the smoke Capture."""
-    import os
+def _configured_threshold() -> float:
+    from scenetiq.config import DEFAULT_MATCH_THRESHOLD
 
-    from scenetiq.pipeline.siglip import SigLIP2Encoder
+    return float(os.environ.get("SCENETIQ_MATCH_THRESHOLD", DEFAULT_MATCH_THRESHOLD))
+
+
+def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, float]]:
+    """The View index and its box (left, top, right, bottom; original-photo pixels)."""
+    raw = os.environ.get(SMOKE_QUERY_BOX_ENV)
+    if not raw:
+        pytest.skip(
+            f"set {SMOKE_QUERY_BOX_ENV}='view,left,top,right,bottom': the queried object's "
+            "box in that photo (view = index in the sorted smoke Capture)"
+        )
+    view, left, top, right, bottom = (float(x) for x in raw.split(","))
+    assert 0 <= int(view) < len(capture.views), f"{SMOKE_QUERY_BOX_ENV} view index out of range"
+    return int(view), (left, top, right, bottom)
+
+
+def _fraction_inside_box(points, camera, box, photo_size) -> float:
+    """Share of the points that project into the image and land inside ``box``."""
+    from scenetiq.pipeline.adapters import c2w_to_w2c
+
+    w2c = c2w_to_w2c(camera.cam_to_world)
+    cam = points @ w2c[:3, :3].T + w2c[:3, 3]
+    front = cam[:, 2] > 1e-6
+    cam = cam[front]
+    k = camera.intrinsics
+    # Pixels at the depth resolution, scaled to the original photo the box refers to.
+    sx, sy = photo_size[0] / camera.width, photo_size[1] / camera.height
+    u = (k[0, 0] * cam[:, 0] / cam[:, 2] + k[0, 2]) * sx
+    v = (k[1, 1] * cam[:, 1] / cam[:, 2] + k[1, 2]) * sy
+    in_image = (u >= 0) & (u < photo_size[0]) & (v >= 0) & (v < photo_size[1])
+    if not np.any(in_image):
+        return 0.0
+    left, top, right, bottom = box
+    u, v = u[in_image], v[in_image]
+    inside = (u >= left) & (u < right) & (v >= top) & (v < bottom)
+    return float(np.mean(inside))
+
+
+def test_query_for_a_present_object_matches_that_object(
+    real_result, smoke_capture: Capture, encoder
+):
+    """A clearly visible object must be a confident Match, and the best Match must be it.
+
+    Set SCENETIQ_SMOKE_QUERY to the object's name and SCENETIQ_SMOKE_QUERY_BOX to its
+    box in one photo of the smoke Capture.
+    """
+    from PIL import Image
+
     from scenetiq.query import run_query
 
     text = os.environ.get(SMOKE_QUERY_ENV)
     if not text:
         pytest.skip(f"set {SMOKE_QUERY_ENV} to an object visible in the smoke Capture")
+    view, box = _annotated_box(smoke_capture)
     rec, stages = real_result
     assert stages[-1] == Stage.EMBEDDING
     assert all(inst.embedding is not None for inst in rec.instances)
-    encoder = SigLIP2Encoder()
-    result = run_query(rec.instances, encoder.encode(text), 0.5, encoder.to_score)
-    assert result.matches
+
+    result = run_query(
+        rec.instances, encoder.encode(text), _configured_threshold(), encoder.to_score
+    )
     print(f"{text!r}: {[(m.instance_id, round(m.score, 3)) for m in result.matches]}")
+
+    assert not result.low_confidence, f"{text!r} found only a Low-confidence Match"
+    best = result.matches[0].instance_id
+    with Image.open(smoke_capture.views[view].path) as photo:
+        photo_size = photo.size
+    share = _fraction_inside_box(
+        rec.points[rec.instance_ids == best], rec.cameras[view], box, photo_size
+    )
+    assert share >= MIN_POINTS_IN_BOX, (
+        f"best Match (Instance {best}) has only {share:.0%} of its points inside the box"
+    )
+
+
+def test_query_for_an_absent_object_is_low_confidence(real_result, encoder):
+    """Set SCENETIQ_SMOKE_ABSENT_QUERY to something not in the smoke Capture."""
+    from scenetiq.query import run_query
+
+    text = os.environ.get(SMOKE_ABSENT_QUERY_ENV)
+    if not text:
+        pytest.skip(f"set {SMOKE_ABSENT_QUERY_ENV} to an object absent from the smoke Capture")
+    rec, _ = real_result
+    result = run_query(
+        rec.instances, encoder.encode(text), _configured_threshold(), encoder.to_score
+    )
+    assert result.low_confidence, f"{text!r} unexpectedly matched {result.matches}"
