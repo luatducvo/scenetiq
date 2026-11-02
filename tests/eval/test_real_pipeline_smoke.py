@@ -57,3 +57,25 @@ def test_superpoints_cover_every_point_of_the_fused_mesh(smoke_capture: Capture)
     assert len(ids) == len(geometry.vertices)
     assert ids.min() == 0
     assert 10 < ids.max() + 1 < len(geometry.vertices)
+
+
+SMOKE_QUERY_ENV = "SCENETIQ_SMOKE_QUERY"
+
+
+def test_query_for_a_present_object_finds_a_match(real_result):
+    """Set SCENETIQ_SMOKE_QUERY to an object clearly visible in the smoke Capture."""
+    import os
+
+    from scenetiq.pipeline.siglip import SigLIP2Encoder
+    from scenetiq.query import run_query
+
+    text = os.environ.get(SMOKE_QUERY_ENV)
+    if not text:
+        pytest.skip(f"set {SMOKE_QUERY_ENV} to an object visible in the smoke Capture")
+    rec, stages = real_result
+    assert stages[-1] == Stage.EMBEDDING
+    assert all(inst.embedding is not None for inst in rec.instances)
+    encoder = SigLIP2Encoder()
+    result = run_query(rec.instances, encoder.encode(text), 0.5, encoder.to_score)
+    assert result.matches
+    print(f"{text!r}: {[(m.instance_id, round(m.score, 3)) for m in result.matches]}")

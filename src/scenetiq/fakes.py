@@ -109,3 +109,7 @@ class FakeTextEncoder:
     def encode(self, text: str) -> FloatArray:
         """Return the fixed embedding for ``text`` (case-insensitive)."""
         return FAKE_TEXT_EMBEDDINGS.get(text.strip().lower(), UNKNOWN_TEXT_EMBEDDING)
+
+    def to_score(self, cosine: FloatArray) -> FloatArray:
+        """Use cosine similarity itself as the relevance score."""
+        return np.asarray(cosine, dtype=np.float32)

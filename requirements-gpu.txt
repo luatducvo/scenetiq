@@ -8,3 +8,5 @@ sam2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c181235
 # Vendored MV3DIS runtime needs
 scipy>=1.11
 tqdm>=4.66
+# SigLIP2 (google/siglip2-giant-opt-patch16-384, Apache-2.0) via Hugging Face transformers
+transformers>=4.50

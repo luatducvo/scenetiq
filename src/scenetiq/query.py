@@ -1,5 +1,6 @@
 """Open-vocabulary Query over the Instances of a Reconstruction."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -34,14 +35,19 @@ class QueryResult:
 
 
 def run_query(
-    instances: list[Instance], query_embedding: FloatArray, threshold: float
+    instances: list[Instance],
+    query_embedding: FloatArray,
+    threshold: float,
+    to_score: Callable[[FloatArray], FloatArray] | None = None,
 ) -> QueryResult:
-    """Score every Instance against ``query_embedding`` by cosine similarity.
+    """Score every Instance against ``query_embedding``.
 
     Args:
         instances: Instances with L2-normalised embeddings.
         query_embedding: L2-normalised embedding of the Query text.
         threshold: Minimum score for a Match.
+        to_score: Maps cosine similarities to relevance scores (the encoder's
+            calibration); cosine similarity itself when omitted.
 
     Returns:
         Every Instance scoring at least ``threshold``, best first. If there is
@@ -58,6 +64,8 @@ def run_query(
         raise MissingEmbeddingsError("Scene Instances have no embeddings yet")
     matrix = np.stack([e for e in embeddings if e is not None]).astype(np.float32)
     scores = matrix @ np.asarray(query_embedding, dtype=np.float32)
+    if to_score is not None:
+        scores = np.asarray(to_score(scores), dtype=np.float32)
     order = np.argsort(-scores, kind="stable")
     ranked = [Match(instances[i].instance_id, float(scores[i])) for i in order]
     confident = [m for m in ranked if m.score >= threshold]

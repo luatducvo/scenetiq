@@ -115,3 +115,7 @@ class TextEncoder(Protocol):
     def encode(self, text: str) -> FloatArray:
         """Return the L2-normalised embedding of ``text``."""
         ...
+
+    def to_score(self, cosine: FloatArray) -> FloatArray:
+        """Map cosine similarities to the relevance scores the Match threshold applies to."""
+        ...

@@ -23,8 +23,10 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder]:
         return FakePipeline(), FakeTextEncoder()
     if settings.pipeline == "real":
         from scenetiq.pipeline.real import RealPipeline
+        from scenetiq.pipeline.siglip import SigLIP2Encoder
 
-        return RealPipeline(), FakeTextEncoder()
+        encoder = SigLIP2Encoder()  # one model for Instance crops and Query text
+        return RealPipeline(image_encoder=encoder), encoder
     raise ValueError(f"unknown pipeline {settings.pipeline!r}; expected 'fake' or 'real'")
 
 

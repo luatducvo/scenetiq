@@ -172,7 +172,10 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
         try:
             result = run_query(
-                load_instances(directory), text_encoder.encode(text), settings.match_threshold
+                load_instances(directory),
+                text_encoder.encode(text),
+                settings.match_threshold,
+                text_encoder.to_score,
             )
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

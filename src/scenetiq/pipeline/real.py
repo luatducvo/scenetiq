@@ -7,11 +7,13 @@ import numpy as np
 
 from scenetiq.domain import Capture, Reconstruction, Stage, StageCallback
 from scenetiq.geometry import build_instances
+from scenetiq.pipeline.embedding import EmbeddingOptions, ImageEncoder, embed_instances
 from scenetiq.pipeline.fusion import FusionOptions, fuse
 from scenetiq.pipeline.masking import SAM2Masker
 from scenetiq.pipeline.merging import MergingOptions, merge_instances
 from scenetiq.pipeline.primitives import voxel_primitives
 from scenetiq.pipeline.reconstruct import DA3Reconstructor, Reconstructor
+from scenetiq.pipeline.siglip import SigLIP2Encoder
 from scenetiq.pipeline.superpoints import mesh_superpoints
 
 
@@ -22,6 +24,7 @@ class RealPipelineOptions:
     Attributes:
         fusion: TSDF Fusing stage (ADR 0002).
         merging: MV3DIS Merging stage.
+        embedding: SigLIP2 Embedding stage.
         primitives: ``"superpoints"`` (ScanNet Segmentator on the fused mesh) or
             ``"voxel"`` (voxel-grid fallback, for debugging).
         superpoint_k_thresh: Segmentator threshold; larger gives larger superpoints.
@@ -31,6 +34,7 @@ class RealPipelineOptions:
 
     fusion: FusionOptions = field(default_factory=FusionOptions)
     merging: MergingOptions = field(default_factory=MergingOptions)
+    embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
     primitives: Literal["superpoints", "voxel"] = "superpoints"
     superpoint_k_thresh: float = 0.01
     superpoint_min_verts: int = 20
@@ -43,6 +47,8 @@ class RealPipeline:
     Args:
         reconstructor: The Reconstructing stage (DA3 by default, ADR 0001).
         masker: The Masking stage (SAM2 automatic masks by default, ADR 0003).
+        image_encoder: Image tower of the Embedding stage (SigLIP2 by default). Pass
+            the same encoder the API uses for Query text.
         options: Settings of the remaining stages.
     """
 
@@ -50,11 +56,13 @@ class RealPipeline:
         self,
         reconstructor: Reconstructor | None = None,
         masker: SAM2Masker | None = None,
+        image_encoder: ImageEncoder | None = None,
         options: RealPipelineOptions | None = None,
     ) -> None:
         """Assemble the stages; models load lazily on the first run."""
         self.reconstructor = reconstructor or DA3Reconstructor()
         self.masker = masker or SAM2Masker()
+        self.image_encoder = image_encoder or SigLIP2Encoder()
         self.options = options or RealPipelineOptions()
 
     def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
@@ -81,10 +89,23 @@ class RealPipeline:
         on_stage(Stage.MERGING)
         instance_ids = merge_instances(points, primitive_ids, frames, view_masks, opts.merging)
 
+        on_stage(Stage.EMBEDDING)
+        embeddings = embed_instances(
+            points,
+            instance_ids,
+            frames,
+            [v.path for v in capture.views],
+            self.image_encoder,
+            opts.embedding,
+        )
+        # Instances no View sees well enough cannot be queried: drop them.
+        unseen = np.isin(instance_ids, list(embeddings), invert=True)
+        instance_ids = np.where(unseen, -1, instance_ids).astype(np.int32)
+
         return Reconstruction(
             points=points,
             colors=geometry.colors,
-            instance_ids=instance_ids.astype(np.int32),
+            instance_ids=instance_ids,
             cameras=frames.cameras,
-            instances=build_instances(points, instance_ids),
+            instances=build_instances(points, instance_ids, embeddings),
         )

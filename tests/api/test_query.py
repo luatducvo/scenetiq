@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from scenetiq.artifacts import decode_ply
 from scenetiq.config import Settings
 from scenetiq.domain import Reconstruction
-from scenetiq.fakes import FakePipeline, fake_reconstruction
+from scenetiq.fakes import FakePipeline, FakeTextEncoder, fake_reconstruction
 
 from .conftest import AUTH, TOKEN, upload, wait_for_job
 
@@ -134,3 +134,19 @@ def test_instances_report_centroid_and_bounding_box_in_metres(client: TestClient
 def test_instance_endpoints_require_a_ready_scene(client: TestClient):
     assert client.get("/scenes/nope/instance-ids", headers=AUTH).status_code == 404
     assert client.get("/scenes/nope/instances", headers=AUTH).status_code == 404
+
+
+class _HalvingEncoder(FakeTextEncoder):
+    """Maps cosine similarity to score = cosine / 2, like a calibrated model would rescale."""
+
+    def to_score(self, cosine):
+        return np.asarray(cosine, dtype=np.float32) / 2
+
+
+def test_scores_come_from_the_encoders_calibration(make_client: Callable[..., TestClient]):
+    client = make_client(text_encoder=_HalvingEncoder())
+    scene = _ready_scene(client)
+    result = _query(client, scene, "red chair")
+    assert result["matches"][0]["score"] == pytest.approx(0.5)
+    assert result["low_confidence"] is False  # 0.5 >= threshold 0.5
+    assert _query(client, scene, "chair")["low_confidence"] is True  # 0.4 < 0.5
