@@ -77,3 +77,14 @@ Test only at these seams. Do not test internal stage functions directly.
 4. Tests are added at the right seam, and `uv run pytest` passes.
 5. If the ticket touches `frontend/`: `npm --prefix frontend run lint`, `run typecheck` and `run build` pass.
 6. AGENTS.md is updated whenever the ticket adds a command, directory, convention or configuration value that a future agent needs to know.
+
+### Colab (backend deployment, ADR 0004)
+
+`notebooks/colab_server.ipynb` is the only way the backend is deployed. It holds parameters and calls into `scenetiq.colab`; put any new logic in the package, not the notebook. Notebooks are excluded from ruff and ty.
+
+One-time setup:
+1. In the Cloudflare Zero Trust dashboard, create a named tunnel (Networks → Tunnels → Create → Cloudflared). Add a public hostname (e.g. `scenetiq.<your-domain>`) whose service is `http://localhost:8000`. Copy the tunnel token.
+2. In Colab, add the secrets `SCENETIQ_TOKEN` (any long random string, also entered in the frontend Settings) and `CLOUDFLARE_TUNNEL_TOKEN`, and grant the notebook access to both.
+3. Pick a GPU runtime.
+
+Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells. Scenes, the SQLite database and logs live under `DRIVE_ROOT` on Google Drive, so they survive runtime restarts. Jobs that were running when the runtime died are marked failed at the next start. Then run the frontend locally with the backend URL set to `https://<tunnel hostname>`. Add the frontend's origin to `SCENETIQ_CORS_ORIGINS` if it is not on `localhost:5173`.
