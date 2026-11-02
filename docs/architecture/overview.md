@@ -36,7 +36,7 @@ Progress reaches the browser as `scene_events` rows that the store writes with e
 | `backend/services/scene-worker/` | `runner.py` the Job loop |
 | `backend/services/scene-compute/` | `server.py` the compute contract · `download_models.py` |
 | `backend/config/` | pipeline and compute YAML, Vocabularies |
-| `backend/deploy/` | one README per Provider; Modal app; Colab notebook cells |
+| `backend/deploy/` | the Colab notebook and README; the local GPU README |
 | `backend/tests/` | pytest suite |
 | `frontend/src/pages/` | route screens |
 | `frontend/src/components/` | screens and panels; `viewer/` for the 3D canvas |

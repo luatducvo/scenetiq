@@ -376,7 +376,7 @@
       "title": "Targets",
       "items": [
         "GPU_TARGET names one Target in compute.yaml; there is no default",
-        "cpu runs Algorithms in-process (fake pipeline); local_gpu, vast, colab, modal and runpod reach scene-compute over HTTP",
+        "cpu runs Algorithms in-process (fake pipeline); local_gpu and colab reach scene-compute over HTTP",
         "The token check applies only when COMPUTE_TOKEN is set; local_gpu runs without one"
       ]
     },

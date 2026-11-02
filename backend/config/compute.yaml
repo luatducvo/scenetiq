@@ -6,44 +6,6 @@ targets:
     url: http://scene-compute:9000
     token: ${COMPUTE_TOKEN}
     chunk_size: 25000000
-  modal:
-    backend: http
-    url: ${MODAL_COMPUTE_URL}
-    token: ${COMPUTE_TOKEN}
-    chunk_size: 25000000
-    startup_timeout: 900
-    poll_interval: 3
-  runpod_pod:
-    backend: http
-    url: ${RUNPOD_POD_URL}
-    token: ${COMPUTE_TOKEN}
-    chunk_size: 25000000
-    startup_timeout: 900
-    poll_interval: 3
-  runpod_serverless:
-    backend: http
-    url: ${RUNPOD_SERVERLESS_URL}
-    token: ${COMPUTE_TOKEN}
-    headers:
-      Authorization: Bearer ${RUNPOD_API_KEY}
-    chunk_size: 25000000
-    startup_timeout: 900
-    poll_interval: 3
-  # A rented Vast.ai instance; its URL changes with every rental.
-  vast:
-    backend: http
-    url: ${VAST_URL}
-    token: ${COMPUTE_TOKEN}
-    chunk_size: 25000000
-    startup_timeout: 900
-    poll_interval: 3
-  generic:
-    backend: http
-    url: ${GENERIC_COMPUTE_URL}
-    token: ${COMPUTE_TOKEN}
-    chunk_size: 25000000
-    startup_timeout: 900
-    poll_interval: 3
   colab:
     backend: http
     url: ${COLAB_URL}

@@ -315,19 +315,6 @@ def push_compute_image(args):
     print(f"Pushed {image}\nDigest {digest}")
 
 
-@command(
-    "deploy scene-compute to Modal (built remotely)",
-    (["--variant"], {"default": "fake", "choices": ["fake", "gpu"]}),
-)
-def deploy_modal(args):
-    fake = args.variant == "fake"
-    env = {
-        "COMPUTE_EXTRAS": "" if fake else args.variant,
-        "MODAL_APP_NAME": "scene-compute" if fake else f"scene-compute-{args.variant}",
-    }
-    run("uvx", "modal", "deploy", str(BACKEND / "deploy/modal/app.py"), env=env)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)

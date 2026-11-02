@@ -59,7 +59,7 @@ The one place where every Stage of the Pipeline executes: in-process on the work
 _Avoid_: GPU worker, backend, provider
 
 **Provider**:
-A service that hosts the machine behind a Target, such as Modal, RunPod, Vast.ai or Colab.
+A service that hosts the machine behind a Target; Google Colab is the only one.
 _Avoid_: target, cloud
 
 **Target Workspace**:
@@ -139,7 +139,6 @@ _Avoid_: ruler
 ## Flagged ambiguities
 
 - "Run" is never used bare: say **Job**, **Stage Run** or **Compute Run**.
-- "Instance" also names a rented Vast.ai machine; call that a "rented machine".
 - "Workspace" alone means only the folder layout that a **Target Workspace** and a **Publication** share; it is not a domain concept of its own.
 - "Publish" is the verb for turning a successful **Job**'s results into the Scene's **Publication**.
 - "Scene Graph" and "graph" are retired: what a **Publication** serves is the Scene's **Objects**, their embeddings and its mesh.

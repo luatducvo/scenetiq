@@ -1,8 +1,8 @@
 # Google Colab GPU Target
 
 Runs `scene-compute` on a Google Colab GPU runtime and exposes it to your machine through a free
-Cloudflare Tunnel. [scene_compute_colab.py](scene_compute_colab.py) holds every notebook cell as
-text; this guide explains the steps and what to configure locally.
+Cloudflare Tunnel. [scene_compute_colab.ipynb](scene_compute_colab.ipynb) is the notebook; this
+guide explains the steps and what to configure locally.
 
 ## How it works
 
@@ -18,8 +18,8 @@ Every request finishes in under 300 s and bodies stay under 100 MB, so the tunne
 
 ## Run the notebook
 
-Create a notebook in Colab, paste each `CELL` block of `scene_compute_colab.py` into its own code
-cell, and run the cells in order:
+Open `scene_compute_colab.ipynb` in Colab (File → Upload notebook, or File → Open notebook →
+GitHub) and run the cells in order:
 
 0. **Download weights.** Once, on any runtime (a CPU runtime is enough), fetch every model's
    weights (over 25 GB, of which the embed Stage's Qwen3-VL, bge-m3 and bge-reranker-v2-m3 take

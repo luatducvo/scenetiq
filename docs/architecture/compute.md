@@ -10,7 +10,7 @@ The pipeline file names one Target, and everything that touches a Target Workspa
 | --- | --- | --- |
 | `cpu` | in-process, under `DATA_DIR/target` on the worker and API host | none |
 | `local_gpu` | HTTP, scene-compute in the `local-gpu` Compose profile | fixed `http://scene-compute:9000` |
-| `modal`, `runpod_pod`, `runpod_serverless`, `vast`, `generic`, `colab` | HTTP, scene-compute on a Provider | `MODAL_COMPUTE_URL`, `RUNPOD_POD_URL`, `RUNPOD_SERVERLESS_URL`, `VAST_URL`, `GENERIC_COMPUTE_URL`, `COLAB_URL` |
+| `colab` | HTTP, scene-compute on a Google Colab runtime behind a Cloudflare Tunnel | `COLAB_URL` |
 
 `scene_target.open_target_workspace` builds a `TargetWorkspace` for the pipeline's Target and raises a `ValueError` naming what to set in `backend/.env` when the Target is unset, unknown or has no URL. The API builds it on first use and waits at most 10 seconds for a cold Target; the worker waits up to the Target's `startup_timeout`.
 
@@ -52,7 +52,7 @@ Server behaviour:
 
 ## The GPU image
 
-`Dockerfile.compute` builds one image for every Provider from the repository root, on CUDA 12.8.
+`Dockerfile.compute` builds the image for the `local_gpu` Compose profile from the repository root, on CUDA 12.8; Colab installs `scene-compute` from the repository instead.
 
 - The `EXTRAS` build argument chooses what it contains: empty for Fake Algorithms only, `gpu` for every real Algorithm (`scene-compute[gpu]` pins torch, torchvision and xformers together).
 - `uv run main.py compute-image [--extras gpu]` builds it and `push-compute-image` pushes it, tagged `<variant>-<git short sha>` under `COMPUTE_IMAGE_REPO`.
@@ -60,4 +60,4 @@ Server behaviour:
 
 ## Providers
 
-Each Provider has a README in `backend/deploy/`: `modal/` (with `app.py`, deployed by `uv run main.py deploy-modal`), `runpod/`, `vast/`, `colab/` (with the notebook cells as `scene_compute_colab.py`) and `generic/` (any Docker host, including the local GPU). Point the worker at a new Target with `pipeline.fake-gpu.yaml` first: it checks transport, authentication and file transfer without weights.
+Colab is the only Provider: `backend/deploy/colab/` holds its README and the notebook `scene_compute_colab.ipynb`. `backend/deploy/local-gpu/` covers the `local_gpu` Compose profile and building the image. Point the worker at a new Target with `pipeline.fake-gpu.yaml` first: it checks transport, authentication and file transfer without weights.

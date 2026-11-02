@@ -23,8 +23,8 @@ testpaths=["backend/tests"]
 markers=["db: needs the Postgres test database (TEST_DATABASE_URL); `main.py test-unit` skips it"]
 [tool.ruff]
 line-length=100
-# Notebook cells kept as text: their `!` and `%` lines are IPython, not Python.
-extend-exclude=["backend/deploy/colab/scene_compute_colab.py"]
+# The Colab notebook: its `!` and `%` lines are IPython, not Python.
+extend-exclude=["backend/deploy/colab/scene_compute_colab.ipynb"]
 [tool.ruff.lint]
 select=["E", "F", "I", "UP", "B", "C4", "RUF"]
 # The formatter owns line length; mutable class defaults on Algorithms are read-only by convention.

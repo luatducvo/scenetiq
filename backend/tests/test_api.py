@@ -293,7 +293,7 @@ def test_delete_removes_the_target_workspace_and_tolerates_an_unreachable_target
 
 
 def test_worker_refuses_to_start_without_configured_gpu_targets(tmp_path, monkeypatch):
-    for name in ("GPU_TARGET", "VAST_URL"):
+    for name in ("GPU_TARGET", "COLAB_URL"):
         monkeypatch.delenv(name, raising=False)
     config = Path(__file__).parents[1] / "config"
 
@@ -307,8 +307,8 @@ def test_worker_refuses_to_start_without_configured_gpu_targets(tmp_path, monkey
 
     with pytest.raises(ValueError, match="GPU_TARGET"):
         start()
-    monkeypatch.setenv("GPU_TARGET", "vast")
-    with pytest.raises(ValueError, match=r"vast.*URL"):
+    monkeypatch.setenv("GPU_TARGET", "colab")
+    with pytest.raises(ValueError, match=r"colab.*URL"):
         start()
 
 

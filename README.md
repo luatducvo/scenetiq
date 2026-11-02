@@ -44,10 +44,9 @@ The frontend is a React SPA built with Vite, React Router and Three.js through R
 
 ## Real models on a GPU
 
-1. Build and push the GPU image: set `COMPUTE_IMAGE_REPO` in `backend/.env`, then `uv run main.py push-compute-image --extras gpu`.
-2. Run it on a Provider following `backend/deploy/<provider>/README.md` (Modal, RunPod, Vast.ai, Colab, or any Docker host).
-3. In `backend/.env`, set the Provider's URL variable, `COMPUTE_TOKEN`, `GPU_TARGET` to the Target name from `backend/config/compute.yaml`, and `PIPELINE_CONFIG=/app/backend/config/pipeline.yaml`. Try `pipeline.fake-gpu.yaml` first to check the connection.
-4. `uv run main.py up`.
+1. Run scene-compute on Google Colab following `backend/deploy/colab/README.md`.
+2. In `backend/.env`, set `COLAB_URL` to the notebook's tunnel URL, `COMPUTE_TOKEN`, `GPU_TARGET=colab`, and `PIPELINE_CONFIG=/app/backend/config/pipeline.yaml`. Try `pipeline.fake-gpu.yaml` first to check the connection.
+3. `uv run main.py up`.
 
 With a local NVIDIA GPU, `uv run main.py download-models` and `uv run main.py up-local-gpu` run scene-compute on this machine (`GPU_TARGET=local_gpu`, `LOCAL_GPU_EXTRAS=gpu`).
 
