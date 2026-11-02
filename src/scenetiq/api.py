@@ -1,6 +1,7 @@
 """HTTP API: upload Captures, track jobs, fetch Reconstructions and run Queries."""
 
 import io
+import logging
 import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -18,6 +19,8 @@ from scenetiq.config import Settings
 from scenetiq.domain import Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore
+
+logger = logging.getLogger(__name__)
 
 MIN_VIEWS = 10
 MAX_VIEWS = 300
@@ -39,6 +42,9 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         store = SceneStore(settings.storage_root)
+        interrupted = store.fail_unfinished_jobs()
+        if interrupted:
+            logger.warning("marked %d unfinished job(s) failed after restart", interrupted)
         app.state.store = store
         app.state.runner = JobRunner(store, pipeline)
         yield
