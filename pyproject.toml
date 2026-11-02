@@ -1,5 +1,5 @@
 [project]
-name="scene-understanding"
+name="scenetiq"
 version="0.1.0"
 requires-python=">=3.12,<3.14"
 # Plain `uv sync` installs every workspace member (light deps, plus the mesh extra its tests need) for tooling and tests.
