@@ -25,3 +25,22 @@ def test_real_reconstruction_is_a_metric_point_cloud(real_result, smoke_capture:
     # A room-scale Scene fits in tens of metres, not thousands or millimetres.
     extent = rec.points.max(axis=0) - rec.points.min(axis=0)
     assert 0.3 < float(extent.max()) < 50.0
+
+
+def test_real_pipeline_reports_stages_up_to_merging(real_result):
+    _, stages = real_result
+    assert stages[:5] == [
+        Stage.RECONSTRUCTING, Stage.FUSING, Stage.SUPERPOINTS, Stage.MASKING, Stage.MERGING,
+    ]  # fmt: skip
+
+
+def test_real_reconstruction_has_consistent_instances(real_result):
+    rec, _ = real_result
+    assert len(rec.instances) >= 1
+    ids = {i.instance_id for i in rec.instances}
+    assert ids == set(np.unique(rec.instance_ids[rec.instance_ids >= 0]).tolist())
+    for inst in rec.instances:
+        member = rec.points[rec.instance_ids == inst.instance_id]
+        np.testing.assert_allclose(inst.centroid, member.mean(axis=0), atol=1e-4)
+        assert np.all(inst.bbox_min <= inst.centroid)
+        assert np.all(inst.centroid <= inst.bbox_max)

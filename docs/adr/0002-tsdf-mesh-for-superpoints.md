@@ -5,7 +5,7 @@ MV3DIS groups points into superpoints with the ScanNet Segmentator, which runs o
 ## Considered Options
 
 - Superpoints computed directly on the point cloud (cut-pursuit, VCCS): needs no mesh, but strays from the setup MV3DIS was tuned on.
-- `point_level=True` (every point is its own primitive): simplest, but slower and noisier. Kept only as a debugging fallback.
+- `point_level=True` (every point is its own primitive): rejected. It is broken at the vendored MV3DIS commit (return arity mismatch), and it would allocate dense N×N matrices over all points. The fallback primitive is a voxel grid of about 15 cm instead.
 
 ## Consequences
 

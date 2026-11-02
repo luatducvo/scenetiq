@@ -91,7 +91,7 @@ Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells
 
 ### Real Pipeline (GPU)
 
-- `src/scenetiq/pipeline/` holds the real Pipeline. `real.py` chains the stages. `adapters.py` holds the pure conversions (unit-tested): DA3 world-to-camera ↔ camera-to-world, and confidence filtering of depth. Each stage file holds one stage: `reconstruct.py` (DA3, ADR 0001) and `fusion.py` (TSDF, ADR 0002).
+- `src/scenetiq/pipeline/` holds the real Pipeline. `real.py` chains the stages. `adapters.py` holds the pure conversions (unit-tested): DA3 world-to-camera ↔ camera-to-world, and confidence filtering of depth. Each stage file holds one stage: `reconstruct.py` (DA3, ADR 0001), `fusion.py` (TSDF, ADR 0002), `primitives.py` (voxel-grid fallback primitives), `masking.py` (SAM2 automatic Masks, ADR 0003, at most 255 per View) and `merging.py` (wraps vendored MV3DIS; turns its labels into Instance ids).
 - Model libraries (`torch`, `depth_anything_3`, `open3d`, `sam2`, `transformers`) are **imported lazily inside functions**, so the package still imports and tests on CPU. ty is told to allow these unresolved imports in `[tool.ty.analysis]`.
 - The GPU stack is pinned in `requirements-gpu.txt`, not in `pyproject.toml`, because `uv lock` must stay resolvable on CPU-only machines. The notebook installs it when `PIPELINE = "real"`. On a GPU machine: `pip install -e . -r requirements-gpu.txt`.
 - GPU smoke tests: `SCENETIQ_SMOKE_CAPTURE=/path/to/photos uv run pytest -m gpu`. They are skipped when the variable is unset.
