@@ -65,3 +65,13 @@ exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
 testpaths = ["tests"]
 markers = ["gpu: needs a CUDA GPU and the real model stack (run on Colab)"]
 addopts = "-m 'not gpu'"
+
+[tool.ty.analysis]
+# GPU-only model stack from requirements-gpu.txt, imported lazily inside pipeline stages.
+allowed-unresolved-imports = [
+    "depth_anything_3.**",
+    "open3d.**",
+    "torch.**",
+    "sam2.**",
+    "transformers.**",
+]

@@ -1,0 +1,5 @@
+# GPU model stack for SCENETIQ_PIPELINE=real. Installed only on Colab by notebooks/colab_server.ipynb.
+# Kept out of pyproject.toml so `uv lock` stays resolvable on CPU-only dev machines.
+# Depth Anything 3 (code Apache-2.0; DA3NESTED-GIANT-LARGE weights CC BY-NC 4.0, see ADR 0001)
+depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3.git@40674546e40144452ec93035ac77d762f4b5d16f
+open3d==0.19.0

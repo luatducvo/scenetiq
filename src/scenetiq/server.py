@@ -14,12 +14,18 @@ from scenetiq.fakes import FakePipeline, FakeTextEncoder
 def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder]:
     """Return the Pipeline and text encoder selected by ``settings.pipeline``.
 
+    ``"real"`` needs the GPU stack from ``requirements-gpu.txt``; models load on first use.
+
     Raises:
         ValueError: If ``settings.pipeline`` names no known implementation.
     """
     if settings.pipeline == "fake":
         return FakePipeline(), FakeTextEncoder()
-    raise ValueError(f"unknown pipeline {settings.pipeline!r}; expected 'fake'")
+    if settings.pipeline == "real":
+        from scenetiq.pipeline.real import RealPipeline
+
+        return RealPipeline(), FakeTextEncoder()
+    raise ValueError(f"unknown pipeline {settings.pipeline!r}; expected 'fake' or 'real'")
 
 
 def build_app() -> FastAPI:

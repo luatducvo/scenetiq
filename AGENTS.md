@@ -88,3 +88,11 @@ One-time setup:
 3. Pick a GPU runtime.
 
 Each run: open the notebook, set `PIPELINE` (`fake` or `real`) and run all cells. Scenes, the SQLite database and logs live under `DRIVE_ROOT` on Google Drive, so they survive runtime restarts. Jobs that were running when the runtime died are marked failed at the next start. Then run the frontend locally with the backend URL set to `https://<tunnel hostname>`. Add the frontend's origin to `SCENETIQ_CORS_ORIGINS` if it is not on `localhost:5173`.
+
+### Real Pipeline (GPU)
+
+- `src/scenetiq/pipeline/` holds the real Pipeline. `real.py` chains the stages. `adapters.py` holds the pure conversions (unit-tested): DA3 world-to-camera ↔ camera-to-world, and confidence filtering of depth. Each stage file holds one stage: `reconstruct.py` (DA3, ADR 0001) and `fusion.py` (TSDF, ADR 0002).
+- Model libraries (`torch`, `depth_anything_3`, `open3d`, `sam2`, `transformers`) are **imported lazily inside functions**, so the package still imports and tests on CPU. ty is told to allow these unresolved imports in `[tool.ty.analysis]`.
+- The GPU stack is pinned in `requirements-gpu.txt`, not in `pyproject.toml`, because `uv lock` must stay resolvable on CPU-only machines. The notebook installs it when `PIPELINE = "real"`. On a GPU machine: `pip install -e . -r requirements-gpu.txt`.
+- GPU smoke tests: `SCENETIQ_SMOKE_CAPTURE=/path/to/photos uv run pytest -m gpu`. They are skipped when the variable is unset.
+- Tuning knobs live in the stage option dataclasses (`DA3Options`, `FusionOptions`). Defaults: process at 504 px, drop depth below the 30th confidence percentile or beyond 12 m, 2 cm TSDF voxels.
