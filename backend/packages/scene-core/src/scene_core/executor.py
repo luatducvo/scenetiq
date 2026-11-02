@@ -1,3 +1,5 @@
+import gc
+import sys
 import threading
 from pathlib import Path
 
@@ -22,8 +24,25 @@ class Executor:
             self._instances[name] = instance
         return self._instances[name]
 
+    def _release_others(self, keep: str):
+        """Drop every Algorithm instance but keep's, so only one Stage's models occupy the GPU.
+
+        Stages run one after another and each loads its own models; kept alive together they
+        exhaust GPU and host memory, and the compute process is killed mid-Job.
+        """
+        released = [name for name in self._instances if name != keep]
+        for name in released:
+            del self._instances[name]
+        if released:
+            gc.collect()
+            # Only an Algorithm imports torch; the Executor clears its cache when one has.
+            torch = sys.modules.get("torch")
+            if torch is not None and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def run(self, algorithm: str, scene_id: str, params: dict, on_progress=None) -> dict:
         with self._lock:
+            self._release_others(algorithm)
             instance = self.algorithm(algorithm)
             workspace = SceneWorkspace(self.data_dir, scene_id)
             instance._progress = on_progress

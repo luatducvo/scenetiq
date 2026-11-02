@@ -361,15 +361,16 @@ class Sam3Segmentation(StageAlgorithm):
                 )
                 if masks is None:
                     continue
-                masks, boxes = _numpy(masks), _numpy(boxes)
+                # Thresholded on the GPU: a float copy of every full-resolution mask in host
+                # memory is four times the size and can exhaust it within one Frame.
+                masks, boxes = (masks > 0.5).cpu().numpy(), _numpy(boxes)
                 if masks.shape != (len(boxes), height, width):
                     raise SceneError(
                         "INVALID_MODEL_OUTPUT", "SAM 3 mask dimensions differ from RGB"
                     )
-                for mask, score, label in zip(
+                for binary, score, label in zip(
                     masks, boxes[:, 4], boxes[:, 5].astype(int), strict=True
                 ):
-                    binary = mask > 0.5
                     if np.isfinite(score) and score >= threshold and binary.any():
                         candidates.append((float(score), labels[label], binary))
             kept = select_masks(candidates, containment)
