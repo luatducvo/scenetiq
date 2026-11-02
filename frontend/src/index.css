@@ -62,3 +62,8 @@ button.danger { color: var(--error); }
 .stages li { color: var(--muted); }
 .stages li.active { color: var(--accent); font-weight: 600; }
 .stages li.done { color: var(--done); }
+
+.viewer { display: flex; flex-direction: column; gap: 0.75rem; flex: 1; min-height: 0; }
+.canvas-wrap {
+  flex: 1; min-height: 60vh; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}

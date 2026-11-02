@@ -4,18 +4,20 @@ import io
 import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image, UnidentifiedImageError
 
+from scenetiq.artifacts import POINTS_FILE
 from scenetiq.config import Settings
 from scenetiq.domain import Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
-from scenetiq.storage import SceneRecord, SceneStore
+from scenetiq.storage import JobStatus, SceneRecord, SceneStore
 
 MIN_VIEWS = 10
 MAX_VIEWS = 300
@@ -116,7 +118,25 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         """List every Scene, newest first."""
         return [_scene_summary(r) for r in request.app.state.store.list_scenes()]
 
+    @app.get("/scenes/{scene_id}/points")
+    def get_points(request: Request, scene_id: str) -> FileResponse:
+        """Return the Reconstruction's point cloud as binary PLY (xyz metres, rgb)."""
+        directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
+        return FileResponse(directory / POINTS_FILE, media_type="application/octet-stream")
+
     return app
+
+
+def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:
+    record = store.get_scene(scene_id)
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Scene")
+    if record.status is not JobStatus.SUCCEEDED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Scene is not ready: its job is {record.status.value}",
+        )
+    return store.reconstruction_dir(scene_id)
 
 
 def _scene_summary(record: SceneRecord) -> dict[str, str]:

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import type { BackendConfig } from './api'
 import { JobProgress } from './components/JobProgress'
 import { SettingsPanel } from './components/SettingsPanel'
+import { SceneViewer } from './components/SceneViewer'
 import { UploadForm } from './components/UploadForm'
 import { loadConfig, saveConfig } from './settings'
 
@@ -45,7 +46,7 @@ export default function App() {
         {screen.kind === 'job' && (
           <JobProgress config={config} jobId={screen.jobId} onSucceeded={openScene} />
         )}
-        {screen.kind === 'scene' && <p className="panel">Scene {screen.sceneId} is ready.</p>}
+        {screen.kind === 'scene' && <SceneViewer config={config} sceneId={screen.sceneId} />}
       </main>
     </div>
   )

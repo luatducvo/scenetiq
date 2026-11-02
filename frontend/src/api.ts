@@ -73,3 +73,8 @@ export async function getJob(cfg: BackendConfig, jobId: string): Promise<Job> {
 export async function listScenes(cfg: BackendConfig): Promise<SceneSummary[]> {
   return (await request(cfg, '/scenes')).json()
 }
+
+/** Fetch a Scene's point cloud as raw binary PLY. */
+export async function getPointCloud(cfg: BackendConfig, sceneId: string): Promise<ArrayBuffer> {
+  return (await request(cfg, `/scenes/${sceneId}/points`)).arrayBuffer()
+}
