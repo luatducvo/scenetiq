@@ -17,6 +17,6 @@ Spec: `.scratch/scene-reconstruction-query/spec.md` (Deployment)
   - [ ] starts the Cloudflare named tunnel
 - [ ] The notebook contains no business logic. Everything it calls lives in the package.
 - [ ] Running the notebook again after a runtime restart brings back the same Scenes at the same URL. Restart recovery (ticket 04) applies if that ticket has landed.
-- [ ] Configuration selects the Pipeline used on Colab. It is the fake one for now; later tickets switch the default to the real one.
+- [ ] Configuration selects the Pipeline used on Colab. The notebook defaults to `PIPELINE = "real"` (switched by ticket 08); `"fake"` remains for testing the deployment without models.
 - [ ] AGENTS.md documents how to run the notebook, the Colab secrets it needs, and the one-time Cloudflare named-tunnel setup.
 - [ ] The Definition of Done in AGENTS.md is met. The notebook is exempt from docstring rules; the package code it calls is not.
