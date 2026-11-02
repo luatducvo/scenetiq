@@ -44,3 +44,16 @@ def test_real_reconstruction_has_consistent_instances(real_result):
         np.testing.assert_allclose(inst.centroid, member.mean(axis=0), atol=1e-4)
         assert np.all(inst.bbox_min <= inst.centroid)
         assert np.all(inst.centroid <= inst.bbox_max)
+
+
+def test_superpoints_cover_every_point_of_the_fused_mesh(smoke_capture: Capture):
+    from scenetiq.pipeline.fusion import fuse
+    from scenetiq.pipeline.reconstruct import DA3Reconstructor
+    from scenetiq.pipeline.superpoints import mesh_superpoints
+
+    frames = DA3Reconstructor().reconstruct(smoke_capture.views)
+    geometry = fuse(frames)
+    ids = mesh_superpoints(geometry.vertices, geometry.triangles)
+    assert len(ids) == len(geometry.vertices)
+    assert ids.min() == 0
+    assert 10 < ids.max() + 1 < len(geometry.vertices)

@@ -1,6 +1,7 @@
 """The real Pipeline: chains the GPU stages behind the ``Pipeline`` interface."""
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
@@ -11,6 +12,7 @@ from scenetiq.pipeline.masking import SAM2Masker
 from scenetiq.pipeline.merging import MergingOptions, merge_instances
 from scenetiq.pipeline.primitives import voxel_primitives
 from scenetiq.pipeline.reconstruct import DA3Reconstructor, Reconstructor
+from scenetiq.pipeline.superpoints import mesh_superpoints
 
 
 @dataclass
@@ -20,11 +22,18 @@ class RealPipelineOptions:
     Attributes:
         fusion: TSDF Fusing stage (ADR 0002).
         merging: MV3DIS Merging stage.
-        primitive_voxel_size: Edge, in metres, of the voxel-grid primitives fed to MV3DIS.
+        primitives: ``"superpoints"`` (ScanNet Segmentator on the fused mesh) or
+            ``"voxel"`` (voxel-grid fallback, for debugging).
+        superpoint_k_thresh: Segmentator threshold; larger gives larger superpoints.
+        superpoint_min_verts: Segmentator minimum superpoint size.
+        primitive_voxel_size: Edge, in metres, of the voxel-grid fallback primitives.
     """
 
     fusion: FusionOptions = field(default_factory=FusionOptions)
     merging: MergingOptions = field(default_factory=MergingOptions)
+    primitives: Literal["superpoints", "voxel"] = "superpoints"
+    superpoint_k_thresh: float = 0.01
+    superpoint_min_verts: int = 20
     primitive_voxel_size: float = 0.15
 
 
@@ -59,7 +68,12 @@ class RealPipeline:
         points = geometry.vertices
 
         on_stage(Stage.SUPERPOINTS)
-        primitive_ids = voxel_primitives(points, opts.primitive_voxel_size)
+        if opts.primitives == "superpoints":
+            primitive_ids = mesh_superpoints(
+                points, geometry.triangles, opts.superpoint_k_thresh, opts.superpoint_min_verts
+            )
+        else:
+            primitive_ids = voxel_primitives(points, opts.primitive_voxel_size)
 
         on_stage(Stage.MASKING)
         view_masks = self.masker.masks_for(frames)
