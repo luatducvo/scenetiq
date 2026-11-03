@@ -70,7 +70,6 @@ addopts = "-m 'not gpu'"
 [tool.ty.analysis]
 # GPU-only model stack from requirements-gpu.txt, imported lazily inside pipeline stages.
 allowed-unresolved-imports = [
-    "depth_anything_3.**",
     "open3d.**",
     "torch.**",
     "sam2.**",

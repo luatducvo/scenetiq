@@ -56,7 +56,7 @@ class DA3Reconstructor:
 
     def _load(self) -> Any:
         if self._model is None:
-            from depth_anything_3.api import DepthAnything3
+            from scenetiq.vendor.depth_anything_3.api import DepthAnything3
 
             self._model = DepthAnything3.from_pretrained(self.options.model_id).to(self.device)
         return self._model

@@ -1,11 +1,19 @@
 # GPU model stack for SCENETIQ_PIPELINE=real. Installed only on Colab by notebooks/colab_server.ipynb.
 # Kept out of pyproject.toml so `uv lock` stays resolvable on CPU-only dev machines.
-# Depth Anything 3 (code Apache-2.0; DA3NESTED-GIANT-LARGE weights CC BY-NC 4.0, see ADR 0001)
-depth-anything-3 @ git+https://github.com/ByteDance-Seed/Depth-Anything-3.git@40674546e40144452ec93035ac77d762f4b5d16f
-open3d==0.19.0
+# torch and torchvision are not listed: Colab's preinstalled CUDA builds are used.
+open3d==0.20.0
+# Depth Anything 3 is vendored in src/scenetiq/vendor/depth_anything_3 (ADR 0005); these are its runtime needs.
+# (code Apache-2.0; DA3NESTED-GIANT-LARGE weights CC BY-NC 4.0, see ADR 0001)
+addict>=2.4
+einops>=0.8
+huggingface-hub>=0.25
+imageio>=2.34
+omegaconf>=2.3
+opencv-python>=4.10
+safetensors>=0.4
 # SAM2 from Meta's official repo (the PyPI "sam2" package is a third-party upload; do not use it)
 sam2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4
-# Vendored MV3DIS runtime needs
+# Vendored MV3DIS and DA3 runtime needs
 tqdm>=4.66
 # SigLIP2 (google/siglip2-giant-opt-patch16-384, Apache-2.0) via Hugging Face transformers
 transformers>=4.50

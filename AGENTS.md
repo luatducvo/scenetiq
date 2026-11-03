@@ -6,7 +6,7 @@
 
 ## Development
 
-Python 3.12 with uv; React + Vite + TS in `frontend/`. Human-facing setup and usage are in `README.md`. The current spec is `.scratch/scene-reconstruction-query/spec.md`.
+Python 3.13 with uv (Colab's Python); React + Vite + TS in `frontend/`. Human-facing setup and usage are in `README.md`. The current spec is `.scratch/scene-reconstruction-query/spec.md`.
 
 - Use the `GLOSSARY.md` terms (Scene, Capture, View, Reconstruction, Mask, Instance, Query, Match) in names, docstrings and tests, and avoid the terms it lists under *Avoid*. ScanNet's own "frame" is the only exception.
 - Respect `docs/adr/`. When a decision changes, update or supersede its ADR in the same change.
@@ -38,10 +38,10 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 
 ### Non-obvious constraints
 
-- **GPU imports are lazy.** `torch`, `depth_anything_3`, `open3d`, `sam2` and `transformers` are imported only inside functions, so the package imports and tests on CPU. ty whitelists them in `[tool.ty.analysis]`. Never import them at module top level.
+- **GPU imports are lazy.** `torch`, `open3d`, `sam2`, `transformers` and the vendored `scenetiq.vendor.depth_anything_3` are imported only inside functions, so the package imports and tests on CPU. ty whitelists the third-party ones in `[tool.ty.analysis]`. Never import them at module top level.
 - **The GPU stack lives in `requirements-gpu.txt`, not `pyproject.toml`**, so that `uv lock` still resolves on CPU-only machines.
   - Install it with `uv pip install --system -e . -r requirements-gpu.txt`. Do not use `uv sync`: `--system` keeps Colab's CUDA-matched torch.
-  - DA3 needs `numpy<2`, so keep `numpy>=1.26` in `pyproject.toml`; do not raise the lower bound.
+  - DA3 is vendored, not installed (ADR 0005): upstream pins `numpy<2` and Python `<=3.13`, which Colab no longer satisfies. Its runtime dependencies are listed by hand in `requirements-gpu.txt`. Do not add `xformers`: its wheels pin a torch version and can replace Colab's CUDA torch.
   - Install SAM2 only from Meta's GitHub repo. The PyPI `sam2` package is a third-party upload.
 - **Vendored code** is in `src/scenetiq/vendor/`, excluded from ruff and ty.
   - Each directory needs `LICENSE` and `PROVENANCE.md` (upstream URL, pinned commit, every local modification).
