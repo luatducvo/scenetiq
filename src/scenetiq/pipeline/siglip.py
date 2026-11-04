@@ -41,9 +41,9 @@ class SigLIP2Encoder:
                 import torch
                 from transformers import AutoModel, AutoProcessor
 
-                model = AutoModel.from_pretrained(
-                    self.options.model_id, torch_dtype=torch.bfloat16
-                ).to(self.device)
+                model = AutoModel.from_pretrained(self.options.model_id, dtype=torch.bfloat16).to(
+                    self.device
+                )
                 model.eval()
                 self._processor = AutoProcessor.from_pretrained(self.options.model_id)
                 self._scale = math.exp(float(model.logit_scale.float().item()))
@@ -61,7 +61,7 @@ class SigLIP2Encoder:
             batch = images[start : start + self.options.batch_size]
             inputs = processor(images=batch, return_tensors="pt").to(self.device)
             with torch.inference_mode():
-                feats = model.get_image_features(**inputs).float()
+                feats = model.get_image_features(**inputs).pooler_output.float()
             feats = torch.nn.functional.normalize(feats, dim=-1)
             out.append(feats.cpu().numpy())
         if not out:
@@ -78,7 +78,7 @@ class SigLIP2Encoder:
             text=[prompt], padding="max_length", max_length=64, return_tensors="pt"
         ).to(self.device)
         with torch.inference_mode():
-            feats = model.get_text_features(**inputs).float()
+            feats = model.get_text_features(**inputs).pooler_output.float()
         feats = torch.nn.functional.normalize(feats, dim=-1)
         return feats[0].cpu().numpy().astype(np.float32)
 

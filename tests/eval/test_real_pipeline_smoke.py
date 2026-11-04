@@ -56,6 +56,13 @@ def test_real_reconstruction_has_consistent_instances(real_result):
         assert np.all(inst.centroid <= inst.bbox_max)
 
 
+def test_siglip2_encodes_query_text_to_a_unit_vector(encoder):
+    # Runs without the Query environment variables, so a broken text tower is always caught.
+    embedding = encoder.encode("a chair")
+    assert embedding.ndim == 1
+    assert float(np.linalg.norm(embedding)) == pytest.approx(1.0, abs=1e-3)
+
+
 def test_only_siglip2_stays_on_the_gpu_after_a_run(real_result):
     import torch
 
