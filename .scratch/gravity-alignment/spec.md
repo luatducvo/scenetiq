@@ -91,7 +91,7 @@ The user sees a level Scene and tighter bounding boxes, and one extra step in jo
 - The real Pipeline receives the aligner through its constructor with a GeoCalib default, and the stage runs inside the existing per-stage memory tracking. The model is loaded for the stage and released on exit, also on failure.
 
 **Configuration**
-- A new `AlignmentOptions` settings group holds: maximum Views, whether to use the focal prior, consensus angle, consensus fraction, plane inlier distance, maximum planes, minimum plane fraction and maximum plane angle. Defaults are 12, on, 10°, 0.5, 0.03 m, 5, 0.05 and 10°.
+- A new `AlignmentOptions` settings group holds: maximum Views, whether to use the focal prior, consensus angle, consensus fraction, plane inlier distance, maximum planes, minimum plane fraction, maximum plane angle, the plane search's subsample size and its RANSAC iterations. Defaults are 12, on, 10°, 0.5, 0.03 m, 5, 0.05, 10°, 200,000 and 1000.
 - It is added to `Settings` and passed to the stage in the server's component assembly, like every other stage's options.
 
 **Dependencies**

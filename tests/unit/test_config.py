@@ -60,6 +60,7 @@ def test_json_values_become_the_types_the_settings_declare():
     [
         ({"view_stide": 7}, "view_stide"),
         ({"da3": {"proces_res": 392}}, "da3.proces_res"),
+        ({"alignment": {"enabled": False}}, "alignment.enabled"),
     ],
 )
 def test_unknown_key_is_refused_by_its_full_name(overrides: dict, named: str):

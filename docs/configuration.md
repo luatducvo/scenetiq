@@ -88,7 +88,7 @@ DA3 and SAM2 leave the GPU when their stage ends and load again for the next job
 | `block_resolution` | `16` | Voxels along each edge of a TSDF block. |
 | `initial_block_count` | `1000` | Blocks allocated up front. The grid grows beyond this as needed, so it only affects speed and the first allocation. |
 
-### `alignment`: level the Scene
+### `alignment`: Gravity alignment
 
 Each job logs one line, for example `gravity-alignment method=plane angle=12.3deg views=12 consensus=0.83 plane=0.42`. The `method` is one of:
 

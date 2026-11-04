@@ -19,9 +19,10 @@ from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 Float64Array = npt.NDArray[np.float64]
+"""Rotations and directions, which are computed in double precision."""
 
 CONVENTIONAL_UP = (0.0, -1.0, 0.0)
-"""The direction physical up has in every Reconstruction."""
+"""The direction physical up has in a Reconstruction once it is Gravity-aligned."""
 
 ALIGNMENT_LOGGER = "scenetiq.alignment"
 """Logger of the per-job line; ``colab_logging.json`` sends it to stdout unformatted."""
@@ -35,7 +36,7 @@ class UpEstimator(Protocol):
     def estimate(
         self, images: npt.NDArray[np.uint8], focals: npt.NDArray[np.float32] | None
     ) -> npt.ArrayLike:
-        """Return one up vector per image, each in its camera's frame (OpenCV convention).
+        """Return one up vector per View, each in its camera's frame (OpenCV convention).
 
         Args:
             images: ``(K, H, W, 3)`` uint8 RGB.
