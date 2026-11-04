@@ -295,7 +295,8 @@ def _validate_image(filename: str, data: bytes) -> None:
         )
     try:
         with Image.open(io.BytesIO(data)) as img:
-            actual = img.format
+            # Phones write JPEGs with embedded pictures, which Pillow reports as MPO.
+            actual = "JPEG" if img.format == "MPO" else img.format
             img.verify()
     except (UnidentifiedImageError, OSError, SyntaxError) as exc:
         raise HTTPException(

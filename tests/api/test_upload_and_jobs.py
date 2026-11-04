@@ -39,6 +39,30 @@ def test_file_whose_content_does_not_match_its_extension_is_rejected(client: Tes
     assert "fake.jpg" in resp.json()["detail"]
 
 
+def test_multi_picture_jpeg_from_a_phone_is_accepted(client: TestClient):
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(
+        buf, format="MPO", save_all=True, append_images=[Image.new("RGB", (4, 4))]
+    )
+    assert Image.open(io.BytesIO(buf.getvalue())).format == "MPO"
+
+    resp = post_view(client, start_capture(client), 0, filename="phone.jpg", data=buf.getvalue())
+
+    assert resp.status_code == 204, resp.text
+
+
+def test_multi_picture_jpeg_named_png_is_rejected(client: TestClient):
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8)).save(
+        buf, format="MPO", save_all=True, append_images=[Image.new("RGB", (4, 4))]
+    )
+
+    resp = post_view(client, start_capture(client), 0, filename="phone.png", data=buf.getvalue())
+
+    assert resp.status_code == 415
+    assert "phone.png" in resp.json()["detail"]
+
+
 def test_capture_missing_a_view_creates_no_scene(client: TestClient):
     capture_id = start_capture(client, 10)
     for i in range(9):
