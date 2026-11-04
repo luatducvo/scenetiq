@@ -1,4 +1,5 @@
 import io
+import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from scenetiq.fakes import FakePipeline
+from scenetiq.runtime_log import PROGRESS_LOGGER, JobProgress, UploadProgress, parse_progress
 
 from .conftest import AUTH, post_view, staged_capture, start_capture, upload, wait_for_job
 
@@ -112,6 +114,81 @@ def test_views_sent_concurrently_and_out_of_order_all_reach_the_pipeline(
     (capture,) = pipeline.captures
     assert len(capture.views) == 30
     assert all(v.path.exists() for v in capture.views)
+
+
+def _reported_progress(caplog: pytest.LogCaptureFixture) -> list[JobProgress]:
+    parsed = [parse_progress(r.getMessage()) for r in caplog.records if r.name == PROGRESS_LOGGER]
+    return [p for p in parsed if isinstance(p, JobProgress)]
+
+
+def _reported_uploads(caplog: pytest.LogCaptureFixture) -> list[UploadProgress]:
+    parsed = [parse_progress(r.getMessage()) for r in caplog.records if r.name == PROGRESS_LOGGER]
+    return [p for p in parsed if isinstance(p, UploadProgress)]
+
+
+def test_each_stored_view_reports_the_upload_count_and_a_retry_does_not_add_to_it(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger=PROGRESS_LOGGER)
+    capture_id = start_capture(client, 10)
+
+    for index in (0, 0, 1):
+        assert post_view(client, capture_id, index).status_code == 204
+
+    assert _reported_uploads(caplog) == [
+        UploadProgress(capture_id, 1, 10),
+        UploadProgress(capture_id, 1, 10),
+        UploadProgress(capture_id, 2, 10),
+    ]
+
+
+def test_rejected_view_reports_no_upload_progress(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger=PROGRESS_LOGGER)
+
+    resp = post_view(client, start_capture(client), 0, filename="notes.txt", data=b"hello")
+
+    assert resp.status_code == 415
+    assert _reported_uploads(caplog) == []
+
+
+def test_job_reports_every_stage_and_then_success(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger=PROGRESS_LOGGER)
+
+    body = upload(client)
+    wait_for_job(client, body["job_id"])
+    client.app.state.runner.join(5)  # type: ignore[attr-defined]
+
+    assert [(p.status, p.stage, p.step, p.total) for p in _reported_progress(caplog)] == [
+        ("running", "reconstructing", 1, 6),
+        ("running", "fusing", 2, 6),
+        ("running", "superpoints", 3, 6),
+        ("running", "masking", 4, 6),
+        ("running", "merging", 5, 6),
+        ("running", "embedding", 6, 6),
+        ("succeeded", "embedding", 6, 6),
+    ]
+    assert {(p.job_id, p.scene_id) for p in _reported_progress(caplog)} == {
+        (body["job_id"], body["scene_id"])
+    }
+
+
+def test_failed_job_reports_the_stage_it_failed_at(
+    make_client: Callable[..., TestClient], caplog: pytest.LogCaptureFixture
+):
+    caplog.set_level(logging.INFO, logger=PROGRESS_LOGGER)
+    client = make_client(pipeline=FakePipeline(error=RuntimeError("boom")))
+
+    wait_for_job(client, upload(client)["job_id"])
+    client.app.state.runner.join(5)  # type: ignore[attr-defined]
+
+    assert [(p.status, p.stage) for p in _reported_progress(caplog)] == [
+        ("running", "reconstructing"),
+        ("failed", "reconstructing"),
+    ]
 
 
 def test_view_index_outside_the_capture_is_rejected(client: TestClient):

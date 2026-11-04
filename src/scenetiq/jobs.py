@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 
 from scenetiq.domain import Capture, Pipeline, Stage
+from scenetiq.runtime_log import JobProgress, report_progress
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore
 
 logger = logging.getLogger(__name__)
@@ -75,9 +77,21 @@ class JobRunner:
 
     def _run(self, record: SceneRecord, capture: Capture) -> None:
         store = self._store
+        stages = list(Stage)
+        progress = JobProgress(
+            job_id=record.job_id,
+            scene_id=record.scene_id,
+            status=JobStatus.RUNNING.value,
+            stage="",
+            step=0,
+            total=len(stages),
+        )
 
         def on_stage(stage: Stage) -> None:
+            nonlocal progress
             store.update_job(record.job_id, stage=stage.value)
+            progress = replace(progress, stage=stage.value, step=stages.index(stage) + 1)
+            report_progress(progress)
 
         try:
             store.update_job(record.job_id, status=JobStatus.RUNNING)
@@ -86,7 +100,9 @@ class JobRunner:
         except Exception as exc:
             logger.exception("job %s failed", record.job_id)
             store.update_job(record.job_id, status=JobStatus.FAILED, error=str(exc) or repr(exc))
+            report_progress(replace(progress, status=JobStatus.FAILED.value))
         else:
             store.update_job(record.job_id, status=JobStatus.SUCCEEDED)
+            report_progress(replace(progress, status=JobStatus.SUCCEEDED.value))
         finally:
             self.release()

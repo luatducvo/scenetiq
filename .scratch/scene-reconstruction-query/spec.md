@@ -44,16 +44,13 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 28. As a user, I want to set the backend URL and access token in the frontend's `.env` file, so that I can point it at my Colab instance.
 29. As the owner, I want every API request to need a shared token, so that strangers who find the tunnel URL cannot use my GPU or see my Scenes.
 30. As the owner, I want requests with a missing or wrong token rejected, so that the backend is never open by accident.
-31. As the owner, I want to start the whole backend from one Colab notebook (mount Drive, install, start the server, open the tunnel), so that bringing the system up is a single action.
+31. As the owner, I want to start the whole backend from one Colab notebook (install, start the server, open the tunnel), so that bringing the system up is a single action.
 32. As a developer, I want each Instance to keep its centroid and 3D bounding box in metres, so that spatial reasoning can be added later without reprocessing.
 33. As a developer, I want the relevance threshold to be a configuration value, so that it can be re-tuned without code changes.
-34. As a developer, I want an evaluation harness that runs the real pipeline on 5–10 ScanNet200 scenes using RGB only, so that I can measure instance AP and tune the threshold.
-35. As a developer, I want the harness to sample ScanNet frames evenly down to at most 300 Views, so that evaluation respects the same Capture limits as users.
-36. As a developer, I want the harness to choose the F1-optimal threshold, using ground-truth class names as Queries, so that the threshold is grounded in data.
-37. As a developer, I want the harness to act as an end-to-end regression test, so that a change to any stage that hurts quality is caught.
-38. As a developer, I want the pipeline to sit behind one interface that the API depends on, so that the API can be tested on a CPU with a fake pipeline.
-39. As a developer, I want the reconstruction model swappable behind its stage interface, so that switching to Apache-2.0 DA3 weights stays possible (ADR 0001).
-40. As a developer, I want MV3DIS and the ScanNet Segmentator vendored with their source and licence recorded and the upstream commit pinned, so that I can trace and diff against upstream.
+34. As the owner, I want the notebook to show the API log and a progress bar for the running upload or job, so that I can follow the backend without opening anything else.
+35. As a developer, I want the pipeline to sit behind one interface that the API depends on, so that the API can be tested on a CPU with a fake pipeline.
+36. As a developer, I want the reconstruction model swappable behind its stage interface, so that switching to Apache-2.0 DA3 weights stays possible (ADR 0001).
+37. As a developer, I want MV3DIS and the ScanNet Segmentator vendored with their source and licence recorded and the upstream commit pinned, so that I can trace and diff against upstream.
 
 ## Implementation Decisions
 
@@ -89,10 +86,10 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
   - a list of Matches (instance id plus score) at or above the threshold, sorted by descending score, or
   - when there are none, exactly one Low-confidence Match (the top-scoring Instance), flagged as such.
 - Queries keep no state and no history is stored.
-- The threshold comes from configuration. Its default is the value the evaluation harness produces.
+- The threshold comes from configuration. Its default (0.5) has not been validated against ground truth.
 
 **Storage**
-- Everything is stored under a configurable root, which is the runtime's local disk on Colab. Only logs go to Google Drive. Each Scene has its own directory holding its Reconstruction artifacts:
+- Everything is stored under a configurable root, which is the runtime's local disk on Colab. Each Scene has its own directory holding its Reconstruction artifacts:
   - the point cloud as binary PLY
   - the per-point instance ids
   - Instance metadata and embeddings
@@ -133,22 +130,11 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 
 **Deployment**
 - The Colab notebook:
-  1. mounts Drive, for logs only
-  2. installs the package and its model dependencies
-  3. reads the token from Colab secrets
-  4. starts uvicorn
-  5. starts a Cloudflare **named** tunnel, so the URL stays stable (ADR 0004)
-
-**Evaluation harness**
-- A CLI or module entry point takes a list of ScanNet200 scene ids and their local data paths.
-- For each scene it:
-  1. samples RGB frames evenly to at most 300, discarding the ScanNet depth and poses
-  2. runs `Pipeline.run`
-  3. transfers predicted Instances to ScanNet ground-truth points by nearest neighbour, because the Reconstruction is in its own frame and scale; it aligns first using the ScanNet poses of the sampled frames against the DA3 cameras, with a similarity transform
-  4. computes class-agnostic instance AP / AP50 / AP25
-  5. runs a Query for each ground-truth class name
-- Across all scenes it sweeps the threshold to find the F1-optimal value.
-- It writes a report and the recommended threshold.
+  1. installs the package and its model dependencies
+  2. reads the token from Colab secrets
+  3. starts uvicorn
+  4. starts a Cloudflare **named** tunnel, so the URL stays stable (ADR 0004)
+  5. stays running in its last cell, showing a progress bar for the running upload or job and the API log: request lines and errors, without successful `/health` and job-status polling. Nothing is written to files or Drive.
 
 ## Testing Decisions
 
@@ -165,9 +151,8 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
     - Query thresholding, ranking and the Low-confidence Match fallback
     - restart recovery: a job left in a running state is marked failed when the app starts on the same storage root
   - This is the main test suite and must pass on CI without a GPU.
-- **Seam B: Real Pipeline through the evaluation harness (GPU, Colab only).**
-  - This is the end-to-end regression for all pipeline stages. Stages have no separate unit tests.
-  - It records AP and the tuned threshold. A drop in AP against the last recorded run counts as a regression.
+- **Seam B: Smoke test of the real Pipeline (GPU, Colab only).**
+  - This runs all pipeline stages end to end. Stages have no separate unit tests, and quality (AP) is not measured.
 - The pure coordinate and unit adapters (pose convention, depth units, bounding box and centroid computation) may have small unit tests, because they are easy to get silently wrong.
 - There is no prior art in the codebase: the repo is a fresh skeleton. Use pytest with FastAPI's TestClient (httpx).
 
@@ -189,4 +174,3 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 - The default 2D Mask source for MV3DIS (Grounded-SAM2 prompted with ScanNet200 classes) is deliberately not used (ADR 0003). Expect many more Masks. The merging stage has to cope with over-segmentation, and runtime per Capture will go up.
 - MV3DIS has a `--points_clipfeature_path` argument, but its loader is unimplemented upstream. Do not rely on it. The Embedding stage is new code.
 - MV3DIS's visibility check uses a relative 5% depth tolerance, so depth and points must share one scale. That is one reason the point cloud comes from the TSDF fusion of the same DA3 depth.
-- ScanNet's own data licence applies to the evaluation scenes. They are used for evaluation only and are not redistributed.

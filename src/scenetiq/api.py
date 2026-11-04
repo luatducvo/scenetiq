@@ -21,6 +21,7 @@ from scenetiq.config import Settings
 from scenetiq.domain import Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.query import MissingEmbeddingsError, run_query
+from scenetiq.runtime_log import UploadProgress, report_progress
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureError
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,8 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
             data = image.file.read()
             _validate_image(filename, data)
             store.save_view(capture_id, index, PurePath(filename).suffix.lower(), data)
+            received = store.received_view_count(capture_id)
+            report_progress(UploadProgress(capture_id, received, view_count))
         except UnknownCaptureError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Capture") from exc
 

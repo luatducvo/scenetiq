@@ -15,7 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scenetiq.domain import Camera, FloatArray, Instance, Reconstruction
+from scenetiq.domain import FloatArray, Instance, Reconstruction
 
 POINTS_FILE = "points.ply"
 INSTANCE_IDS_FILE = "instance_ids.bin"
@@ -104,18 +104,4 @@ def load_instances(directory: Path) -> list[Instance]:
             embedding=None if embeddings is None else embeddings[i],
         )
         for i, row in enumerate(rows)
-    ]
-
-
-def load_cameras(directory: Path) -> list[Camera]:
-    """Load the camera of every View from ``directory``."""
-    rows = json.loads((directory / CAMERAS_FILE).read_text())
-    return [
-        Camera(
-            cam_to_world=np.asarray(r["cam_to_world"], dtype=np.float32),
-            intrinsics=np.asarray(r["intrinsics"], dtype=np.float32),
-            width=int(r["width"]),
-            height=int(r["height"]),
-        )
-        for r in rows
     ]

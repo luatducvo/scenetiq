@@ -1,7 +1,7 @@
 import type { MatchInfo } from './api'
 
 /** Distinct highlight colours for ranked Matches (RGB 0-1). */
-export const MATCH_COLORS: [number, number, number][] = [
+const MATCH_COLORS:[number, number, number][] = [
   [1.0, 0.84, 0.0],
   [0.0, 0.9, 1.0],
   [1.0, 0.3, 0.9],

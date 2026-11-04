@@ -20,9 +20,9 @@ Upload 10–300 photos of a static scene to get a metric 3D point cloud of it. T
 
    This link always loads the latest `notebooks/colab_server.ipynb` from `main`, so a push needs no manual copy. Edits made in Colab are not saved back; change parameters in the repo instead. Do not use a "Save a copy in Drive" version: it stops following the repo.
 2. Set `PIPELINE`. Use `"fake"` on your first run to check the tunnel and the frontend without models. Use `"real"` for real reconstruction.
-3. Run all cells.
+3. Run all cells. The last cell keeps running and shows the API log, with a progress bar for the photo upload and the job being processed. Stop it if you need to run another cell; the backend keeps going, and running the cell again resumes the display.
 
-Model weights download automatically the first time each session uses them (about 15 GB). Scenes are saved on the runtime's local disk (`/content/scenetiq-data`), and logs go to `MyDrive/scenetiq/logs/`. **When the runtime disconnects or is deleted, all Scenes are lost:** run the notebook again and upload them again.
+Model weights download automatically the first time each session uses them (about 15 GB), so the first job stays on `reconstructing` for several minutes. Scenes are saved on the runtime's local disk (`/content/scenetiq-data`), and logs are not saved anywhere. **When the runtime disconnects or is deleted, all Scenes are lost:** run the notebook again and upload them again.
 
 ## 3. Open the frontend
 

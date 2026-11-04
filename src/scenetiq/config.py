@@ -9,8 +9,8 @@ from pathlib import Path
 DEFAULT_MATCH_THRESHOLD = 0.5
 """Default relevance threshold for a Match.
 
-With the real Pipeline this is a SigLIP2 match probability. Replace it with the
-``recommended_threshold`` of an accepted evaluation-harness run (see AGENTS.md).
+With the real Pipeline this is a SigLIP2 match probability. The value has not been validated
+against ground truth; override it per deployment with ``SCENETIQ_MATCH_THRESHOLD``.
 """
 
 

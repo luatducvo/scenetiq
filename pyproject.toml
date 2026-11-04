@@ -16,9 +16,6 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
-[project.scripts]
-scenetiq = "scenetiq:main"
-
 [dependency-groups]
 dev = [
     "httpx>=0.28",
