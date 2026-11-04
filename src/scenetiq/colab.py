@@ -3,8 +3,10 @@
 The notebook only wires these together; it holds no logic of its own (ADR 0004).
 """
 
+import contextlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -12,7 +14,11 @@ import urllib.error
 import urllib.request
 from collections import deque
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
+
+SERVER_APP = "scenetiq.server:build_app"
+LOG_CONFIG_PATH = Path(__file__).with_name("colab_logging.json")
 
 CLOUDFLARED_URL = (
     "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
@@ -186,31 +192,113 @@ def server_environment(
 
 
 def server_command(port: int) -> list[str]:
-    """Return the command that starts the backend on ``port``."""
+    """Return the command that starts the backend on ``port``, with timestamped logs."""
     return [
         sys.executable,
         "-m",
         "uvicorn",
         "--factory",
-        "scenetiq.server:build_app",
+        SERVER_APP,
         "--host",
         "127.0.0.1",
         "--port",
         str(port),
+        "--log-config",
+        str(LOG_CONFIG_PATH),
     ]
 
 
-def start_server(env: dict[str, str], port: int, log_path: Path) -> subprocess.Popen[bytes]:
-    """Start the backend in the background, logging to ``log_path``."""
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log = log_path.open("ab")
-    return subprocess.Popen(server_command(port), env=env, stdout=log, stderr=subprocess.STDOUT)
+def find_server_pids(port: int, proc_root: Path = Path("/proc")) -> list[int]:
+    """Return the ids of running backend processes started for ``port``, sorted.
+
+    Matches on the command line, so it also finds a server left behind by a restarted
+    notebook kernel. An exited process that has not been reaped has an empty command
+    line and is not reported. Returns nothing where ``proc_root`` does not exist.
+
+    Args:
+        port: The port the backend was started on.
+        proc_root: The Linux process table.
+    """
+    if not proc_root.is_dir():
+        return []
+    pids = []
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            args = (entry / "cmdline").read_bytes().decode(errors="replace").split("\0")
+        except OSError:  # the process exited while we were looking, or is not ours to read
+            continue
+        if SERVER_APP in args and "--port" in args and str(port) in args:
+            pids.append(int(entry.name))
+    return sorted(pids)
 
 
-def wait_until_ready(port: int, token: str, timeout: float = 120.0) -> None:
-    """Block until the backend answers an authenticated request.
+def stop_server(
+    port: int, timeout: float = 15.0, proc_root: Path = Path("/proc"), poll: float = 0.2
+) -> list[int]:
+    """Stop every backend process started for ``port`` and wait until they have gone.
+
+    Each one gets ``timeout`` seconds to shut down, then is killed; a job it was running
+    stops with it, and the next server to start marks that job failed.
+
+    Args:
+        port: The port the backend was started on.
+        timeout: Seconds to wait after each signal.
+        proc_root: The Linux process table.
+        poll: Seconds between checks.
+
+    Returns:
+        The ids of the processes that were stopped.
 
     Raises:
+        TimeoutError: If a process is still there after being killed.
+    """
+    stopped = find_server_pids(port, proc_root)
+    for sig in (signal.SIGTERM, getattr(signal, "SIGKILL", signal.SIGTERM)):
+        remaining = find_server_pids(port, proc_root)
+        for pid in remaining:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, sig)
+        deadline = time.monotonic() + timeout
+        while remaining and time.monotonic() < deadline:
+            time.sleep(poll)
+            remaining = find_server_pids(port, proc_root)
+        if not remaining:
+            return stopped
+    raise TimeoutError(f"backend on port {port} still running after kill: {remaining}")
+
+
+def start_server(env: dict[str, str], port: int, log_path: Path) -> subprocess.Popen[bytes]:
+    """Replace any backend running on ``port`` with a new one, logging to ``log_path``.
+
+    The log lasts across runtimes, so each start appends a line that marks where it begins.
+    """
+    stopped = stop_server(port)
+    if stopped:
+        print(f"stopped previous server {stopped}; a job it was running is now marked failed")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    started_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    with log_path.open("ab") as log:
+        log.write(f"\n=== server start {started_at} UTC, port {port} ===\n".encode())
+        log.flush()
+        return subprocess.Popen(server_command(port), env=env, stdout=log, stderr=subprocess.STDOUT)
+
+
+def wait_until_ready(
+    server: subprocess.Popen[bytes], port: int, token: str, timeout: float = 120.0
+) -> None:
+    """Block until the backend answers an authenticated request.
+
+    Args:
+        server: The process from :func:`start_server`; if it exits, an answer on ``port``
+            could only come from some other process.
+        port: The port the backend listens on.
+        token: Shared bearer token.
+        timeout: Seconds to wait.
+
+    Raises:
+        RuntimeError: If ``server`` exits first.
         TimeoutError: If it does not answer within ``timeout`` seconds.
     """
     req = urllib.request.Request(
@@ -218,6 +306,9 @@ def wait_until_ready(port: int, token: str, timeout: float = 120.0) -> None:
     )
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        code = server.poll()
+        if code is not None:
+            raise RuntimeError(f"backend exited with code {code}; see its log")
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 if resp.status == 200:
