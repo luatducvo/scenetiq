@@ -12,6 +12,12 @@ from scenetiq.domain import FloatArray
 from scenetiq.pipeline.masking import ViewMasks
 from scenetiq.pipeline.view_data import ViewData
 
+MIN_MERGE_POINTS = 8
+"""MV3DIS links each point to its 8 nearest neighbours (``k_graph``) and cannot run on fewer."""
+
+MIN_MERGE_PRIMITIVES = 2
+"""MV3DIS compares neighbouring primitives, so one alone gives it nothing to compare."""
+
 
 def labels_to_instance_ids(labels: npt.ArrayLike, min_points: int) -> npt.NDArray[np.int32]:
     """Turn MV3DIS point labels into Instance ids.
@@ -45,8 +51,21 @@ def merge_instances(
     Views without any Mask are left out, as upstream does.
 
     Raises:
-        RuntimeError: If no View has a Mask.
+        RuntimeError: If no View has a Mask, or the Scene is too small for MV3DIS.
     """
+    point_count = len(points)
+    if point_count < MIN_MERGE_POINTS:
+        raise RuntimeError(
+            f"the fused Scene has only {point_count} points, too few to form Instances "
+            f"(at least {MIN_MERGE_POINTS} are needed); check the depth and Fusing stages"
+        )
+    primitive_count = len(np.unique(np.asarray(primitive_ids)))
+    if primitive_count < MIN_MERGE_PRIMITIVES:
+        raise RuntimeError(
+            f"the fused Scene has only {primitive_count} primitive in {point_count} points, "
+            f"too few to form Instances (at least {MIN_MERGE_PRIMITIVES} are needed)"
+        )
+
     from scenetiq.vendor.mv3dis.in_memory import InMemoryMV3DIS
 
     opts = options or MergingOptions()

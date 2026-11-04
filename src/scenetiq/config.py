@@ -58,10 +58,14 @@ class FusionOptions:
     Attributes:
         voxel_size: TSDF voxel edge in metres; sets the point spacing (1-2 cm).
         sdf_trunc_voxels: Truncation distance, in voxels.
+        block_resolution: Voxels along each edge of a TSDF block.
+        initial_block_count: Blocks allocated up front; the grid grows beyond this as needed.
     """
 
     voxel_size: float = 0.02
     sdf_trunc_voxels: float = 4.0
+    block_resolution: int = 16
+    initial_block_count: int = 1000
 
 
 @dataclass(frozen=True)

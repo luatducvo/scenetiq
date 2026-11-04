@@ -85,6 +85,8 @@ DA3 and SAM2 leave the GPU when their stage ends and load again for the next job
 |---|---|---|
 | `voxel_size` | `0.02` | Voxel edge in metres, which sets the point spacing. Smaller gives more points and superpoints, so later stages use more memory. |
 | `sdf_trunc_voxels` | `4.0` | Truncation distance, in voxels. |
+| `block_resolution` | `16` | Voxels along each edge of a TSDF block. |
+| `initial_block_count` | `1000` | Blocks allocated up front. The grid grows beyond this as needed, so it only affects speed and the first allocation. |
 
 ### `superpoints`: groups of mesh points
 

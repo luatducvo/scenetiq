@@ -42,6 +42,7 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
   - Install it with `uv pip install --system -e . -r requirements-gpu.txt`. Do not use `uv sync`: `--system` keeps Colab's CUDA-matched torch.
   - DA3 is vendored, not installed (ADR 0005): upstream pins `numpy<2` and Python `<=3.13`, which Colab no longer satisfies. Its runtime dependencies are listed by hand in `requirements-gpu.txt`. Do not add `xformers`: its wheels pin a torch version and can replace Colab's CUDA torch.
   - Install SAM2 only from Meta's GitHub repo. The PyPI `sam2` package is a third-party upload.
+- **TSDF uses Open3D's tensor `VoxelBlockGrid`.** The legacy `ScalableTSDFVolume` keeps almost nothing with metric depth in 0.20.0 ([Open3D#7592](https://github.com/isl-org/Open3D/issues/7592)), and no older release has Python 3.13 wheels. `tests/unit/test_fusion.py` needs open3d, so the CPU suite skips it: after changing fusion, run `uv run --with open3d==0.20.0 pytest tests/unit/test_fusion.py`.
 - **Vendored code** is in `src/scenetiq/vendor/`, excluded from ruff and ty.
   - Each directory needs `LICENSE` and `PROVENANCE.md` (upstream URL, pinned commit, every local modification).
   - Keep changes minimal and record each one in `PROVENANCE.md`.
