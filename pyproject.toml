@@ -71,6 +71,7 @@ allowed-unresolved-imports = [
     "torch.**",
     "sam2.**",
     "transformers.**",
+    "geocalib.**",
     # Preinstalled in the Colab kernel; scenetiq.colab imports it lazily for live output.
     "IPython.**",
 ]

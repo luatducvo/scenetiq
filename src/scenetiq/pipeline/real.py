@@ -4,9 +4,16 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from scenetiq.config import EmbeddingOptions, FusionOptions, MergingOptions, SuperpointOptions
+from scenetiq.config import (
+    AlignmentOptions,
+    EmbeddingOptions,
+    FusionOptions,
+    MergingOptions,
+    SuperpointOptions,
+)
 from scenetiq.domain import Capture, Reconstruction, Stage, StageCallback
 from scenetiq.geometry import build_instances
+from scenetiq.pipeline.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
 from scenetiq.pipeline.embedding import ImageEncoder, embed_instances
 from scenetiq.pipeline.fusion import fuse
 from scenetiq.pipeline.gpu_memory import free_gpu_memory, report_merge_input, track_stage_memory
@@ -24,12 +31,14 @@ class RealPipelineOptions:
 
     Attributes:
         fusion: TSDF Fusing stage (ADR 0002).
+        alignment: Aligning stage (ADR 0007).
         superpoints: Superpoints stage.
         merging: MV3DIS Merging stage.
         embedding: SigLIP2 Embedding stage.
     """
 
     fusion: FusionOptions = field(default_factory=FusionOptions)
+    alignment: AlignmentOptions = field(default_factory=AlignmentOptions)
     superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
     merging: MergingOptions = field(default_factory=MergingOptions)
     embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
@@ -44,6 +53,8 @@ class RealPipeline:
         image_encoder: Image tower of the Embedding stage (SigLIP2 by default). Pass
             the same encoder the API uses for Query text.
         options: Settings of the remaining stages.
+        up_estimator: The Aligning stage's source of up vectors (GeoCalib by default,
+            ADR 0007).
     """
 
     def __init__(
@@ -52,12 +63,14 @@ class RealPipeline:
         masker: SAM2Masker | None = None,
         image_encoder: ImageEncoder | None = None,
         options: RealPipelineOptions | None = None,
+        up_estimator: UpEstimator | None = None,
     ) -> None:
         """Assemble the stages; models load lazily on the first run."""
         self.reconstructor = reconstructor or DA3Reconstructor()
         self.masker = masker or SAM2Masker()
         self.image_encoder = image_encoder or SigLIP2Encoder()
         self.options = options or RealPipelineOptions()
+        self.up_estimator = up_estimator or GeoCalibUpEstimator()
 
     def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
         """Run every stage on ``capture``, reporting each one through ``on_stage``."""
@@ -71,9 +84,13 @@ class RealPipeline:
 
         on_stage(Stage.FUSING)
         geometry = fuse(view_data, opts.fusion)
-        points = geometry.vertices
 
         on_stage(Stage.ALIGNING)
+        with track_stage_memory(Stage.ALIGNING):
+            geometry, view_data = gravity_align(
+                geometry, view_data, self.up_estimator, opts.alignment
+            )
+        points = geometry.vertices
 
         on_stage(Stage.SUPERPOINTS)
         superpoints = opts.superpoints

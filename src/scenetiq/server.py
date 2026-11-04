@@ -34,6 +34,7 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder]:
             image_encoder=encoder,
             options=RealPipelineOptions(
                 fusion=settings.fusion,
+                alignment=settings.alignment,
                 superpoints=settings.superpoints,
                 merging=settings.merging,
                 embedding=settings.embedding,

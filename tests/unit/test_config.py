@@ -31,6 +31,19 @@ def test_override_changes_only_the_values_it_names():
     assert settings.sam2.points_per_side == 32
 
 
+def test_alignment_defaults_can_be_overridden():
+    defaults = Settings.from_overrides("tok", {}).alignment
+    assert (defaults.max_views, defaults.use_focal_prior) == (12, True)
+    assert (defaults.consensus_angle_deg, defaults.consensus_fraction) == (10.0, 0.5)
+
+    settings = Settings.from_overrides(
+        "tok", {"alignment": {"max_views": 4, "use_focal_prior": False}}
+    )
+    assert settings.alignment.max_views == 4
+    assert settings.alignment.use_focal_prior is False
+    assert settings.alignment.consensus_angle_deg == 10.0
+
+
 def test_json_values_become_the_types_the_settings_declare():
     settings = Settings.from_overrides(
         "tok", {"embedding": {"expansions": [0.2, 0.5]}, "da3": {"max_depth": 20}}

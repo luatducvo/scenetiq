@@ -57,6 +57,8 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
   - A stage's output must hold no GPU tensors, or releasing its model frees nothing.
   - Each job logs peak VRAM per stage through `scenetiq.gpu`.
 - **View limits apply to uploaded photos.** Nothing checks the View count against GPU memory: DA3 takes every View left after the View stride in one forward pass, so an oversized Capture fails with OOM.
+- **Up is −Y in every Reconstruction** (ADR 0007), so "above" means a smaller y. A Scene whose Views gave no consensus stays in DA3's frame, and Scenes stored before the Aligning stage were never rotated.
+- **GeoCalib's `gravity.vec3d` points up, not down,** despite its name: it is `(0, -1, 0)` for a level camera.
 - **Point order is a contract.** The PLY, `instance_ids.bin` and the MV3DIS input all use the TSDF mesh vertex order. Never reorder or filter points after fusion.
 - **Request size:** Cloudflare returns 413 for large bodies (105 MB was refused), so never send a whole Capture in one request (ADR 0006).
 - **Deployment** is `notebooks/colab_server.ipynb` only. The notebook holds parameters; its logic belongs in `scenetiq.colab`.

@@ -88,6 +88,19 @@ DA3 and SAM2 leave the GPU when their stage ends and load again for the next job
 | `block_resolution` | `16` | Voxels along each edge of a TSDF block. |
 | `initial_block_count` | `1000` | Blocks allocated up front. The grid grows beyond this as needed, so it only affects speed and the first allocation. |
 
+### `alignment`: level the Scene
+
+Each job logs one line, for example `gravity-alignment method=geocalib angle=12.3deg views=12 consensus=0.83`. `method=none` means the Views did not agree on up, so the Scene was not rotated. `consensus` then shows how far they were from agreeing.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `max_views` | `12` | Most Views to estimate up from, spaced evenly through the Capture. |
+| `use_focal_prior` | `True` | Give GeoCalib the focal length from the Reconstructing stage. |
+| `consensus_angle_deg` | `10.0` | Largest angle, in degrees, between estimates that count as agreeing. |
+| `consensus_fraction` | `0.5` | Agreeing estimates must be more than this share of them all, or the Scene is not rotated. |
+
+These starting values have not been validated on real Captures.
+
 ### `superpoints`: groups of mesh points
 
 | Key | Default | Meaning |

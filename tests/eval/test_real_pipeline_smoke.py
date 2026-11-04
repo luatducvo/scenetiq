@@ -45,6 +45,32 @@ def test_real_pipeline_reports_stages_up_to_merging(real_result):
     ]  # fmt: skip
 
 
+def test_cameras_of_upright_photos_end_up_with_up_near_minus_y(real_result):
+    """An inverted sign from the up estimator would put this near 180 degrees.
+
+    The smoke Capture's photos must be held roughly upright.
+    """
+    rec, _ = real_result
+    camera_ups = np.stack([-cam.cam_to_world[:3, 1] for cam in rec.cameras]).astype(np.float64)
+    mean_up = camera_ups.mean(axis=0)
+    mean_up /= np.linalg.norm(mean_up)
+    # cos 45 degrees = 0.7071, against (0, -1, 0).
+    assert -mean_up[1] > 0.7071
+
+
+def test_geocalib_up_points_up_in_upright_photos(smoke_capture: Capture):
+    """Checks the sign directly, in case the Scene was left unrotated for lack of consensus."""
+    from PIL import Image
+
+    from scenetiq.pipeline.alignment import GeoCalibUpEstimator
+
+    with Image.open(smoke_capture.views[0].path) as photo:
+        image = np.asarray(photo.convert("RGB").resize((504, 378)), dtype=np.uint8)
+    up = np.asarray(GeoCalibUpEstimator().estimate(image[None], None))[0]
+    # In the OpenCV camera frame +Y points down the image, so up has a negative y.
+    assert up[1] < 0
+
+
 def test_real_reconstruction_has_consistent_instances(real_result):
     rec, _ = real_result
     assert len(rec.instances) >= 1

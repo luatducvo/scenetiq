@@ -69,6 +69,23 @@ class FusionOptions:
 
 
 @dataclass(frozen=True)
+class AlignmentOptions:
+    """Settings of the Aligning stage (ADR 0007).
+
+    Attributes:
+        max_views: Most Views to estimate up from, spaced evenly through the Capture.
+        use_focal_prior: Give the up estimator the focal length from the Reconstructing stage.
+        consensus_angle_deg: Largest angle, in degrees, between estimates that agree.
+        consensus_fraction: Agreeing estimates must be more than this share of them all.
+    """
+
+    max_views: int = 12
+    use_focal_prior: bool = True
+    consensus_angle_deg: float = 10.0
+    consensus_fraction: float = 0.5
+
+
+@dataclass(frozen=True)
 class SuperpointOptions:
     """Settings of the Superpoints stage.
 
@@ -167,6 +184,7 @@ class Settings:
         cors_origins: Browser origins allowed to call the API.
         da3: Reconstructing stage.
         fusion: Fusing stage.
+        alignment: Aligning stage.
         superpoints: Superpoints stage.
         sam2: Masking stage.
         merging: Merging stage.
@@ -190,6 +208,7 @@ class Settings:
     )
     da3: DA3Options = field(default_factory=DA3Options)
     fusion: FusionOptions = field(default_factory=FusionOptions)
+    alignment: AlignmentOptions = field(default_factory=AlignmentOptions)
     superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
     sam2: SAM2Options = field(default_factory=SAM2Options)
     merging: MergingOptions = field(default_factory=MergingOptions)

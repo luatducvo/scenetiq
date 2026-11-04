@@ -12,5 +12,5 @@
 - [x] A Seam A test covers the job-stage progression with `aligning` in order and seven stages in total.
 - [x] Any test that fixes the stage list or count, including the GPU smoke test, is updated.
 - [x] The stage list in the v1 spec includes Aligning.
-- [x] Running the backend with the fake Pipeline and creating a Scene shows the new step in the frontend.
+- [ ] Running the backend with the fake Pipeline and creating a Scene shows the new step in the frontend. (Not checked by eye: the API test covers the backend and the frontend's stage list was edited, but nobody has opened the page yet.)
 - [x] Ruff, ty, pytest and the frontend checks pass.
