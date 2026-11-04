@@ -2,7 +2,7 @@
 
 - Upstream: https://github.com/ByteDance-Seed/Depth-Anything-3 (`src/depth_anything_3/`)
 - Pinned commit: `40674546e40144452ec93035ac77d762f4b5d16f`
-- Licence: Apache-2.0 (`LICENSE`). Only the code is vendored. The `DA3NESTED-GIANT-LARGE` weights are downloaded from Hugging Face at runtime and are CC BY-NC 4.0 (ADR 0001).
+- Licence: Apache-2.0 (`LICENSE`). Only the code is vendored. The `DA3NESTED-GIANT-LARGE-1.1` weights are downloaded from Hugging Face at runtime and are CC BY-NC 4.0 (ADR 0001).
 
 Why it is vendored: ADR 0005. Upstream declares `requires-python <=3.13` and `numpy<2`, so it cannot be installed on Colab's Python 3.13.x.
 

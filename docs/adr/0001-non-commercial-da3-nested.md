@@ -1,6 +1,6 @@
 # Non-commercial use: DA3 Nested-Giant-Large for reconstruction
 
-We reconstruct Captures with Depth Anything 3 `DA3NESTED-GIANT-LARGE`, the only DA3 variant that outputs depth directly in meters. Metric scale matters because Instance positions and bounding boxes must be in real units for future spatial reasoning. Its weights are CC BY-NC 4.0, so SceneTIQ is a non-commercial / research project.
+We reconstruct Captures with Depth Anything 3 `DA3NESTED-GIANT-LARGE-1.1`, the only current DA3 variant that outputs depth directly in meters. Upstream retrained the `-1.1` checkpoints after fixing a training bug and deprecated the original `DA3NESTED-GIANT-LARGE`; the architecture is unchanged. Metric scale matters because Instance positions and bounding boxes must be in real units for future spatial reasoning. Its weights are CC BY-NC 4.0, so SceneTIQ is a non-commercial / research project.
 
 ## Considered Options
 

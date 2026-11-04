@@ -3,7 +3,7 @@
 # torch and torchvision are not listed: Colab's preinstalled CUDA builds are used.
 open3d==0.20.0
 # Depth Anything 3 is vendored in src/scenetiq/vendor/depth_anything_3 (ADR 0005); these are its runtime needs.
-# (code Apache-2.0; DA3NESTED-GIANT-LARGE weights CC BY-NC 4.0, see ADR 0001)
+# (code Apache-2.0; DA3NESTED-GIANT-LARGE-1.1 weights CC BY-NC 4.0, see ADR 0001)
 addict>=2.4
 einops>=0.8
 huggingface-hub>=0.25

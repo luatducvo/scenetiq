@@ -68,7 +68,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
   - the camera of every View
   - for every Instance: an id, its point indices, a centroid, an axis-aligned 3D bounding box (metres), and an L2-normalised embedding
 - The stages run in this order, and stage names are reported through `on_stage`:
-  1. **Reconstructing.** DA3 `DA3NESTED-GIANT-LARGE` gives metric depth, confidence, extrinsics and intrinsics for every View (ADR 0001).
+  1. **Reconstructing.** DA3 `DA3NESTED-GIANT-LARGE-1.1` gives metric depth, confidence, extrinsics and intrinsics for every View (ADR 0001).
   2. **Fusing.** TSDF fusion of the DA3 depth (with confidence filtering) produces a mesh. The mesh vertices are the Reconstruction's point cloud, about 1–2 cm voxel (ADR 0002).
   3. **Superpoints.** The vendored ScanNet Segmentator runs on the fused mesh.
   4. **Masking.** SAM2 automatic mask generation, with no prompts, runs on every View (ADR 0003).

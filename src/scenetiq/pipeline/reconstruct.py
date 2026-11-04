@@ -1,6 +1,6 @@
 """Reconstructing stage: metric depth and cameras for every View with Depth Anything 3.
 
-ADR 0001: ``DA3NESTED-GIANT-LARGE`` gives depth directly in metres (CC BY-NC weights).
+ADR 0001: ``DA3NESTED-GIANT-LARGE-1.1`` gives depth directly in metres (CC BY-NC weights).
 The model sits behind :class:`Reconstructor` so it can be swapped.
 """
 
@@ -13,7 +13,7 @@ from scenetiq.domain import View
 from scenetiq.pipeline.adapters import camera_from_da3, confident_depth
 from scenetiq.pipeline.view_data import ViewData
 
-DEFAULT_DA3_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE"
+DEFAULT_DA3_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 
 
 class Reconstructor(Protocol):
