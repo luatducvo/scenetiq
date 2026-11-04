@@ -35,6 +35,8 @@ def test_alignment_defaults_can_be_overridden():
     defaults = Settings.from_overrides("tok", {}).alignment
     assert (defaults.max_views, defaults.use_focal_prior) == (12, True)
     assert (defaults.consensus_angle_deg, defaults.consensus_fraction) == (10.0, 0.5)
+    assert (defaults.plane_distance, defaults.max_planes) == (0.03, 5)
+    assert (defaults.min_plane_fraction, defaults.max_plane_angle_deg) == (0.05, 10.0)
 
     settings = Settings.from_overrides(
         "tok", {"alignment": {"max_views": 4, "use_focal_prior": False}}

@@ -77,12 +77,25 @@ class AlignmentOptions:
         use_focal_prior: Give the up estimator the focal length from the Reconstructing stage.
         consensus_angle_deg: Largest angle, in degrees, between estimates that agree.
         consensus_fraction: Agreeing estimates must be more than this share of them all.
+        plane_distance: RANSAC inlier distance in metres.
+        max_planes: Most planes to look for.
+        min_plane_fraction: A plane must hold at least this share of the searched points.
+        max_plane_angle_deg: Largest angle, in degrees, between a plane's normal and the
+            direction the Views agree on.
+        plane_max_points: The plane search subsamples to this many points.
+        plane_iterations: RANSAC iterations per plane.
     """
 
     max_views: int = 12
     use_focal_prior: bool = True
     consensus_angle_deg: float = 10.0
     consensus_fraction: float = 0.5
+    plane_distance: float = 0.03
+    max_planes: int = 5
+    min_plane_fraction: float = 0.05
+    max_plane_angle_deg: float = 10.0
+    plane_max_points: int = 200_000
+    plane_iterations: int = 1000
 
 
 @dataclass(frozen=True)

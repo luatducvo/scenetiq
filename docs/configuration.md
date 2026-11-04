@@ -90,7 +90,11 @@ DA3 and SAM2 leave the GPU when their stage ends and load again for the next job
 
 ### `alignment`: level the Scene
 
-Each job logs one line, for example `gravity-alignment method=geocalib angle=12.3deg views=12 consensus=0.83`. `method=none` means the Views did not agree on up, so the Scene was not rotated. `consensus` then shows how far they were from agreeing.
+Each job logs one line, for example `gravity-alignment method=plane angle=12.3deg views=12 consensus=0.83 plane=0.42`. The `method` is one of:
+
+- `plane`: up came from the normal of a large horizontal surface, which holds the share of the points shown by `plane`.
+- `geocalib`: the Views agreed on up but no surface qualified, so their agreed direction was used.
+- `none`: the Views did not agree on up, so the Scene was not rotated. `consensus` shows how far they were from agreeing.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -98,6 +102,12 @@ Each job logs one line, for example `gravity-alignment method=geocalib angle=12.
 | `use_focal_prior` | `True` | Give GeoCalib the focal length from the Reconstructing stage. |
 | `consensus_angle_deg` | `10.0` | Largest angle, in degrees, between estimates that count as agreeing. |
 | `consensus_fraction` | `0.5` | Agreeing estimates must be more than this share of them all, or the Scene is not rotated. |
+| `plane_distance` | `0.03` | How close, in metres, a point must be to count as on a plane. |
+| `max_planes` | `5` | Most planes to look for. |
+| `min_plane_fraction` | `0.05` | A plane must hold at least this share of the searched points. |
+| `max_plane_angle_deg` | `10.0` | Largest angle, in degrees, between a plane's normal and the direction the Views agree on. A larger value accepts more planes, including slopes. |
+| `plane_max_points` | `200000` | The plane search subsamples to this many points. The Scene keeps all its points. |
+| `plane_iterations` | `1000` | RANSAC iterations per plane. |
 
 These starting values have not been validated on real Captures.
 

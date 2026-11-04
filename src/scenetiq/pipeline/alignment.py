@@ -5,6 +5,8 @@ technical failure propagates and fails the job like any other stage's.
 """
 
 import logging
+import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
@@ -12,6 +14,7 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import AlignmentOptions
+from scenetiq.domain import FloatArray
 from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
@@ -75,6 +78,23 @@ class GeoCalibUpEstimator:
             # Despite the name, this vector is (0, -1, 0) for a level camera: it points up.
             ups.append(result["gravity"].vec3d.reshape(3).cpu().numpy())
         return np.stack(ups).astype(np.float32)
+
+
+@dataclass(frozen=True)
+class PlaneCandidate:
+    """A plane found in the fused geometry.
+
+    Attributes:
+        normal: Unit normal of the plane.
+        fraction: Share of the searched points that lie on the plane.
+    """
+
+    normal: Float64Array
+    fraction: float
+
+
+PlaneSearch = Callable[[FloatArray, AlignmentOptions], list[PlaneCandidate]]
+"""Finds candidate planes in ``(N, 3)`` points."""
 
 
 @dataclass(frozen=True)
@@ -152,12 +172,91 @@ def evenly_spaced_views(view_count: int, max_views: int) -> list[int]:
     return [int(i) for i in np.linspace(0, view_count - 1, max_views).round()]
 
 
-def format_alignment_line(method: str, angle_deg: float, views: int, consensus: float) -> str:
+def find_planes(points: FloatArray, options: AlignmentOptions) -> list[PlaneCandidate]:
+    """Find the largest planes in ``points`` with RANSAC, removing each one's points in turn.
+
+    Works on a copy, subsampled to ``options.plane_max_points``, so ``points`` is not changed.
+
+    Args:
+        points: ``(N, 3)`` positions in metres.
+        options: Stage settings.
+
+    Returns:
+        The planes found, in the order they were found. Normals have an arbitrary sign.
+    """
+    import open3d as o3d
+
+    remaining = np.asarray(points, dtype=np.float64)
+    if len(remaining) > options.plane_max_points:
+        rng = np.random.default_rng(0)
+        remaining = rng.choice(remaining, options.plane_max_points, replace=False, axis=0)
+    total = len(remaining)
+    # A smaller remainder could not hold a plane that qualifies.
+    smallest = max(3, math.ceil(options.min_plane_fraction * total))
+    candidates: list[PlaneCandidate] = []
+    for _ in range(options.max_planes):
+        if len(remaining) < smallest:
+            break
+        cloud = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(remaining))
+        plane, inliers = cloud.segment_plane(
+            distance_threshold=options.plane_distance,
+            ransac_n=3,
+            num_iterations=options.plane_iterations,
+        )
+        candidates.append(
+            PlaneCandidate(normal=_unit(np.asarray(plane)[:3]), fraction=len(inliers) / total)
+        )
+        remaining = np.delete(remaining, inliers, axis=0)
+    return candidates
+
+
+def select_plane(
+    candidates: Sequence[PlaneCandidate],
+    up: npt.ArrayLike,
+    max_angle_deg: float,
+    min_fraction: float,
+) -> PlaneCandidate | None:
+    """Pick the largest plane level enough to refine ``up``.
+
+    Floor, tabletop and ceiling all qualify: only the plane's direction matters.
+
+    Args:
+        candidates: The planes to choose from.
+        up: Current estimate of up.
+        max_angle_deg: Largest angle between a normal and ``up``, ignoring the normal's sign.
+        min_fraction: Smallest share of the points a plane may hold.
+
+    Returns:
+        The chosen plane with its normal flipped to agree with ``up``, or ``None``.
+    """
+    up_unit = _unit(up)
+    cos_limit = np.cos(np.deg2rad(max_angle_deg))
+    best: PlaneCandidate | None = None
+    for candidate in candidates:
+        normal = _unit(candidate.normal)
+        cos_angle = float(normal @ up_unit)
+        if candidate.fraction < min_fraction or abs(cos_angle) < cos_limit:
+            continue
+        if best is None or candidate.fraction > best.fraction:
+            best = PlaneCandidate(
+                normal=normal if cos_angle > 0 else -normal, fraction=candidate.fraction
+            )
+    return best
+
+
+def format_alignment_line(
+    method: str,
+    angle_deg: float,
+    views: int,
+    consensus: float,
+    plane_fraction: float | None = None,
+) -> str:
     """Return the log line of one job's Aligning stage."""
-    return (
+    line = (
         f"gravity-alignment method={method} angle={angle_deg:.1f}deg "
         f"views={views} consensus={consensus:.2f}"
     )
+    return line if plane_fraction is None else f"{line} plane={plane_fraction:.2f}"
 
 
 def gravity_align(
@@ -165,16 +264,19 @@ def gravity_align(
     view_data: ViewData,
     estimator: UpEstimator,
     options: AlignmentOptions | None = None,
+    plane_search: PlaneSearch = find_planes,
 ) -> tuple[FusedGeometry, ViewData]:
     """Rotate the geometry and cameras so that physical up is -Y, if the Views agree on up.
 
-    Logs one line saying what was done. The point order never changes.
+    A qualifying plane refines the direction the Views agree on, but never replaces a
+    missing consensus. Logs one line saying what was done. The point order never changes.
 
     Args:
         geometry: The fused geometry.
         view_data: Every View, with its camera.
         estimator: The source of per-View up vectors.
         options: Stage settings.
+        plane_search: The source of candidate planes.
 
     Returns:
         The aligned geometry and View data, or the inputs when the Views do not agree.
@@ -199,11 +301,23 @@ def gravity_align(
     if consensus.direction is None:
         _logger.info("%s", format_alignment_line("none", 0.0, len(chosen), consensus.fraction))
         return geometry, view_data
-    cos_angle = float(np.clip(consensus.direction @ np.array(CONVENTIONAL_UP), -1.0, 1.0))
-    angle = float(np.rad2deg(np.arccos(cos_angle)))
-    _logger.info("%s", format_alignment_line("geocalib", angle, len(chosen), consensus.fraction))
-    rotation = rotation_between(consensus.direction, CONVENTIONAL_UP)
-    return apply_rotation(geometry, view_data, rotation)
+    plane = select_plane(
+        plane_search(geometry.vertices, opts),
+        consensus.direction,
+        opts.max_plane_angle_deg,
+        opts.min_plane_fraction,
+    )
+    up = consensus.direction if plane is None else plane.normal
+    cos_angle = float(np.clip(up @ np.array(CONVENTIONAL_UP), -1.0, 1.0))
+    line = format_alignment_line(
+        "geocalib" if plane is None else "plane",
+        float(np.rad2deg(np.arccos(cos_angle))),
+        len(chosen),
+        consensus.fraction,
+        None if plane is None else plane.fraction,
+    )
+    _logger.info("%s", line)
+    return apply_rotation(geometry, view_data, rotation_between(up, CONVENTIONAL_UP))
 
 
 def rotation_between(source: npt.ArrayLike, target: npt.ArrayLike) -> Float64Array:

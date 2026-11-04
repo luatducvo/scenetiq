@@ -11,6 +11,8 @@
 - [ ] Two or three real Captures are compared in the viewer, each as a Scene from before the change and one from after it, using the same photos.
 - [ ] The log line appears in the notebook for each job, and method, rotation angle and consensus fraction are recorded in this ticket under `## Comments`.
 - [ ] The recorded angles confirm or refute the hypothesis that DA3's world frame is not level.
+- [ ] At least one Capture contains portrait photos from a phone, and the result is recorded, as input to ticket 05.
 - [ ] Peak VRAM of the Aligning stage is recorded.
+- [ ] The new step shows in the frontend's job progress (left open from ticket 01).
 - [ ] Bounding boxes of Matches are checked by eye against the before Scene.
 - [ ] If the thresholds or the focal prior need changing, the new defaults and the reason are recorded, or a follow-up ticket is opened.

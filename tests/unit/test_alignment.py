@@ -1,6 +1,7 @@
 import json
 import logging
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -11,16 +12,26 @@ from scenetiq.config import AlignmentOptions
 from scenetiq.domain import Camera
 from scenetiq.pipeline.alignment import (
     ALIGNMENT_LOGGER,
+    PlaneCandidate,
     apply_rotation,
     evenly_spaced_views,
     find_up_consensus,
     gravity_align,
     rotation_between,
+    select_plane,
 )
 from scenetiq.pipeline.embedding import visible_pixels
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 QUARTER_TURN_ABOUT_X = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
+UP = np.array([0.0, -1.0, 0.0])
+
+
+def _no_planes(_points: np.ndarray, _options: AlignmentOptions) -> list[PlaneCandidate]:
+    return []
+
+
+_align = partial(gravity_align, plane_search=_no_planes)
 
 
 def _view_data(cam_to_world: np.ndarray) -> ViewData:
@@ -158,7 +169,7 @@ def test_a_capture_with_consensus_is_rotated_so_up_becomes_minus_y(
 ):
     caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
 
-    aligned, moved = gravity_align(
+    aligned, moved = _align(
         _geometry([[1.0, 2.0, 3.0]]), _views(1), _FixedUps([[0.0, 0.0, 1.0]]), AlignmentOptions()
     )
 
@@ -177,7 +188,7 @@ def test_up_estimates_are_read_in_the_frame_of_their_camera():
     cam_to_world[:3, :3] = QUARTER_TURN_ABOUT_X
     view_data = _view_data(cam_to_world)
 
-    aligned, moved = gravity_align(
+    aligned, moved = _align(
         _geometry([[1.0, 2.0, 3.0]]), view_data, _FixedUps([[0.0, -1.0, 0.0]]), AlignmentOptions()
     )
 
@@ -191,7 +202,7 @@ def test_without_consensus_nothing_moves_and_the_log_says_so(caplog: pytest.LogC
     view_data = _views(2)
     estimator = _FixedUps([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])
 
-    aligned, moved = gravity_align(geometry, view_data, estimator, AlignmentOptions())
+    aligned, moved = _align(geometry, view_data, estimator, AlignmentOptions())
 
     np.testing.assert_array_equal(aligned.vertices, geometry.vertices)
     np.testing.assert_array_equal(moved.cameras[0].cam_to_world, view_data.cameras[0].cam_to_world)
@@ -201,7 +212,7 @@ def test_without_consensus_nothing_moves_and_the_log_says_so(caplog: pytest.LogC
 def test_only_the_selected_views_are_estimated():
     estimator = _FixedUps([[0.0, -1.0, 0.0]] * 3)
 
-    gravity_align(_geometry([[0.0, 0.0, 1.0]]), _views(5), estimator, AlignmentOptions(max_views=3))
+    _align(_geometry([[0.0, 0.0, 1.0]]), _views(5), estimator, AlignmentOptions(max_views=3))
 
     assert estimator.images is not None
     assert estimator.images[:, 0, 0, 0].tolist() == [0, 2, 4]
@@ -215,7 +226,7 @@ def test_the_focal_prior_is_the_mean_of_fx_and_fy():
     view_data = replace(_views(1), cameras=[camera])
     estimator = _FixedUps([[0.0, -1.0, 0.0]])
 
-    gravity_align(_geometry([[0.0, 0.0, 1.0]]), view_data, estimator, AlignmentOptions())
+    _align(_geometry([[0.0, 0.0, 1.0]]), view_data, estimator, AlignmentOptions())
 
     assert estimator.focals is not None
     assert estimator.focals.tolist() == [110.0]
@@ -224,7 +235,7 @@ def test_the_focal_prior_is_the_mean_of_fx_and_fy():
 def test_the_focal_prior_can_be_turned_off():
     estimator = _FixedUps([[0.0, -1.0, 0.0]])
 
-    gravity_align(
+    _align(
         _geometry([[0.0, 0.0, 1.0]]),
         _views(1),
         estimator,
@@ -240,7 +251,103 @@ def test_a_failing_estimator_is_not_swallowed():
             raise RuntimeError("weights could not be downloaded")
 
     with pytest.raises(RuntimeError, match="weights could not be downloaded"):
-        gravity_align(_geometry([[0.0, 0.0, 1.0]]), _views(1), Broken(), AlignmentOptions())
+        _align(_geometry([[0.0, 0.0, 1.0]]), _views(1), Broken(), AlignmentOptions())
+
+
+def _plane(normal: list[float], fraction: float) -> PlaneCandidate:
+    return PlaneCandidate(normal=np.array(normal), fraction=fraction)
+
+
+def test_a_smaller_floor_beats_a_larger_wall():
+    wall = _plane([1.0, 0.0, 0.0], 0.5)
+    floor = _plane([0.0, -1.0, 0.0], 0.2)
+    chosen = select_plane([wall, floor], UP, max_angle_deg=10.0, min_fraction=0.05)
+    assert chosen is not None
+    assert chosen.fraction == 0.2
+
+
+def test_the_largest_of_several_level_planes_wins():
+    table = _plane([0.0, -1.0, 0.0], 0.1)
+    floor = _plane([0.0, -1.0, 0.0], 0.3)
+    chosen = select_plane([table, floor], UP, max_angle_deg=10.0, min_fraction=0.05)
+    assert chosen is not None
+    assert chosen.fraction == 0.3
+
+
+def test_a_plane_below_the_minimum_fraction_is_rejected():
+    assert select_plane([_plane([0.0, -1.0, 0.0], 0.04)], UP, 10.0, 0.05) is None
+
+
+def test_a_plane_over_the_angle_limit_is_rejected():
+    assert select_plane([_plane(_up_at_degrees(12), 0.5)], UP, 10.0, 0.05) is None
+
+
+def test_a_normal_pointing_down_is_flipped_to_agree_with_up():
+    chosen = select_plane([_plane([0.0, 1.0, 0.0], 0.5)], UP, 10.0, 0.05)
+    assert chosen is not None
+    np.testing.assert_allclose(chosen.normal, [0.0, -1.0, 0.0])
+
+
+def test_a_steep_normal_pointing_down_is_rejected_after_ignoring_its_sign():
+    tilted_down = [-x for x in _up_at_degrees(12)]
+    assert select_plane([_plane(tilted_down, 0.5)], UP, 10.0, 0.05) is None
+
+
+def test_no_candidates_select_nothing():
+    assert select_plane([], UP, 10.0, 0.05) is None
+
+
+def test_a_qualifying_plane_decides_up_over_the_estimates(caplog: pytest.LogCaptureFixture):
+    caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
+    normal = _up_at_degrees(6)
+
+    aligned, _ = gravity_align(
+        _geometry([[2 * normal[0], 2 * normal[1], 0.0]]),
+        _views(1),
+        _FixedUps([[0.0, -1.0, 0.0]]),
+        AlignmentOptions(),
+        plane_search=lambda _points, _options: [_plane(normal, 0.4)],
+    )
+
+    # A point 2 m along the plane's normal ends up 2 m along -Y.
+    np.testing.assert_allclose(aligned.vertices, [[0.0, -2.0, 0.0]], atol=1e-5)
+    assert caplog.messages == [
+        "gravity-alignment method=plane angle=6.0deg views=1 consensus=1.00 plane=0.40"
+    ]
+
+
+def test_without_a_qualifying_plane_the_estimates_decide_up(caplog: pytest.LogCaptureFixture):
+    caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
+
+    aligned, _ = gravity_align(
+        _geometry([[1.0, 2.0, 3.0]]),
+        _views(1),
+        _FixedUps([[0.0, 0.0, 1.0]]),
+        AlignmentOptions(),
+        plane_search=lambda _points, _options: [_plane([1.0, 0.0, 0.0], 0.9)],
+    )
+
+    np.testing.assert_allclose(aligned.vertices, [[1.0, -3.0, 2.0]], atol=1e-6)
+    assert caplog.messages == [
+        "gravity-alignment method=geocalib angle=90.0deg views=1 consensus=1.00"
+    ]
+
+
+def test_without_consensus_no_plane_is_searched_for():
+    def fail(_points: np.ndarray, _options: AlignmentOptions) -> list[PlaneCandidate]:
+        raise AssertionError("a plane must not rescue a Scene with no consensus")
+
+    geometry = _geometry([[1.0, 2.0, 3.0]])
+
+    aligned, _ = gravity_align(
+        geometry,
+        _views(2),
+        _FixedUps([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]]),
+        AlignmentOptions(),
+        plane_search=fail,
+    )
+
+    np.testing.assert_array_equal(aligned.vertices, geometry.vertices)
 
 
 def test_colab_logging_lets_the_alignment_line_reach_stdout():

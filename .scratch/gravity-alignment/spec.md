@@ -147,7 +147,8 @@ A good test checks external behaviour with expectations worked out by hand, neve
 
 ## Further Notes
 
-- **GeoCalib's vector points up.** Despite the name, `Gravity.vec3d` is `(0, -1, 0)` for a level camera according to `Gravity.from_rp`, which is up in the OpenCV camera frame. This was read from the code at the pinned commit, not run. The Seam B test confirms it.
+- **GeoCalib's vector points up.** Despite the name, `Gravity.vec3d` is `(0, -1, 0)` for a level camera according to `Gravity.from_rp`, which is up in the OpenCV camera frame. Running the real estimator on CPU on one upright photo gave `(-0.02, -0.99, 0.17)`, which agrees. The Seam B test covers it on GPU.
+- **Correction, found during implementation:** user story 9 does not hold for every Capture. GeoCalib follows roll only to about ±45°, and nothing applies EXIF orientation, so portrait photos stored sideways reach it rolled 90°. Open in ticket 05.
 - **Thresholds are unvalidated starting values**, like `DEFAULT_MATCH_THRESHOLD`. Expect to tune them on real Captures.
 - **Accepted risk:** when the largest plane within 10° of the GeoCalib direction is really a slope, such as an 8° ramp, the Scene ends up tilted by that amount.
 - **Accepted consequence of having no off switch:** if GeoCalib cannot run, for example because its weights cannot be downloaded, every job fails at this stage until it is fixed.

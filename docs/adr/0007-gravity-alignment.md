@@ -14,3 +14,5 @@ DA3's world frame is not tied to gravity, and TSDF fusion keeps whatever frame t
 ## Consequences
 
 Weak evidence never fails a job: Views that do not agree leave the Scene unrotated, and the log line is the only explanation. Technical failures do fail the job, so a broken install cannot silently leave every Scene tilted. The stage has no off switch, so if GeoCalib cannot run, every real job fails until it is fixed. A rotation cannot fix geometry DA3 warped, and a large slope within the plane angle limit tilts the Scene by that slope. Scenes stored before this stage keep their old frame.
+
+GeoCalib follows a photo's roll only to about ±45° and answers wrongly beyond that, without any signal. Views rolled the same way past that limit, such as portrait photos whose pixels are stored sideways with an EXIF flag, can agree on a wrong direction and turn the Scene about 90°. This is open; see `.scratch/gravity-alignment/issues/05-photos-rolled-past-45-degrees.md`.
