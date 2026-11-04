@@ -37,7 +37,10 @@ class View:
 
 @dataclass(frozen=True)
 class Capture:
-    """The unordered set of photos uploaded together for one Scene."""
+    """The Views of one Capture that a Pipeline reconstructs, in upload order.
+
+    Holds only the Views the View stride selected.
+    """
 
     views: list[View]
 

@@ -4,16 +4,14 @@ ADR 0001: ``DA3NESTED-GIANT-LARGE-1.1`` gives depth directly in metres (CC BY-NC
 The model sits behind :class:`Reconstructor` so it can be swapped.
 """
 
-from dataclasses import dataclass
 from typing import Any, Protocol
 
 import numpy as np
 
+from scenetiq.config import DA3Options
 from scenetiq.domain import View
 from scenetiq.pipeline.adapters import camera_from_da3, confident_depth
 from scenetiq.pipeline.view_data import ViewData
-
-DEFAULT_DA3_MODEL = "depth-anything/DA3NESTED-GIANT-LARGE-1.1"
 
 
 class Reconstructor(Protocol):
@@ -22,24 +20,6 @@ class Reconstructor(Protocol):
     def reconstruct(self, views: list[View]) -> ViewData:
         """Return depth, cameras and resized images for ``views``, in order."""
         ...
-
-
-@dataclass(frozen=True)
-class DA3Options:
-    """Settings of the DA3 Reconstructing stage.
-
-    Attributes:
-        model_id: Hugging Face id of the DA3 weights.
-        process_res: Long-side resolution DA3 processes at.
-        conf_percentile: Pixels below this confidence percentile (over the whole
-            Capture) get no depth.
-        max_depth: Depth beyond this many metres is dropped.
-    """
-
-    model_id: str = DEFAULT_DA3_MODEL
-    process_res: int = 504
-    conf_percentile: float = 30.0
-    max_depth: float = 12.0
 
 
 class DA3Reconstructor:
@@ -70,6 +50,9 @@ class DA3Reconstructor:
             pred = model.inference(
                 image=[str(v.path) for v in views],
                 process_res=self.options.process_res,
+                process_res_method=self.options.process_res_method,
+                ref_view_strategy=self.options.ref_view_strategy,
+                use_ray_pose=self.options.use_ray_pose,
             )
         depth = np.asarray(pred.depth, dtype=np.float32)
         conf = np.asarray(pred.conf, dtype=np.float32)

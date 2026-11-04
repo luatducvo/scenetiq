@@ -1,12 +1,5 @@
 import { useState } from 'react'
-import {
-  ApiError,
-  createScene,
-  MAX_VIEWS,
-  MIN_VIEWS,
-  type BackendConfig,
-  type UploadProgress,
-} from '../api'
+import { ApiError, createScene, type BackendConfig, type UploadProgress } from '../api'
 
 interface Props {
   config: BackendConfig
@@ -15,7 +8,7 @@ interface Props {
 
 const ACCEPTED = /\.(jpe?g|png)$/i
 
-/** Upload a named Capture of 10-300 JPG/PNG photos. */
+/** Upload a named Capture of JPG/PNG photos; the backend refuses a count outside its limits. */
 export function UploadForm({ config, onStarted }: Props) {
   const [name, setName] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -24,11 +17,7 @@ export function UploadForm({ config, onStarted }: Props) {
   const [progress, setProgress] = useState<UploadProgress | null>(null)
 
   const badFile = files.find((f) => !ACCEPTED.test(f.name))
-  const countError =
-    files.length > 0 && (files.length < MIN_VIEWS || files.length > MAX_VIEWS)
-      ? `A Capture needs ${MIN_VIEWS}-${MAX_VIEWS} photos; you selected ${files.length}.`
-      : null
-  const clientError = badFile ? `${badFile.name} is not a JPG or PNG file.` : countError
+  const clientError = badFile ? `${badFile.name} is not a JPG or PNG file.` : null
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -54,7 +43,7 @@ export function UploadForm({ config, onStarted }: Props) {
         <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} />
       </label>
       <label>
-        Photos of one static Scene ({MIN_VIEWS}-{MAX_VIEWS}, JPG/PNG)
+        Photos of one static Scene (JPG/PNG)
         <input
           type="file"
           multiple

@@ -4,29 +4,13 @@ The vendored MV3DIS core (``scenetiq.vendor.mv3dis``) runs unchanged on arrays.
 This module adapts SceneTIQ's ViewData and Masks to it and its labels back.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
 import numpy.typing as npt
 
+from scenetiq.config import MergingOptions
 from scenetiq.domain import FloatArray
 from scenetiq.pipeline.masking import ViewMasks
 from scenetiq.pipeline.view_data import ViewData
-
-
-@dataclass(frozen=True)
-class MergingOptions:
-    """Settings of the MV3DIS Merging stage.
-
-    Attributes:
-        visibility_rtol: Relative depth tolerance for a point to count as seen.
-        merge_small_points: MV3DIS merges or drops regions smaller than this.
-        min_instance_points: Instances with fewer points are dropped.
-    """
-
-    visibility_rtol: float = 0.05
-    merge_small_points: int = 200
-    min_instance_points: int = 50
 
 
 def labels_to_instance_ids(labels: npt.ArrayLike, min_points: int) -> npt.NDArray[np.int32]:

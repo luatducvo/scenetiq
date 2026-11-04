@@ -1,6 +1,6 @@
 # Upload a Capture one View per request
 
-The backend is reached through Cloudflare (ADR 0004), which refuses large request bodies: a 105 MB POST to our hostname got a 413 at the edge, before reaching the backend. A Capture sent as one multipart request therefore could not exceed roughly 70 photos of 1.5 MB, far below the 300 Views we promise.
+The backend is reached through Cloudflare (ADR 0004), which refuses large request bodies: a 105 MB POST to our hostname got a 413 at the edge, before reaching the backend. A Capture sent as one multipart request therefore could not exceed roughly 70 photos of 1.5 MB, far below the Capture sizes we accept.
 
 So a Capture takes three steps: `POST /captures` with its View count, `POST /captures/{id}/views` once per View, in parallel, then `POST /scenes` to commit it and start the job.
 

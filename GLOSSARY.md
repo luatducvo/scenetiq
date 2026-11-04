@@ -9,17 +9,21 @@ The physical space the user photographed. Must be static (nothing moves between 
 _Avoid_: Room, environment
 
 **Capture**:
-The set of 10–300 unordered photos uploaded together for one Scene, with no camera poses or intrinsics. In v1 one Scene has exactly one Capture.
+The photos uploaded together for one Scene, in upload order, with no camera poses or intrinsics. In v1 one Scene has exactly one Capture.
 _Avoid_: Upload, dataset, batch
 
 **View**:
 One photo within a Capture, together with the camera it was taken from once reconstructed.
 _Avoid_: Frame, image (when the camera matters)
 
+**View stride**:
+The spacing N at which a Capture's Views are reconstructed: the first View and every Nth one after it, in upload order. The other Views are kept but unused.
+_Avoid_: Frame skip, sampling rate
+
 ## Reconstruction
 
 **Reconstruction**:
-The 3D result of one Capture: a point cloud of the Scene plus the cameras of every View.
+The 3D result of one Capture: a point cloud of the Scene plus the cameras of every View the View stride selected.
 _Avoid_: Model, 3D scan, map
 
 **Mask**:

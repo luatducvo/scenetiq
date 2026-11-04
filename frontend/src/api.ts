@@ -23,9 +23,6 @@ export interface SceneSummary {
   status: JobStatus
 }
 
-export const MIN_VIEWS = 10
-export const MAX_VIEWS = 300
-
 /** Raised for any non-2xx response, carrying the backend's reason. */
 export class ApiError extends Error {
   readonly status: number

@@ -4,6 +4,7 @@ The notebook only wires these together; it holds no logic of its own (ADR 0004).
 """
 
 import contextlib
+import json
 import os
 import shutil
 import signal
@@ -14,9 +15,11 @@ import time
 import urllib.error
 import urllib.request
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
+from scenetiq.config import Settings
 from scenetiq.runtime_log import JobProgress, UploadProgress, parse_progress
 
 SERVER_APP = "scenetiq.server:build_app"
@@ -175,22 +178,29 @@ def install_packages(
         raise RuntimeError(f"uv exited with {code}. Last lines:\n{last}")
 
 
+def configured_pipeline(config: Mapping[str, Any]) -> str:
+    """Return the Pipeline the notebook's ``CONFIG`` selects, checking all of ``CONFIG``.
+
+    Raises:
+        ValueError: If ``CONFIG`` is invalid, so a mistake shows before anything is installed.
+    """
+    return Settings.from_overrides("", config).pipeline
+
+
 def server_environment(
-    token: str, storage_root: Path, pipeline: str, base: dict[str, str] | None = None
+    token: str, config: Mapping[str, Any], base: dict[str, str] | None = None
 ) -> dict[str, str]:
     """Return the environment for the backend process, with model progress bars turned off.
 
     Args:
         token: Shared bearer token.
-        storage_root: Where Scenes are stored (the runtime's local disk on Colab).
-        pipeline: ``"fake"`` or ``"real"``.
+        config: The notebook's ``CONFIG``: overrides of the defaults in ``scenetiq.config``.
         base: Environment to extend; defaults to the current process environment.
     """
     env = dict(os.environ if base is None else base)
     env.update(
         SCENETIQ_TOKEN=token,
-        SCENETIQ_STORAGE_ROOT=str(storage_root),
-        SCENETIQ_PIPELINE=pipeline,
+        SCENETIQ_CONFIG=json.dumps(config),
         TQDM_DISABLE="1",
         HF_HUB_DISABLE_PROGRESS_BARS="1",
     )

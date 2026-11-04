@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from scenetiq.config import SAM2Options
 from scenetiq.pipeline.view_data import ViewData
 
 MAX_MASKS_PER_VIEW = 255
@@ -45,25 +46,6 @@ def select_masks(
     candidates = np.flatnonzero(areas >= min_area)
     order = candidates[np.argsort(-s[candidates], kind="stable")][:max_masks]
     return masks[order].astype(np.uint8), s[order]
-
-
-@dataclass(frozen=True)
-class SAM2Options:
-    """Settings of the SAM2 Masking stage.
-
-    Attributes:
-        model_id: Hugging Face id of the SAM2 weights.
-        points_per_side: Prompt grid density of the automatic generator.
-        pred_iou_thresh: Drop Masks SAM2 itself rates below this.
-        stability_score_thresh: Drop unstable Masks.
-        min_area_fraction: Drop Masks smaller than this fraction of the image.
-    """
-
-    model_id: str = "facebook/sam2.1-hiera-large"
-    points_per_side: int = 32
-    pred_iou_thresh: float = 0.8
-    stability_score_thresh: float = 0.9
-    min_area_fraction: float = 0.001
 
 
 class SAM2Masker:

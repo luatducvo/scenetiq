@@ -1,0 +1,117 @@
+from pathlib import Path
+
+import pytest
+
+from scenetiq.config import Settings
+
+
+def test_settings_without_overrides_use_the_defaults():
+    settings = Settings.from_overrides("tok", {})
+    assert settings.token == "tok"
+    assert settings.storage_root == Path("./data")
+    assert settings.pipeline == "fake"
+    assert (settings.min_views, settings.max_views, settings.view_stride) == (1, 2000, 1)
+    assert settings.da3.process_res == 504
+
+
+def test_override_changes_only_the_values_it_names():
+    settings = Settings.from_overrides(
+        "tok",
+        {
+            "storage_root": "/content/data",
+            "max_views": 50000,
+            "da3": {"process_res": 392, "use_ray_pose": True},
+        },
+    )
+    assert settings.storage_root == Path("/content/data")
+    assert settings.max_views == 50000
+    assert settings.da3.process_res == 392
+    assert settings.da3.use_ray_pose is True
+    assert settings.da3.conf_percentile == 30.0
+    assert settings.sam2.points_per_side == 32
+
+
+def test_json_values_become_the_types_the_settings_declare():
+    settings = Settings.from_overrides(
+        "tok", {"embedding": {"expansions": [0.2, 0.5]}, "da3": {"max_depth": 20}}
+    )
+    assert settings.embedding.expansions == (0.2, 0.5)
+    assert settings.da3.max_depth == 20.0
+    assert isinstance(settings.da3.max_depth, float)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "named"),
+    [
+        ({"view_stide": 7}, "view_stide"),
+        ({"da3": {"proces_res": 392}}, "da3.proces_res"),
+    ],
+)
+def test_unknown_key_is_refused_by_its_full_name(overrides: dict, named: str):
+    with pytest.raises(ValueError, match=named.replace(".", r"\.")):
+        Settings.from_overrides("tok", overrides)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "named"),
+    [
+        ({"view_stride": "7"}, "view_stride"),
+        ({"view_stride": True}, "view_stride"),
+        ({"da3": {"process_res": 392.5}}, "da3.process_res"),
+        ({"da3": 504}, "da3"),
+        ({"cors_origins": "http://localhost:3000"}, "cors_origins"),
+    ],
+)
+def test_value_of_the_wrong_type_is_refused_by_its_full_name(overrides: dict, named: str):
+    with pytest.raises(ValueError, match=named.replace(".", r"\.")):
+        Settings.from_overrides("tok", overrides)
+
+
+def test_token_stays_out_of_the_overrides():
+    with pytest.raises(ValueError, match="token"):
+        Settings.from_overrides("tok", {"token": "other"})
+
+
+@pytest.mark.parametrize(
+    ("overrides", "named"),
+    [
+        ({"view_stride": 0}, "view_stride"),
+        ({"view_stride": -1}, "view_stride"),
+        ({"min_views": 0}, "min_views"),
+        ({"min_views": 11, "max_views": 10}, "min_views"),
+        ({"superpoints": {"primitives": "superpoint"}}, "superpoints.primitives"),
+        ({"pipeline": "reel"}, "pipeline"),
+    ],
+)
+def test_settings_that_cannot_work_are_refused_by_name(overrides: dict, named: str):
+    with pytest.raises(ValueError, match=named.replace(".", r"\.")):
+        Settings.from_overrides("tok", overrides)
+
+
+def test_settings_from_the_environment(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCENETIQ_TOKEN", "tok")
+    monkeypatch.setenv("SCENETIQ_CONFIG", '{"view_stride": 7, "da3": {"process_res": 392}}')
+    settings = Settings.from_env()
+    assert settings.token == "tok"
+    assert settings.view_stride == 7
+    assert settings.da3.process_res == 392
+
+
+def test_environment_without_config_uses_the_defaults(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCENETIQ_TOKEN", "tok")
+    monkeypatch.delenv("SCENETIQ_CONFIG", raising=False)
+    assert Settings.from_env().view_stride == 1
+
+
+def test_environment_without_token_is_refused(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("SCENETIQ_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="SCENETIQ_TOKEN"):
+        Settings.from_env()
+
+
+@pytest.mark.parametrize("raw", ["{not json", "[1, 2]"])
+def test_config_that_is_not_a_json_object_is_refused(monkeypatch: pytest.MonkeyPatch, raw: str):
+    monkeypatch.setenv("SCENETIQ_TOKEN", "tok")
+    monkeypatch.setenv("SCENETIQ_CONFIG", raw)
+    with pytest.raises(ValueError, match="SCENETIQ_CONFIG"):
+        Settings.from_env()

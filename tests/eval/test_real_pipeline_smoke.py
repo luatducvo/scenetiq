@@ -77,9 +77,10 @@ MIN_POINTS_IN_PHOTO = 0.2
 
 
 def _configured_threshold() -> float:
-    from scenetiq.config import DEFAULT_MATCH_THRESHOLD
+    from scenetiq.config import Settings, overrides_from_json
 
-    return float(os.environ.get("SCENETIQ_MATCH_THRESHOLD", DEFAULT_MATCH_THRESHOLD))
+    overrides = overrides_from_json(os.environ.get("SCENETIQ_CONFIG"))
+    return Settings.from_overrides("", overrides).match_threshold
 
 
 def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, float]]:

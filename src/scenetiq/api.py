@@ -26,8 +26,6 @@ from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureE
 
 logger = logging.getLogger(__name__)
 
-MIN_VIEWS = 10
-MAX_VIEWS = 300
 _ALLOWED_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG"}
 _ID_PATTERN = "^[0-9a-f]{32}$"  # capture ids become directory names, so never accept a path
 
@@ -82,10 +80,11 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
     @app.post("/captures", status_code=status.HTTP_201_CREATED)
     def start_capture(request: Request, body: CaptureIn) -> dict[str, str]:
         """Start staging a Capture, refusing it before any View is sent if it cannot run."""
-        if not MIN_VIEWS <= body.view_count <= MAX_VIEWS:
+        if not settings.min_views <= body.view_count <= settings.max_views:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"a Capture needs {MIN_VIEWS}-{MAX_VIEWS} images, got {body.view_count}",
+                f"a Capture needs {settings.min_views}-{settings.max_views} images, "
+                f"got {body.view_count}",
             )
         if request.app.state.runner.busy:
             raise HTTPException(status.HTTP_409_CONFLICT, "another job is running")
@@ -143,7 +142,8 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         except BaseException:
             runner.release()
             raise
-        runner.start(record, Capture(views=[View(path=p) for p in paths]))
+        selected = paths[:: settings.view_stride]
+        runner.start(record, Capture(views=[View(path=p) for p in selected]))
         return {"scene_id": record.scene_id, "job_id": record.job_id}
 
     @app.get("/jobs/{job_id}")

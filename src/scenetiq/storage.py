@@ -264,7 +264,8 @@ class SceneStore:
 
 
 def _view_paths(directory: Path) -> list[Path]:
-    return sorted(p for p in directory.iterdir() if p.suffix != _TEMP_SUFFIX)
+    views = (p for p in directory.iterdir() if p.suffix != _TEMP_SUFFIX)
+    return sorted(views, key=lambda p: int(p.stem))  # by name, View 10000 would precede 9999
 
 
 def _record(row: sqlite3.Row) -> SceneRecord:

@@ -4,31 +4,18 @@ The mesh vertices become the Reconstruction's point cloud, so the points that
 Instances are made of are exactly the points the user sees.
 """
 
-from dataclasses import dataclass
-
 import numpy as np
 
+from scenetiq.config import FusionOptions
 from scenetiq.pipeline.adapters import c2w_to_w2c
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 
-@dataclass(frozen=True)
-class FusionOptions:
-    """Settings of the TSDF Fusing stage.
-
-    Attributes:
-        voxel_size: TSDF voxel edge in metres; sets the point spacing (1-2 cm).
-        sdf_trunc_voxels: Truncation distance, in voxels.
-        max_depth: Depth beyond this many metres is ignored.
-    """
-
-    voxel_size: float = 0.02
-    sdf_trunc_voxels: float = 4.0
-    max_depth: float = 12.0
-
-
 def fuse(view_data: ViewData, options: FusionOptions | None = None) -> FusedGeometry:
     """Integrate every View's depth into a TSDF volume and extract its mesh.
+
+    The Reconstructing stage has already dropped depth beyond ``DA3Options.max_depth``,
+    so everything left in ``view_data`` is fused.
 
     Raises:
         RuntimeError: If fusion yields an empty mesh (e.g. no reliable depth).
@@ -41,6 +28,7 @@ def fuse(view_data: ViewData, options: FusionOptions | None = None) -> FusedGeom
         sdf_trunc=opts.voxel_size * opts.sdf_trunc_voxels,
         color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8,
     )
+    depth_trunc = float(view_data.depth.max()) + 1.0  # Open3D requires one; this cuts nothing.
     for i, cam in enumerate(view_data.cameras):
         color = o3d.geometry.Image(np.ascontiguousarray(view_data.images[i]))
         depth = o3d.geometry.Image(np.ascontiguousarray(view_data.depth[i]))
@@ -48,7 +36,7 @@ def fuse(view_data: ViewData, options: FusionOptions | None = None) -> FusedGeom
             color,
             depth,
             depth_scale=1.0,
-            depth_trunc=opts.max_depth,
+            depth_trunc=depth_trunc,
             convert_rgb_to_intensity=False,
         )
         k = cam.intrinsics

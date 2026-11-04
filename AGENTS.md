@@ -32,7 +32,7 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 - **Seam A**, `tests/api/`: the HTTP API through TestClient, with `FakePipeline` and `FakeTextEncoder` on a temp storage root. Most behaviour is tested here.
 - **Unit**, `tests/unit/`: pure, model-free functions, wherever they live (stage modules included).
 - **Seam B**, `tests/eval/`: the real Pipeline on GPU, marked `@pytest.mark.gpu`, deselected by default.
-- Never unit-test or mock anything that loads a model (DA3, SAM2, SigLIP2, a full MV3DIS run, `RealPipeline.run`). Only Seam B covers those.
+- Never unit-test or mock anything that loads a model (DA3, SAM2, SigLIP2, a full MV3DIS run, `RealPipeline.run`). Only Seam B covers those. Constructing them is fine, because models load on first use.
 - Test expectations must come from hand-worked values, never from recomputing the code's own formula.
 
 ### Non-obvious constraints
@@ -50,10 +50,12 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
   - `point_level=True` is broken upstream and would allocate N×N matrices, so always pass primitive ids.
   - The mask label map is `uint8`, so the Masking stage caps Masks at 255 per View.
 - **Scores:** `TextEncoder.to_score` turns cosine similarity into the score the Match threshold applies to. SigLIP2 uses its sigmoid match probability; the fake encoder uses cosine similarity.
-  - `DEFAULT_MATCH_THRESHOLD` (0.5) has not been validated against ground truth, and the repo has no tool that measures it. Tune it per deployment with `SCENETIQ_MATCH_THRESHOLD`.
+  - `DEFAULT_MATCH_THRESHOLD` (0.5) has not been validated against ground truth, and the repo has no tool that measures it. Tune it per deployment with `match_threshold` in the config.
+- **Configuration** lives only in `scenetiq.config`: every default, including the stage Options. Add a new setting there, and pass it to its stage in `server.build_components`. The notebook's `CONFIG` cell overrides it through `SCENETIQ_CONFIG`; only the token travels separately.
+- **View limits apply to uploaded photos.** Nothing checks the View count against GPU memory: DA3 takes every View left after the View stride in one forward pass, so an oversized Capture fails with OOM.
 - **Point order is a contract.** The PLY, `instance_ids.bin` and the MV3DIS input all use the TSDF mesh vertex order. Never reorder or filter points after fusion.
 - **Request size:** Cloudflare returns 413 for large bodies (105 MB was refused), so never send a whole Capture in one request (ADR 0006).
 - **Deployment** is `notebooks/colab_server.ipynb` only. The notebook holds parameters; its logic belongs in `scenetiq.colab`.
-  - `scenetiq.colab` and `scenetiq.runtime_log` use only the standard library, because the notebook imports them before anything is installed.
+  - `scenetiq.colab`, `scenetiq.config` and `scenetiq.runtime_log` use only the standard library, because the notebook imports them before anything is installed.
 - **Colab logs** are never written to files or Drive. `colab_logging.json` decides what reaches the server's stdout, which the notebook's last cell displays. Stderr is kept only to explain a crash, so anything the owner must see has to go through a logger that file lets through.
 - **Never commit model weights.**

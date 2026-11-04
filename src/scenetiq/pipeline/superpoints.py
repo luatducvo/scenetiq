@@ -3,18 +3,16 @@
 import numpy as np
 import numpy.typing as npt
 
+from scenetiq.config import SuperpointOptions
 from scenetiq.domain import FloatArray
 from scenetiq.vendor.segmentator.segmentator import segment
-
-DEFAULT_K_THRESH = 0.01
-DEFAULT_SEG_MIN_VERTS = 20
 
 
 def mesh_superpoints(
     vertices: FloatArray,
     triangles: npt.ArrayLike,
-    k_thresh: float = DEFAULT_K_THRESH,
-    seg_min_verts: int = DEFAULT_SEG_MIN_VERTS,
+    k_thresh: float = SuperpointOptions.k_thresh,
+    seg_min_verts: int = SuperpointOptions.min_verts,
 ) -> npt.NDArray[np.int64]:
     """Group mesh vertices into superpoints by normal similarity.
 

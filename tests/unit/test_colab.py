@@ -29,19 +29,40 @@ from scenetiq.colab import (
     server_command,
     server_environment,
 )
+from scenetiq.config import Settings
 from scenetiq.runtime_log import JobProgress, UploadProgress, format_progress
 
 
 def test_server_environment_sets_backend_config_and_keeps_base():
-    env = server_environment("tok", Path("/content/scenetiq-data"), "real", base={"PATH": "/bin"})
+    env = server_environment(
+        "tok", {"view_stride": 3, "da3": {"process_res": 392}}, base={"PATH": "/bin"}
+    )
     assert env == {
         "PATH": "/bin",
         "SCENETIQ_TOKEN": "tok",
-        "SCENETIQ_STORAGE_ROOT": str(Path("/content/scenetiq-data")),
-        "SCENETIQ_PIPELINE": "real",
+        "SCENETIQ_CONFIG": '{"view_stride": 3, "da3": {"process_res": 392}}',
         "TQDM_DISABLE": "1",
         "HF_HUB_DISABLE_PROGRESS_BARS": "1",
     }
+
+
+def test_backend_reads_the_config_cell_it_is_given(monkeypatch: pytest.MonkeyPatch):
+    env = server_environment("tok", {"view_stride": 3, "da3": {"process_res": 392}}, base={})
+    monkeypatch.setenv("SCENETIQ_TOKEN", env["SCENETIQ_TOKEN"])
+    monkeypatch.setenv("SCENETIQ_CONFIG", env["SCENETIQ_CONFIG"])
+    settings = Settings.from_env()
+    assert settings.view_stride == 3
+    assert settings.da3.process_res == 392
+
+
+@pytest.mark.parametrize(("config", "expected"), [({"pipeline": "real"}, "real"), ({}, "fake")])
+def test_configured_pipeline_follows_the_config_cell(config: dict, expected: str):
+    assert colab.configured_pipeline(config) == expected
+
+
+def test_mistake_in_the_config_cell_is_found_before_installing_anything():
+    with pytest.raises(ValueError, match="view_stide"):
+        colab.configured_pipeline({"view_stide": 7})
 
 
 def test_server_command_runs_the_app_factory_on_localhost():
@@ -403,7 +424,7 @@ def _wait_for_lines(server: RunningServer, wanted: str) -> list[str]:
 def test_real_server_logs_requests_and_errors_only_and_hides_successful_polling(tmp_path):
     token = "tok"
     port = _free_port()
-    env = server_environment(token, tmp_path, "fake")
+    env = server_environment(token, {"storage_root": str(tmp_path), "pipeline": "fake"})
     process = subprocess.Popen(
         server_command(port),
         env=env,

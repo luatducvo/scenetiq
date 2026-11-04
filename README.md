@@ -1,6 +1,6 @@
 # SceneTIQ
 
-Upload 10–300 photos of a static scene to get a metric 3D point cloud of it. Then find objects in the scene by describing them in free text, for example "red chair".
+Upload photos of a static scene to get a metric 3D point cloud of it. Then find objects in the scene by describing them in free text, for example "red chair".
 
 > The GPU pipeline has not been run end to end yet. Expect to fix issues on the first Colab run.
 
@@ -19,7 +19,7 @@ Upload 10–300 photos of a static scene to get a metric 3D point cloud of it. T
    [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luatducvo/scenetiq/blob/main/notebooks/colab_server.ipynb)
 
    This link always loads the latest `notebooks/colab_server.ipynb` from `main`, so a push needs no manual copy. Edits made in Colab are not saved back; change parameters in the repo instead. Do not use a "Save a copy in Drive" version: it stops following the repo.
-2. Set `PIPELINE`. Use `"fake"` on your first run to check the tunnel and the frontend without models. Use `"real"` for real reconstruction.
+2. Edit `CONFIG` in the first code cell. Use `"pipeline": "fake"` on your first run to check the tunnel and the frontend without models, and `"real"` for real reconstruction. `view_stride` reconstructs only every Nth photo, in upload order. `CONFIG` overrides `src/scenetiq/config.py`, which lists every setting and its default.
 3. Run all cells. The last cell keeps running and shows the API log, with a progress bar for the photo upload and the job being processed. Stop it if you need to run another cell; the backend keeps going, and running the cell again resumes the display.
 
 Model weights download automatically the first time each session uses them (about 15 GB), so the first job stays on `reconstructing` for several minutes. Scenes are saved on the runtime's local disk (`/content/scenetiq-data`), and logs are not saved anywhere. **When the runtime disconnects or is deleted, all Scenes are lost:** run the notebook again and upload them again.
@@ -41,7 +41,7 @@ Vite compiles these values into the JavaScript bundle, so anyone who can load a 
 
 The header shows the backend's status from when the page loaded; click **Ping** to check again. **Offline** usually means the Colab runtime or the tunnel has stopped.
 
-1. **New Scene:** name the Scene and select 10–300 JPG/PNG photos.
+1. **New Scene:** name the Scene and select JPG/PNG photos, between `min_views` and `max_views` of `CONFIG`.
 2. **Processing:** watch the progress through each stage. Only one Scene is processed at a time.
 3. **Viewer:**
    - Drag to orbit, right-drag to pan, scroll to zoom.

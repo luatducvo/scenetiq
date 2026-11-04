@@ -1,4 +1,4 @@
-# GPU model stack for SCENETIQ_PIPELINE=real. Installed only on Colab by notebooks/colab_server.ipynb.
+# GPU model stack for the real Pipeline. Installed only on Colab by notebooks/colab_server.ipynb.
 # Kept out of pyproject.toml so `uv lock` stays resolvable on CPU-only dev machines.
 # torch and torchvision are not listed: Colab's preinstalled CUDA builds are used.
 open3d==0.20.0

@@ -5,36 +5,19 @@ The same instance serves as the Pipeline's image encoder and the API's
 """
 
 import math
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
+from scenetiq.config import SigLIP2Options
 from scenetiq.domain import FloatArray
-
-DEFAULT_SIGLIP2_MODEL = "google/siglip2-giant-opt-patch16-384"
 
 
 def sigmoid_score(cosine: npt.ArrayLike, logit_scale: float, logit_bias: float) -> FloatArray:
     """Turn cosine similarity into SigLIP's match probability ``sigmoid(scale * cos + bias)``."""
     z = logit_scale * np.asarray(cosine, dtype=np.float64) + logit_bias
     return (1.0 / (1.0 + np.exp(-z))).astype(np.float32)
-
-
-@dataclass(frozen=True)
-class SigLIP2Options:
-    """Settings of the SigLIP2 encoder.
-
-    Attributes:
-        model_id: Hugging Face id of the SigLIP2 checkpoint (Apache-2.0).
-        prompt: Template wrapping Query text; ``{}`` is replaced by the text.
-        batch_size: Crops encoded per forward pass.
-    """
-
-    model_id: str = DEFAULT_SIGLIP2_MODEL
-    prompt: str = "This is a photo of {}."
-    batch_size: int = 64
 
 
 class SigLIP2Encoder:

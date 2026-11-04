@@ -22,16 +22,29 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder]:
     if settings.pipeline == "fake":
         return FakePipeline(), FakeTextEncoder()
     if settings.pipeline == "real":
-        from scenetiq.pipeline.real import RealPipeline
+        from scenetiq.pipeline.masking import SAM2Masker
+        from scenetiq.pipeline.real import RealPipeline, RealPipelineOptions
+        from scenetiq.pipeline.reconstruct import DA3Reconstructor
         from scenetiq.pipeline.siglip import SigLIP2Encoder
 
-        encoder = SigLIP2Encoder()  # one model for Instance crops and Query text
-        return RealPipeline(image_encoder=encoder), encoder
+        encoder = SigLIP2Encoder(settings.siglip)  # one model for Instance crops and Query text
+        pipeline = RealPipeline(
+            reconstructor=DA3Reconstructor(settings.da3),
+            masker=SAM2Masker(settings.sam2),
+            image_encoder=encoder,
+            options=RealPipelineOptions(
+                fusion=settings.fusion,
+                superpoints=settings.superpoints,
+                merging=settings.merging,
+                embedding=settings.embedding,
+            ),
+        )
+        return pipeline, encoder
     raise ValueError(f"unknown pipeline {settings.pipeline!r}; expected 'fake' or 'real'")
 
 
 def build_app() -> FastAPI:
-    """Create the API configured from ``SCENETIQ_*`` environment variables."""
+    """Create the API configured by ``SCENETIQ_TOKEN`` and ``SCENETIQ_CONFIG``."""
     settings = Settings.from_env()
     pipeline, text_encoder = build_components(settings)
     return create_app(settings, pipeline, text_encoder)

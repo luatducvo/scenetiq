@@ -1,7 +1,7 @@
 """Deterministic stand-ins for the GPU Pipeline and text encoder.
 
 Used by the CPU test suite and selectable on a running backend with
-``SCENETIQ_PIPELINE=fake`` so the whole system can be exercised without models.
+``"pipeline": "fake"`` in the config, so the whole system can be exercised without models.
 """
 
 from __future__ import annotations

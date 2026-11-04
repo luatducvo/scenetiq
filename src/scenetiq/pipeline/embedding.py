@@ -7,13 +7,13 @@ with SigLIP2, and average them into one L2-normalised embedding.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 import numpy.typing as npt
 
+from scenetiq.config import EmbeddingOptions
 from scenetiq.domain import Camera, FloatArray
 from scenetiq.geometry import l2_normalize
 from scenetiq.pipeline.adapters import c2w_to_w2c
@@ -26,23 +26,6 @@ class ImageEncoder(Protocol):
     def encode_images(self, images: list) -> FloatArray:
         """Return ``(len(images), D)`` L2-normalised embeddings."""
         ...
-
-
-@dataclass(frozen=True)
-class EmbeddingOptions:
-    """Settings of the Embedding stage.
-
-    Attributes:
-        views_per_instance: How many of the best Views to crop each Instance from.
-        min_visible_pixels: A View must see at least this many of the Instance's points.
-        expansions: Context added around the tight crop, as fractions of its size.
-        visibility_rtol: Relative depth tolerance of the occlusion test.
-    """
-
-    views_per_instance: int = 5
-    min_visible_pixels: int = 30
-    expansions: tuple[float, ...] = (0.1, 0.4)
-    visibility_rtol: float = 0.05
 
 
 def visible_pixels(

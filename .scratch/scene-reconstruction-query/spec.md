@@ -10,15 +10,15 @@ A user has a set of ordinary 2D photos of a room or other static space. They wan
 
 ## Solution
 
-The user opens a local web app and uploads a Capture of 10–300 photos of a Scene. The photos need no camera poses or intrinsics. The backend runs on Colab and reconstructs the Scene: it builds a metric-scale point cloud and splits it into class-agnostic Instances, each with a semantic embedding. The web app shows the job's progress stage by stage, then displays the point cloud. The user types a Query and sees the matching Instances highlighted with 3D bounding boxes. If nothing clears the relevance threshold, the app shows the single closest Instance flagged as a Low-confidence Match. Processed Scenes last as long as the Colab runtime and can be reopened or deleted.
+The user opens a local web app and uploads a Capture of photos of a Scene, of which every Nth is reconstructed (the View stride). The photos need no camera poses or intrinsics. The backend runs on Colab and reconstructs the Scene: it builds a metric-scale point cloud and splits it into class-agnostic Instances, each with a semantic embedding. The web app shows the job's progress stage by stage, then displays the point cloud. The user types a Query and sees the matching Instances highlighted with 3D bounding boxes. If nothing clears the relevance threshold, the app shows the single closest Instance flagged as a Low-confidence Match. Processed Scenes last as long as the Colab runtime and can be reopened or deleted.
 
 ## User Stories
 
 1. As a user, I want to upload a set of photos of a static Scene, so that I can get a 3D Reconstruction without special hardware.
 2. As a user, I want to upload photos without camera poses or intrinsics, so that I can use any ordinary camera or phone.
 3. As a user, I want to name a Scene when I upload it, so that I can recognise it later in the list.
-4. As a user, I want an upload with fewer than 10 photos rejected immediately with a clear message, so that I don't wait for a job that cannot succeed.
-5. As a user, I want an upload with more than 300 photos rejected immediately with a clear message, so that I don't trigger a job that would run out of GPU memory.
+4. As a user, I want an upload outside my configured photo limits rejected immediately with a clear message, so that I don't send photos for nothing.
+5. As the owner, I want to configure the photo limits and the View stride myself, with no enforced limit on the Views reconstructed, so that I decide what my GPU can take; a Capture too large for it fails with out-of-memory.
 6. As a user, I want files that are not JPG/PNG images rejected with a clear message, so that I know which file is the problem.
 7. As a user, I want to receive a job identifier right after uploading, so that I can track processing without keeping the request open.
 8. As a user, I want to see which stage the job is in (e.g. reconstructing, segmenting, embedding), so that I know it is progressing.
@@ -101,7 +101,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 - Every endpoint needs a shared token in a request header. The token is set by configuration (a Colab secret). A missing or wrong token gets 401.
 - Endpoints (names are indicative):
   - health: `{status, job_running}`, so that the frontend can show whether the backend is up and the token is valid.
-  - start Capture: View count → `{capture_id}`. Validates 10–300 Views, and returns a conflict error while another job is running.
+  - start Capture: View count → `{capture_id}`. Validates the View count against `min_views` and `max_views`, and returns a conflict error while another job is running.
   - add View: multipart upload of one image and its index, sent in parallel and safe to retry (ADR 0006). Validates JPG/PNG type and returns 4xx with a reason otherwise.
   - create Scene: name and `capture_id` → `{scene_id, job_id}`. Returns 4xx if a View is missing, and a conflict error while another job is running.
   - get job status → `{status: queued|running|succeeded|failed, stage, error}`.
@@ -118,7 +118,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 - The backend URL and token come from `VITE_BACKEND_URL` and `VITE_BACKEND_TOKEN` in `frontend/.env`, read at build time.
 - Screens:
   - Scene list (open, delete)
-  - upload form (name and images, with client-side 10–300 count validation)
+  - upload form (name and images; the backend validates the count before any image is sent)
   - job progress view that polls job status and shows the stage
   - Scene viewer
 - The Scene viewer:
@@ -143,7 +143,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
   - The FastAPI app runs against a temporary storage root, with a fake Pipeline that returns a fixed, hand-built Reconstruction. That Reconstruction has a few Instances with known embeddings, and a fake text encoder maps known Query strings to known vectors.
   - It covers:
     - token enforcement
-    - upload validation (fewer than 10 or more than 300 images, wrong file types)
+    - upload validation (image count outside the configured limits, wrong file types)
     - single-job conflict
     - job status transitions and stage reporting
     - failed job with an error message, when the fake raises
@@ -160,7 +160,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 
 - Spatial reasoning Queries (relations between Instances). v1 only stores the centroid and bounding box needed later.
 - Video upload, frame extraction, and Captures with known poses or intrinsics.
-- More than 300 Views per Capture, and DA3-Streaming or chunked reconstruction.
+- DA3-Streaming or chunked reconstruction.
 - More than one Capture per Scene, adding photos to an existing Scene, and renaming Scenes.
 - Resuming interrupted jobs.
 - Multiple users, accounts and per-user permissions.

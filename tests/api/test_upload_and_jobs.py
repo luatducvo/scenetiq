@@ -3,28 +3,55 @@ import logging
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from scenetiq.config import Settings
 from scenetiq.fakes import FakePipeline
 from scenetiq.runtime_log import PROGRESS_LOGGER, JobProgress, UploadProgress, parse_progress
 
-from .conftest import AUTH, post_view, staged_capture, start_capture, upload, wait_for_job
+from .conftest import AUTH, TOKEN, post_view, staged_capture, start_capture, upload, wait_for_job
 
 
-@pytest.mark.parametrize("count", [9, 301])
-def test_capture_outside_10_to_300_images_is_rejected(client: TestClient, count: int):
+@pytest.mark.parametrize("count", [0, 2001])
+def test_capture_outside_1_to_2000_images_is_rejected(client: TestClient, count: int):
     resp = client.post("/captures", json={"view_count": count}, headers=AUTH)
     assert resp.status_code == 422
-    assert "10-300" in resp.json()["detail"]
+    assert "1-2000" in resp.json()["detail"]
 
 
-@pytest.mark.parametrize("count", [10, 300])
-def test_capture_at_the_limits_is_accepted(client: TestClient, count: int):
-    body = upload(client, count)
+def test_one_photo_capture_is_accepted(client: TestClient):
+    body = upload(client, 1)
     assert wait_for_job(client, body["job_id"])["status"] == "succeeded"
+
+
+def test_capture_at_the_default_maximum_is_accepted_without_a_stride(client: TestClient):
+    resp = client.post("/captures", json={"view_count": 2000}, headers=AUTH)
+    assert resp.status_code == 201
+
+
+@pytest.mark.parametrize(("count", "expected_status"), [(4, 422), (5, 201), (6, 201), (7, 422)])
+def test_configured_view_limits_apply_to_the_uploaded_photos(
+    make_client: Callable[..., TestClient], tmp_path: Path, count: int, expected_status: int
+):
+    settings = Settings(tmp_path / "s", token=TOKEN, min_views=5, max_views=6, view_stride=4)
+    client = make_client(settings=settings)
+    resp = client.post("/captures", json={"view_count": count}, headers=AUTH)
+    assert resp.status_code == expected_status
+    if expected_status == 422:
+        assert "5-6" in resp.json()["detail"]
+
+
+def test_view_stride_gives_the_pipeline_every_nth_view_from_the_first(
+    make_client: Callable[..., TestClient], pipeline: FakePipeline, tmp_path: Path
+):
+    client = make_client(settings=Settings(tmp_path / "s", token=TOKEN, view_stride=3))
+    body = upload(client, 10)
+    assert wait_for_job(client, body["job_id"])["status"] == "succeeded"
+    assert [v.path.stem for v in pipeline.captures[0].views] == ["0000", "0003", "0006", "0009"]
 
 
 def test_non_image_file_is_rejected_with_its_name(client: TestClient):

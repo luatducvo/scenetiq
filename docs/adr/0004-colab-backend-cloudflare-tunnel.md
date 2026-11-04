@@ -1,6 +1,6 @@
 # Backend runs on Google Colab, reached through a Cloudflare named tunnel
 
-The pipeline needs a large GPU (DA3 Giant on up to 300 Views, SAM2, SigLIP2). We run the FastAPI backend on Google Colab (80GB VRAM). The React frontend runs on localhost and connects through a Cloudflare named tunnel, so the URL stays stable across Colab restarts.
+The pipeline needs a large GPU (DA3 Giant on hundreds of Views, SAM2, SigLIP2). We run the FastAPI backend on Google Colab (80GB VRAM). The React frontend runs on localhost and connects through a Cloudflare named tunnel, so the URL stays stable across Colab restarts.
 
 ## Consequences
 

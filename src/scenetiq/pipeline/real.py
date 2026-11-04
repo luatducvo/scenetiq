@@ -1,16 +1,16 @@
 """The real Pipeline: chains the GPU stages behind the ``Pipeline`` interface."""
 
 from dataclasses import dataclass, field
-from typing import Literal
 
 import numpy as np
 
+from scenetiq.config import EmbeddingOptions, FusionOptions, MergingOptions, SuperpointOptions
 from scenetiq.domain import Capture, Reconstruction, Stage, StageCallback
 from scenetiq.geometry import build_instances
-from scenetiq.pipeline.embedding import EmbeddingOptions, ImageEncoder, embed_instances
-from scenetiq.pipeline.fusion import FusionOptions, fuse
+from scenetiq.pipeline.embedding import ImageEncoder, embed_instances
+from scenetiq.pipeline.fusion import fuse
 from scenetiq.pipeline.masking import SAM2Masker
-from scenetiq.pipeline.merging import MergingOptions, merge_instances
+from scenetiq.pipeline.merging import merge_instances
 from scenetiq.pipeline.primitives import voxel_primitives
 from scenetiq.pipeline.reconstruct import DA3Reconstructor, Reconstructor
 from scenetiq.pipeline.siglip import SigLIP2Encoder
@@ -23,22 +23,15 @@ class RealPipelineOptions:
 
     Attributes:
         fusion: TSDF Fusing stage (ADR 0002).
+        superpoints: Superpoints stage.
         merging: MV3DIS Merging stage.
         embedding: SigLIP2 Embedding stage.
-        primitives: ``"superpoints"`` (ScanNet Segmentator on the fused mesh) or
-            ``"voxel"`` (voxel-grid fallback, for debugging).
-        superpoint_k_thresh: Segmentator threshold; larger gives larger superpoints.
-        superpoint_min_verts: Segmentator minimum superpoint size.
-        primitive_voxel_size: Edge, in metres, of the voxel-grid fallback primitives.
     """
 
     fusion: FusionOptions = field(default_factory=FusionOptions)
+    superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
     merging: MergingOptions = field(default_factory=MergingOptions)
     embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
-    primitives: Literal["superpoints", "voxel"] = "superpoints"
-    superpoint_k_thresh: float = 0.01
-    superpoint_min_verts: int = 20
-    primitive_voxel_size: float = 0.15
 
 
 class RealPipeline:
@@ -76,12 +69,13 @@ class RealPipeline:
         points = geometry.vertices
 
         on_stage(Stage.SUPERPOINTS)
-        if opts.primitives == "superpoints":
+        superpoints = opts.superpoints
+        if superpoints.primitives == "superpoints":
             primitive_ids = mesh_superpoints(
-                points, geometry.triangles, opts.superpoint_k_thresh, opts.superpoint_min_verts
+                points, geometry.triangles, superpoints.k_thresh, superpoints.min_verts
             )
         else:
-            primitive_ids = voxel_primitives(points, opts.primitive_voxel_size)
+            primitive_ids = voxel_primitives(points, superpoints.primitive_voxel_size)
 
         on_stage(Stage.MASKING)
         view_masks = self.masker.masks_for(view_data)
