@@ -26,13 +26,16 @@ Model weights download automatically the first time each session uses them (abou
 
 ## 3. Open the frontend
 
-```bash
-npm --prefix frontend install
-npm --prefix frontend run dev
-```
+1. Copy `frontend/.env.example` to `frontend/.env`, then set `VITE_BACKEND_URL` to `https://<your tunnel hostname>` and `VITE_BACKEND_TOKEN` to your `SCENETIQ_TOKEN`.
+2. Start the frontend. Restart it after any change to `.env`.
 
-1. Open http://localhost:3000.
-2. In **Settings**, enter `https://<your tunnel hostname>` and your `SCENETIQ_TOKEN`.
+   ```bash
+   npm --prefix frontend install
+   npm --prefix frontend run dev
+   ```
+3. Open http://localhost:3000.
+
+Vite compiles these values into the JavaScript bundle, so anyone who can load a build can read the token. Do not host a build publicly.
 
 ## 4. Use it
 
@@ -57,7 +60,7 @@ The fake pipeline returns a small fixed scene. It ignores the uploaded photos an
 SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001
 ```
 
-Run the frontend as in step 3, using the URL `http://localhost:8001` and the token `dev`.
+Run the frontend as in step 3, using `VITE_BACKEND_URL=http://localhost:8001` and `VITE_BACKEND_TOKEN=dev`.
 
 ## License note
 

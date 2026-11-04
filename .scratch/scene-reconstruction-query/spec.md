@@ -41,7 +41,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 25. As a user, I want my processed Scenes to survive a Colab restart, so that I don't lose hours of GPU work.
 26. As a user, I want a job that was interrupted by a Colab restart marked as failed, not left stuck as running, so that I know to re-upload.
 27. As a user, I want the backend reachable at a stable URL across Colab restarts, so that I don't have to reconfigure the frontend every time.
-28. As a user, I want to set the backend URL and access token in the frontend, so that I can point it at my Colab instance.
+28. As a user, I want to set the backend URL and access token in the frontend's `.env` file, so that I can point it at my Colab instance.
 29. As the owner, I want every API request to need a shared token, so that strangers who find the tunnel URL cannot use my GPU or see my Scenes.
 30. As the owner, I want requests with a missing or wrong token rejected, so that the backend is never open by accident.
 31. As the owner, I want to start the whole backend from one Colab notebook (mount Drive, install, start the server, open the tunnel), so that bringing the system up is a single action.
@@ -115,7 +115,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 - CORS allows the localhost frontend origin.
 
 **Frontend**
-- A settings panel takes the backend URL and token, stored in browser storage.
+- The backend URL and token come from `VITE_BACKEND_URL` and `VITE_BACKEND_TOKEN` in `frontend/.env`, read at build time.
 - Screens:
   - Scene list (open, delete)
   - upload form (name and images, with client-side 10–300 count validation)

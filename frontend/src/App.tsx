@@ -1,27 +1,35 @@
 import { useCallback, useState } from 'react'
-import type { BackendConfig } from './api'
 import { JobProgress } from './components/JobProgress'
 import { SceneList } from './components/SceneList'
 import { SceneViewer } from './components/SceneViewer'
-import { SettingsPanel } from './components/SettingsPanel'
 import { UploadForm } from './components/UploadForm'
-import { loadConfig, saveConfig } from './settings'
+import { backendConfig as config } from './config'
 
 type Screen =
-  | { kind: 'settings' }
   | { kind: 'scenes' }
   | { kind: 'upload' }
   | { kind: 'job'; jobId: string }
   | { kind: 'scene'; sceneId: string }
 
 export default function App() {
-  const [config, setConfig] = useState<BackendConfig>(loadConfig)
-  const [screen, setScreen] = useState<Screen>(() =>
-    config.token ? { kind: 'scenes' } : { kind: 'settings' },
-  )
+  const [screen, setScreen] = useState<Screen>({ kind: 'scenes' })
 
   const openScene = useCallback((sceneId: string) => setScreen({ kind: 'scene', sceneId }), [])
   const openJob = useCallback((jobId: string) => setScreen({ kind: 'job', jobId }), [])
+
+  if (!config.url || !config.token) {
+    return (
+      <div className="app">
+        <div className="panel">
+          <h2>Backend not configured</h2>
+          <p>
+            Set <code>VITE_BACKEND_URL</code> and <code>VITE_BACKEND_TOKEN</code> in{' '}
+            <code>frontend/.env</code>, then restart <code>npm run dev</code>.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app">
@@ -30,20 +38,9 @@ export default function App() {
         <nav>
           <button onClick={() => setScreen({ kind: 'scenes' })}>Scenes</button>
           <button onClick={() => setScreen({ kind: 'upload' })}>New Scene</button>
-          <button onClick={() => setScreen({ kind: 'settings' })}>Settings</button>
         </nav>
       </header>
       <main>
-        {screen.kind === 'settings' && (
-          <SettingsPanel
-            config={config}
-            onSave={(cfg) => {
-              saveConfig(cfg)
-              setConfig(cfg)
-              setScreen({ kind: 'scenes' })
-            }}
-          />
-        )}
         {screen.kind === 'scenes' && (
           <SceneList config={config} onOpen={openScene} onOpenJob={openJob} />
         )}
