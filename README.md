@@ -44,6 +44,7 @@ The header shows the backend's status from when the page loaded; click **Ping** 
 1. **New Scene:** name the Scene and select JPG/PNG photos, between `min_views` and `max_views` of `CONFIG`.
 2. **Processing:** watch the progress through each stage. Only one Scene is processed at a time.
 3. **Viewer:**
+   - The Scene fills the browser window. **Full screen** expands it to the whole display (Esc to leave), and **← Scenes** goes back.
    - Drag to orbit, right-drag to pan, scroll to zoom.
    - Type a Query to highlight and box the matching objects.
    - A **low confidence** badge means nothing matched well; you are seeing the closest object.

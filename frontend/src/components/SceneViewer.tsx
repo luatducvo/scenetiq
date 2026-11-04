@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import {
@@ -16,6 +16,7 @@ import { PointCloudCanvas } from './PointCloudCanvas'
 interface Props {
   config: BackendConfig
   sceneId: string
+  onBack: () => void
 }
 
 interface LoadedScene {
@@ -25,8 +26,10 @@ interface LoadedScene {
   instances: Map<number, InstanceInfo>
 }
 
-/** Load a Scene, show it as a point cloud, and highlight the Matches of a Query. */
-export function SceneViewer({ config, sceneId }: Props) {
+/** Load a Scene, fill the window with its point cloud, and highlight the Matches of a Query. */
+export function SceneViewer({ config, sceneId, onBack }: Props) {
+  const viewerRef = useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const [scene, setScene] = useState<LoadedScene | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [text, setText] = useState('')
@@ -68,6 +71,13 @@ export function SceneViewer({ config, sceneId }: Props) {
 
   useEffect(() => () => scene?.geometry.dispose(), [scene])
 
+  // Follow the browser's state, which Esc can also change.
+  useEffect(() => {
+    const sync = () => setFullscreen(document.fullscreenElement !== null)
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
+
   // Recolour points whenever the Query result changes.
   useEffect(() => {
     if (!scene) return
@@ -88,6 +98,13 @@ export function SceneViewer({ config, sceneId }: Props) {
     })
   }, [scene, result])
 
+  function toggleFullscreen() {
+    const change = fullscreen
+      ? document.exitFullscreen()
+      : viewerRef.current?.requestFullscreen()
+    change?.catch((err) => setError(String(err)))
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!text.trim()) return
@@ -103,45 +120,7 @@ export function SceneViewer({ config, sceneId }: Props) {
   }
 
   return (
-    <div className="viewer">
-      <form className="query-bar" onSubmit={submit}>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder='Describe an object, e.g. "red chair"'
-          disabled={!scene}
-        />
-        <button type="submit" disabled={!scene || querying || !text.trim()}>
-          {querying ? 'Searching…' : 'Query'}
-        </button>
-        {result && (
-          <button type="button" onClick={() => setResult(null)}>
-            Clear
-          </button>
-        )}
-      </form>
-      {queryError && <p className="error">{queryError}</p>}
-      {result && (
-        <div className="matches">
-          {result.matches.length === 0 && <p className="muted">This Scene has no Instances.</p>}
-          {result.low_confidence && result.matches.length > 0 && (
-            <p className="warning">
-              No confident Match. Showing the closest Instance as a Low-confidence Match.
-            </p>
-          )}
-          <ol>
-            {result.matches.map((m, rank) => (
-              <li key={m.instance_id}>
-                <span className="swatch" style={{ background: `rgb(${matchColor(rank).map((c) => c * 255).join(',')})` }} />
-                Instance {m.instance_id} — score {m.score.toFixed(3)}
-                {result.low_confidence && <span className="badge">low confidence</span>}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-      {error && <p className="error">{error}</p>}
-      {!scene && !error && <p className="muted">Loading Reconstruction…</p>}
+    <div className="viewer" ref={viewerRef}>
       {scene && (
         <div className="canvas-wrap">
           <PointCloudCanvas geometry={scene.geometry}>
@@ -151,6 +130,62 @@ export function SceneViewer({ config, sceneId }: Props) {
           </PointCloudCanvas>
         </div>
       )}
+      <div className="viewer-overlay">
+        <div className="viewer-toolbar">
+          <button type="button" onClick={onBack}>
+            ← Scenes
+          </button>
+          <form className="query-bar" onSubmit={submit}>
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder='Describe an object, e.g. "red chair"'
+              disabled={!scene}
+            />
+            <button type="submit" disabled={!scene || querying || !text.trim()}>
+              {querying ? 'Searching…' : 'Query'}
+            </button>
+            {result && (
+              <button type="button" onClick={() => setResult(null)}>
+                Clear
+              </button>
+            )}
+          </form>
+          {document.fullscreenEnabled && (
+            <button type="button" onClick={toggleFullscreen}>
+              {fullscreen ? 'Exit full screen' : 'Full screen'}
+            </button>
+          )}
+        </div>
+        {(error || queryError || !scene || result) && (
+          <div className="viewer-panel">
+            {error && <p className="error">{error}</p>}
+            {!scene && !error && <p className="muted">Loading Reconstruction…</p>}
+            {queryError && <p className="error">{queryError}</p>}
+            {result && (
+              <div className="matches">
+                {result.matches.length === 0 && (
+                  <p className="muted">This Scene has no Instances.</p>
+                )}
+                {result.low_confidence && result.matches.length > 0 && (
+                  <p className="warning">
+                    No confident Match. Showing the closest Instance as a Low-confidence Match.
+                  </p>
+                )}
+                <ol>
+                  {result.matches.map((m, rank) => (
+                    <li key={m.instance_id}>
+                      <span className="swatch" style={{ background: `rgb(${matchColor(rank).map((c) => c * 255).join(',')})` }} />
+                      Instance {m.instance_id} — score {m.score.toFixed(3)}
+                      {result.low_confidence && <span className="badge">low confidence</span>}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

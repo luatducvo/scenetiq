@@ -32,6 +32,16 @@ export default function App() {
     )
   }
 
+  if (screen.kind === 'scene') {
+    return (
+      <SceneViewer
+        config={config}
+        sceneId={screen.sceneId}
+        onBack={() => setScreen({ kind: 'scenes' })}
+      />
+    )
+  }
+
   return (
     <div className="app">
       <header>
@@ -50,7 +60,6 @@ export default function App() {
         {screen.kind === 'job' && (
           <JobProgress config={config} jobId={screen.jobId} onSucceeded={openScene} />
         )}
-        {screen.kind === 'scene' && <SceneViewer config={config} sceneId={screen.sceneId} />}
       </main>
     </div>
   )
