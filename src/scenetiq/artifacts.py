@@ -5,7 +5,6 @@ Files:
     ``instance_ids.bin``: little-endian int32 per point, same order as the PLY.
     ``instances.json``: id, centroid, bbox_min, bbox_max of every Instance.
     ``embeddings.npy``: ``(K, D)`` float32, row ``i`` belongs to ``instances.json[i]``.
-    ``cameras.json``: camera-to-world, intrinsics and size of every View.
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ POINTS_FILE = "points.ply"
 INSTANCE_IDS_FILE = "instance_ids.bin"
 INSTANCES_FILE = "instances.json"
 EMBEDDINGS_FILE = "embeddings.npy"
-CAMERAS_FILE = "cameras.json"
 
 _VERTEX_DTYPE = np.dtype(
     [("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("red", "u1"), ("green", "u1"), ("blue", "u1")]
@@ -75,19 +73,6 @@ def save_reconstruction(directory: Path, reconstruction: Reconstruction) -> None
     with_embedding = [inst.embedding for inst in instances if inst.embedding is not None]
     if instances and len(with_embedding) == len(instances):
         np.save(directory / EMBEDDINGS_FILE, np.stack(with_embedding).astype(np.float32))
-    (directory / CAMERAS_FILE).write_text(
-        json.dumps(
-            [
-                {
-                    "cam_to_world": cam.cam_to_world.tolist(),
-                    "intrinsics": cam.intrinsics.tolist(),
-                    "width": cam.width,
-                    "height": cam.height,
-                }
-                for cam in reconstruction.cameras
-            ]
-        )
-    )
 
 
 def load_instances(directory: Path) -> list[Instance]:
