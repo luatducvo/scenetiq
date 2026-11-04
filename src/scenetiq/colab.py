@@ -172,7 +172,7 @@ def server_environment(
 
     Args:
         token: Shared bearer token.
-        storage_root: Where Scenes persist (a Google Drive folder on Colab).
+        storage_root: Where Scenes are stored (the runtime's local disk on Colab).
         pipeline: ``"fake"`` or ``"real"``.
         base: Environment to extend; defaults to the current process environment.
     """

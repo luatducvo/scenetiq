@@ -10,7 +10,7 @@ A user has a set of ordinary 2D photos of a room or other static space. They wan
 
 ## Solution
 
-The user opens a local web app and uploads a Capture of 10–300 photos of a Scene. The photos need no camera poses or intrinsics. The backend runs on Colab and reconstructs the Scene: it builds a metric-scale point cloud and splits it into class-agnostic Instances, each with a semantic embedding. The web app shows the job's progress stage by stage, then displays the point cloud. The user types a Query and sees the matching Instances highlighted with 3D bounding boxes. If nothing clears the relevance threshold, the app shows the single closest Instance flagged as a Low-confidence Match. Processed Scenes persist across Colab restarts and can be reopened or deleted.
+The user opens a local web app and uploads a Capture of 10–300 photos of a Scene. The photos need no camera poses or intrinsics. The backend runs on Colab and reconstructs the Scene: it builds a metric-scale point cloud and splits it into class-agnostic Instances, each with a semantic embedding. The web app shows the job's progress stage by stage, then displays the point cloud. The user types a Query and sees the matching Instances highlighted with 3D bounding boxes. If nothing clears the relevance threshold, the app shows the single closest Instance flagged as a Low-confidence Match. Processed Scenes last as long as the Colab runtime and can be reopened or deleted.
 
 ## User Stories
 
@@ -38,7 +38,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 22. As a user, I want to see a list of my processed Scenes, so that I can go back to earlier work.
 23. As a user, I want to reopen a processed Scene from the list, so that I can query it again.
 24. As a user, I want to delete a Scene, so that I can free storage and clean up the list.
-25. As a user, I want my processed Scenes to survive a Colab restart, so that I don't lose hours of GPU work.
+25. As a user, I want my processed Scenes to survive a backend restart within the same Colab runtime, so that I don't lose GPU work. Losing the runtime loses its Scenes (ADR 0004).
 26. As a user, I want a job that was interrupted by a Colab restart marked as failed, not left stuck as running, so that I know to re-upload.
 27. As a user, I want the backend reachable at a stable URL across Colab restarts, so that I don't have to reconfigure the frontend every time.
 28. As a user, I want to set the backend URL and access token in the frontend's `.env` file, so that I can point it at my Colab instance.
@@ -92,7 +92,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 - The threshold comes from configuration. Its default is the value the evaluation harness produces.
 
 **Storage**
-- Everything persists under a configurable root, which is a Google Drive folder on Colab. Each Scene has its own directory holding its Reconstruction artifacts:
+- Everything is stored under a configurable root, which is the runtime's local disk on Colab. Only logs go to Google Drive. Each Scene has its own directory holding its Reconstruction artifacts:
   - the point cloud as binary PLY
   - the per-point instance ids
   - Instance metadata and embeddings
@@ -103,7 +103,9 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 **HTTP API (FastAPI)**
 - Every endpoint needs a shared token in a request header. The token is set by configuration (a Colab secret). A missing or wrong token gets 401.
 - Endpoints (names are indicative):
-  - create Scene: multipart upload of name and images → `{scene_id, job_id}`. Validates 10–300 images and JPG/PNG type, and returns 4xx with a reason otherwise. Returns a conflict error while another job is running.
+  - start Capture: View count → `{capture_id}`. Validates 10–300 Views, and returns a conflict error while another job is running.
+  - add View: multipart upload of one image and its index, sent in parallel and safe to retry (ADR 0006). Validates JPG/PNG type and returns 4xx with a reason otherwise.
+  - create Scene: name and `capture_id` → `{scene_id, job_id}`. Returns 4xx if a View is missing, and a conflict error while another job is running.
   - get job status → `{status: queued|running|succeeded|failed, stage, error}`.
   - list Scenes → `[{scene_id, name, created_at, status}]`.
   - get Scene point cloud → binary PLY (xyz + rgb).
@@ -130,7 +132,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 
 **Deployment**
 - The Colab notebook:
-  1. mounts Drive
+  1. mounts Drive, for logs only
   2. installs the package and its model dependencies
   3. reads the token from Colab secrets
   4. starts uvicorn

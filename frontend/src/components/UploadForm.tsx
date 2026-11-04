@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { ApiError, createScene, MAX_VIEWS, MIN_VIEWS, type BackendConfig } from '../api'
+import {
+  ApiError,
+  createScene,
+  MAX_VIEWS,
+  MIN_VIEWS,
+  type BackendConfig,
+  type UploadProgress,
+} from '../api'
 
 interface Props {
   config: BackendConfig
@@ -14,6 +21,7 @@ export function UploadForm({ config, onStarted }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<UploadProgress | null>(null)
 
   const badFile = files.find((f) => !ACCEPTED.test(f.name))
   const countError =
@@ -27,8 +35,9 @@ export function UploadForm({ config, onStarted }: Props) {
     if (clientError || files.length === 0) return
     setBusy(true)
     setError(null)
+    setProgress(null)
     try {
-      const { job_id, scene_id } = await createScene(config, name.trim(), files)
+      const { job_id, scene_id } = await createScene(config, name.trim(), files, setProgress)
       onStarted(job_id, scene_id)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err))
@@ -54,6 +63,12 @@ export function UploadForm({ config, onStarted }: Props) {
         />
       </label>
       {files.length > 0 && <p className="muted">{files.length} photos selected</p>}
+      {busy && progress && (
+        <p className="muted">
+          <progress value={progress.bytesDone} max={progress.bytesTotal} /> {progress.viewsDone}/
+          {progress.viewsTotal} photos · {(progress.bytesPerSecond / 1e6).toFixed(1)} MB/s
+        </p>
+      )}
       {(clientError ?? error) && <p className="error">{clientError ?? error}</p>}
       <button type="submit" disabled={busy || files.length === 0 || clientError !== null}>
         {busy ? 'Uploading…' : 'Upload and reconstruct'}

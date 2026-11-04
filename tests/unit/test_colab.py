@@ -8,11 +8,11 @@ from scenetiq.colab import InstallProgress, install_command, server_command, ser
 
 
 def test_server_environment_sets_backend_config_and_keeps_base():
-    env = server_environment("tok", Path("/drive/scenetiq"), "real", base={"PATH": "/bin"})
+    env = server_environment("tok", Path("/content/scenetiq-data"), "real", base={"PATH": "/bin"})
     assert env == {
         "PATH": "/bin",
         "SCENETIQ_TOKEN": "tok",
-        "SCENETIQ_STORAGE_ROOT": str(Path("/drive/scenetiq")),
+        "SCENETIQ_STORAGE_ROOT": str(Path("/content/scenetiq-data")),
         "SCENETIQ_PIPELINE": "real",
     }
 

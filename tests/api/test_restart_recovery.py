@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from scenetiq.config import Settings
 from scenetiq.storage import JobStatus, SceneStore
 
-from .conftest import AUTH, image_files, upload, wait_for_job
+from .conftest import AUTH, upload, wait_for_job
 
 
 def _leave_job_running(settings: Settings) -> str:
@@ -35,8 +35,7 @@ def test_upload_is_accepted_after_restart_recovery(
 ):
     _leave_job_running(settings)
     client = make_client()
-    resp = client.post("/scenes", data={"name": "x"}, files=image_files(10), headers=AUTH)
-    assert resp.status_code == 201
+    upload(client)
 
 
 def test_succeeded_scene_survives_restart(make_client: Callable[..., TestClient]):

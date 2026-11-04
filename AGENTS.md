@@ -53,5 +53,6 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 - **Scores:** `TextEncoder.to_score` turns cosine similarity into the score the Match threshold applies to. SigLIP2 uses its sigmoid match probability; the fake encoder uses cosine similarity.
   - `DEFAULT_MATCH_THRESHOLD` (0.5) is a placeholder. Replace it only with the `recommended_threshold` of an accepted run of `python -m scenetiq.evaluation`, and cite that report in the commit.
 - **Point order is a contract.** The PLY, `instance_ids.bin` and the MV3DIS input all use the TSDF mesh vertex order. Never reorder or filter points after fusion.
+- **Request size:** Cloudflare returns 413 for large bodies (105 MB was refused), so never send a whole Capture in one request (ADR 0006).
 - **Deployment** is `notebooks/colab_server.ipynb` only. The notebook holds parameters; its logic belongs in `scenetiq.colab`.
 - **Never commit ScanNet data or model weights.**

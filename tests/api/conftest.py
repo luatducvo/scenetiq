@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from PIL import Image
 
 from scenetiq.api import create_app
@@ -21,8 +22,34 @@ def png_bytes(color: tuple[int, int, int] = (200, 30, 30)) -> bytes:
     return buf.getvalue()
 
 
-def image_files(n: int, *, ext: str = "png") -> list[tuple[str, tuple[str, bytes, str]]]:
-    return [("images", (f"view_{i:03d}.{ext}", png_bytes(), f"image/{ext}")) for i in range(n)]
+def start_capture(client: TestClient, view_count: int = 10) -> str:
+    resp = client.post("/captures", json={"view_count": view_count}, headers=AUTH)
+    assert resp.status_code == 201, resp.text
+    return resp.json()["capture_id"]
+
+
+def post_view(
+    client: TestClient,
+    capture_id: str,
+    index: int,
+    *,
+    filename: str = "view.png",
+    data: bytes | None = None,
+) -> Response:
+    return client.post(
+        f"/captures/{capture_id}/views",
+        data={"index": str(index)},
+        files={"image": (filename, png_bytes() if data is None else data)},
+        headers=AUTH,
+    )
+
+
+def staged_capture(client: TestClient, n: int = 10) -> str:
+    capture_id = start_capture(client, n)
+    for i in range(n):
+        resp = post_view(client, capture_id, i)
+        assert resp.status_code == 204, resp.text
+    return capture_id
 
 
 @pytest.fixture
@@ -62,7 +89,8 @@ def client(make_client: Callable[..., TestClient]) -> TestClient:
 
 
 def upload(client: TestClient, n: int = 10, name: str = "Kitchen") -> dict:
-    resp = client.post("/scenes", data={"name": name}, files=image_files(n), headers=AUTH)
+    capture_id = staged_capture(client, n)
+    resp = client.post("/scenes", json={"name": name, "capture_id": capture_id}, headers=AUTH)
     assert resp.status_code == 201, resp.text
     return resp.json()
 

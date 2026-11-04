@@ -15,6 +15,11 @@ from scenetiq.artifacts import save_reconstruction
 from scenetiq.domain import Reconstruction
 
 INTERRUPTED_REASON = "interrupted by restart"
+_TEMP_SUFFIX = ".tmp"
+
+
+class UnknownCaptureError(LookupError):
+    """Raised for a Capture that was never started, or was committed or discarded."""
 
 
 class JobStatus(StrEnum):
@@ -108,6 +113,84 @@ class SceneStore:
             )
         return record
 
+    def start_capture(self, view_count: int) -> str:
+        """Stage a new Capture of ``view_count`` Views and return its id.
+
+        Only one Capture is staged at a time: an earlier unfinished one is discarded.
+        """
+        shutil.rmtree(self._captures_dir(), ignore_errors=True)
+        capture_id = uuid.uuid4().hex
+        directory = self._capture_dir(capture_id)
+        (directory / "views").mkdir(parents=True)
+        (directory / "view_count").write_text(str(view_count))
+        return capture_id
+
+    def capture_view_count(self, capture_id: str) -> int:
+        """Return how many Views the staged Capture was started with.
+
+        Raises:
+            UnknownCaptureError: If ``capture_id`` is not staged.
+        """
+        try:
+            return int((self._capture_dir(capture_id) / "view_count").read_text())
+        except FileNotFoundError as exc:
+            raise UnknownCaptureError(capture_id) from exc
+
+    def save_view(self, capture_id: str, index: int, suffix: str, data: bytes) -> None:
+        """Store one View of a staged Capture, replacing any earlier copy of ``index``.
+
+        Replacing makes a retried request safe. The write is atomic, so an interrupted
+        request never counts as a received View.
+
+        Raises:
+            UnknownCaptureError: If ``capture_id`` is not staged.
+        """
+        views = self._capture_dir(capture_id) / "views"
+        try:
+            temp = views / f"{uuid.uuid4().hex}{_TEMP_SUFFIX}"
+            temp.write_bytes(data)
+            for earlier in views.glob(f"{index:04d}.*"):
+                earlier.unlink(missing_ok=True)
+            temp.replace(views / f"{index:04d}{suffix}")
+        except FileNotFoundError as exc:
+            raise UnknownCaptureError(capture_id) from exc
+
+    def received_view_count(self, capture_id: str) -> int:
+        """Return how many Views of the staged Capture have been stored.
+
+        Raises:
+            UnknownCaptureError: If ``capture_id`` is not staged.
+        """
+        directory = self._capture_dir(capture_id) / "views"
+        if not directory.is_dir():
+            raise UnknownCaptureError(capture_id)
+        return len(_view_paths(directory))
+
+    def create_scene_from_capture(
+        self, name: str, capture_id: str
+    ) -> tuple[SceneRecord, list[Path]]:
+        """Register a new Scene and move the staged Capture's Views into it.
+
+        Returns:
+            The Scene's record and the final paths of its Views, in index order.
+
+        Raises:
+            UnknownCaptureError: If ``capture_id`` is not staged.
+        """
+        staged = self._capture_dir(capture_id) / "views"
+        if not staged.is_dir():
+            raise UnknownCaptureError(capture_id)
+        record = self.create_scene(name)
+        target = self.views_dir(record.scene_id)
+        try:
+            target.rmdir()
+            shutil.move(staged, target)
+        except BaseException:
+            self.delete_scene(record.scene_id)
+            raise
+        shutil.rmtree(self._capture_dir(capture_id), ignore_errors=True)
+        return record, _view_paths(target)
+
     def update_job(
         self,
         job_id: str,
@@ -168,10 +251,20 @@ class SceneStore:
         """Directory holding the Reconstruction artifacts of ``scene_id``."""
         return self.scene_dir(scene_id) / "reconstruction"
 
+    def _captures_dir(self) -> Path:
+        return self.root / "captures"
+
+    def _capture_dir(self, capture_id: str) -> Path:
+        return self._captures_dir() / capture_id
+
     def _one(self, sql: str, arg: str) -> SceneRecord | None:
         with self._lock:
             row = self._db.execute(sql, (arg,)).fetchone()
         return _record(row) if row else None
+
+
+def _view_paths(directory: Path) -> list[Path]:
+    return sorted(p for p in directory.iterdir() if p.suffix != _TEMP_SUFFIX)
 
 
 def _record(row: sqlite3.Row) -> SceneRecord:

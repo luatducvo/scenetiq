@@ -9,6 +9,7 @@ from pathlib import Path, PurePath
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import Path as FastApiPath
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,13 +21,14 @@ from scenetiq.config import Settings
 from scenetiq.domain import Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.query import MissingEmbeddingsError, run_query
-from scenetiq.storage import JobStatus, SceneRecord, SceneStore
+from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureError
 
 logger = logging.getLogger(__name__)
 
 MIN_VIEWS = 10
 MAX_VIEWS = 300
 _ALLOWED_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG"}
+_ID_PATTERN = "^[0-9a-f]{32}$"  # capture ids become directory names, so never accept a path
 
 
 def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder) -> FastAPI:
@@ -71,40 +73,69 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
     app.state.settings = settings
     app.state.text_encoder = text_encoder
 
-    @app.post("/scenes", status_code=status.HTTP_201_CREATED)
-    def create_scene(
-        request: Request,
-        name: Annotated[str, Form(min_length=1, max_length=200)],
-        images: Annotated[list[UploadFile], File()],
-    ) -> dict[str, str]:
-        """Upload a Capture for a new Scene and start reconstructing it."""
-        if not MIN_VIEWS <= len(images) <= MAX_VIEWS:
+    @app.post("/captures", status_code=status.HTTP_201_CREATED)
+    def start_capture(request: Request, body: CaptureIn) -> dict[str, str]:
+        """Start staging a Capture, refusing it before any View is sent if it cannot run."""
+        if not MIN_VIEWS <= body.view_count <= MAX_VIEWS:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"a Capture needs {MIN_VIEWS}-{MAX_VIEWS} images, got {len(images)}",
+                f"a Capture needs {MIN_VIEWS}-{MAX_VIEWS} images, got {body.view_count}",
             )
-        payloads = [(f, f.file.read()) for f in images]
-        for upload, data in payloads:
-            _validate_image(upload.filename or "", data)
+        if request.app.state.runner.busy:
+            raise HTTPException(status.HTTP_409_CONFLICT, "another job is running")
+        return {"capture_id": request.app.state.store.start_capture(body.view_count)}
 
+    # One URL for every View, so that browsers reuse a single cached CORS preflight.
+    @app.post("/captures/{capture_id}/views", status_code=status.HTTP_204_NO_CONTENT)
+    def add_view(
+        request: Request,
+        capture_id: Annotated[str, FastApiPath(pattern=_ID_PATTERN)],
+        index: Annotated[int, Form(ge=0)],
+        image: Annotated[UploadFile, File()],
+    ) -> None:
+        """Validate and store one View; sending the same ``index`` again replaces it."""
+        store: SceneStore = request.app.state.store
+        filename = image.filename or ""
+        try:
+            view_count = store.capture_view_count(capture_id)
+            if index >= view_count:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"View index {index} is outside this Capture of {view_count} Views",
+                )
+            data = image.file.read()
+            _validate_image(filename, data)
+            store.save_view(capture_id, index, PurePath(filename).suffix.lower(), data)
+        except UnknownCaptureError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Capture") from exc
+
+    @app.post("/scenes", status_code=status.HTTP_201_CREATED)
+    def create_scene(request: Request, body: SceneIn) -> dict[str, str]:
+        """Create a Scene from a fully received Capture and start reconstructing it."""
         runner: JobRunner = request.app.state.runner
         store: SceneStore = request.app.state.store
         try:
+            view_count = store.capture_view_count(body.capture_id)
+            received = store.received_view_count(body.capture_id)
+            if received != view_count:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    f"received only {received} of this Capture's {view_count} Views",
+                )
             runner.reserve()
         except JobBusyError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        except UnknownCaptureError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Capture") from exc
         try:
-            record = store.create_scene(name)
-            views_dir = store.views_dir(record.scene_id)
-            views = []
-            for i, (upload, data) in enumerate(payloads):
-                path = views_dir / f"{i:04d}{PurePath(upload.filename or '').suffix.lower()}"
-                path.write_bytes(data)
-                views.append(View(path=path))
+            record, paths = store.create_scene_from_capture(body.name, body.capture_id)
+        except UnknownCaptureError as exc:
+            runner.release()
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown Capture") from exc
         except BaseException:
             runner.release()
             raise
-        runner.start(record, Capture(views=views))
+        runner.start(record, Capture(views=[View(path=p) for p in paths]))
         return {"scene_id": record.scene_id, "job_id": record.job_id}
 
     @app.get("/jobs/{job_id}")
@@ -185,6 +216,19 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         )
 
     return app
+
+
+class CaptureIn(BaseModel):
+    """The size of a Capture about to be staged."""
+
+    view_count: int
+
+
+class SceneIn(BaseModel):
+    """A name for a new Scene and the staged Capture to create it from."""
+
+    name: str = Field(min_length=1, max_length=200)
+    capture_id: str = Field(pattern=_ID_PATTERN)
 
 
 class InstanceOut(BaseModel):
