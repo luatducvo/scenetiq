@@ -55,6 +55,40 @@ async function request(cfg: BackendConfig, path: string, init: RequestInit = {})
   return resp
 }
 
+const PING_TIMEOUT_MS = 10_000
+
+export type BackendHealth =
+  | { state: 'online'; latencyMs: number; jobRunning: boolean }
+  | { state: 'unauthorized' }
+  | { state: 'offline'; reason: string }
+
+/**
+ * Ping the backend; never throws.
+ *
+ * A stopped tunnel gets a Cloudflare error page without CORS headers, which the
+ * browser reports as a network error, so that case has no HTTP status to show.
+ */
+export async function pingBackend(cfg: BackendConfig): Promise<BackendHealth> {
+  const startedAt = performance.now()
+  try {
+    const resp = await request(cfg, '/health', { signal: AbortSignal.timeout(PING_TIMEOUT_MS) })
+    const body = (await resp.json()) as { job_running: boolean }
+    return {
+      state: 'online',
+      latencyMs: Math.round(performance.now() - startedAt),
+      jobRunning: body.job_running,
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return err.status === 401
+        ? { state: 'unauthorized' }
+        : { state: 'offline', reason: `HTTP ${err.status}` }
+    }
+    const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+    return { state: 'offline', reason: timedOut ? 'no answer in time' : 'unreachable' }
+  }
+}
+
 /** How many Views are sent at once. */
 const VIEW_CONCURRENCY = 8
 const VIEW_ATTEMPTS = 5

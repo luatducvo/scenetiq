@@ -39,6 +39,8 @@ Vite compiles these values into the JavaScript bundle, so anyone who can load a 
 
 ## 4. Use it
 
+The header shows the backend's status and refreshes it every 15 seconds; click it to ping now. **Offline** usually means the Colab runtime or the tunnel has stopped.
+
 1. **New Scene:** name the Scene and select 10–300 JPG/PNG photos.
 2. **Processing:** watch the progress through each stage. Only one Scene is processed at a time.
 3. **Viewer:**

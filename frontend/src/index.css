@@ -55,6 +55,11 @@ button[type='submit'], button.primary { background: var(--accent); border-color:
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.danger { color: var(--error); }
 
+.backend-status { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.85rem; }
+.status-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--muted); }
+.status-dot.online { background: var(--done); }
+.status-dot.offline { background: var(--error); }
+
 .muted { color: var(--muted); margin: 0; }
 .error { color: var(--error); margin: 0; }
 

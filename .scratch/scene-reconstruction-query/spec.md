@@ -103,6 +103,7 @@ The user opens a local web app and uploads a Capture of 10–300 photos of a Sce
 **HTTP API (FastAPI)**
 - Every endpoint needs a shared token in a request header. The token is set by configuration (a Colab secret). A missing or wrong token gets 401.
 - Endpoints (names are indicative):
+  - health: `{status, job_running}`, so that the frontend can show whether the backend is up and the token is valid.
   - start Capture: View count → `{capture_id}`. Validates 10–300 Views, and returns a conflict error while another job is running.
   - add View: multipart upload of one image and its index, sent in parallel and safe to retry (ADR 0006). Validates JPG/PNG type and returns 4xx with a reason otherwise.
   - create Scene: name and `capture_id` → `{scene_id, job_id}`. Returns 4xx if a View is missing, and a conflict error while another job is running.

@@ -73,6 +73,11 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
     app.state.settings = settings
     app.state.text_encoder = text_encoder
 
+    @app.get("/health")
+    def health(request: Request) -> dict[str, str | bool]:
+        """Report that the backend is up and whether a job holds the single job slot."""
+        return {"status": "ok", "job_running": request.app.state.runner.busy}
+
     @app.post("/captures", status_code=status.HTTP_201_CREATED)
     def start_capture(request: Request, body: CaptureIn) -> dict[str, str]:
         """Start staging a Capture, refusing it before any View is sent if it cannot run."""

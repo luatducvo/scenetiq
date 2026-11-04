@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { BackendStatus } from './components/BackendStatus'
 import { JobProgress } from './components/JobProgress'
 import { SceneList } from './components/SceneList'
 import { SceneViewer } from './components/SceneViewer'
@@ -36,6 +37,7 @@ export default function App() {
       <header>
         <h1>SceneTIQ</h1>
         <nav>
+          <BackendStatus config={config} />
           <button onClick={() => setScreen({ kind: 'scenes' })}>Scenes</button>
           <button onClick={() => setScreen({ kind: 'upload' })}>New Scene</button>
         </nav>

@@ -63,10 +63,11 @@ export function UploadForm({ config, onStarted }: Props) {
         />
       </label>
       {files.length > 0 && <p className="muted">{files.length} photos selected</p>}
-      {busy && progress && (
+      {busy && (
         <p className="muted">
-          <progress value={progress.bytesDone} max={progress.bytesTotal} /> {progress.viewsDone}/
-          {progress.viewsTotal} photos · {(progress.bytesPerSecond / 1e6).toFixed(1)} MB/s
+          <progress value={progress?.bytesDone ?? 0} max={progress?.bytesTotal ?? 1} />{' '}
+          {progress?.viewsDone ?? 0}/{files.length} photos
+          {progress && ` · ${(progress.bytesPerSecond / 1e6).toFixed(1)} MB/s`}
         </p>
       )}
       {(clientError ?? error) && <p className="error">{clientError ?? error}</p>}
