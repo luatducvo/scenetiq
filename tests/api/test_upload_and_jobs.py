@@ -190,13 +190,14 @@ def test_job_reports_every_stage_and_then_success(
     client.app.state.runner.join(5)  # type: ignore[attr-defined]
 
     assert [(p.status, p.stage, p.step, p.total) for p in _reported_progress(caplog)] == [
-        ("running", "reconstructing", 1, 6),
-        ("running", "fusing", 2, 6),
-        ("running", "superpoints", 3, 6),
-        ("running", "masking", 4, 6),
-        ("running", "merging", 5, 6),
-        ("running", "embedding", 6, 6),
-        ("succeeded", "embedding", 6, 6),
+        ("running", "reconstructing", 1, 7),
+        ("running", "fusing", 2, 7),
+        ("running", "aligning", 3, 7),
+        ("running", "superpoints", 4, 7),
+        ("running", "masking", 5, 7),
+        ("running", "merging", 6, 7),
+        ("running", "embedding", 7, 7),
+        ("succeeded", "embedding", 7, 7),
     ]
     assert {(p.job_id, p.scene_id) for p in _reported_progress(caplog)} == {
         (body["job_id"], body["scene_id"])

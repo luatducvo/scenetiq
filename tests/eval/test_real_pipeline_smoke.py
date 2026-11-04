@@ -39,8 +39,9 @@ def test_real_reconstruction_is_a_metric_point_cloud(real_result, smoke_capture:
 
 def test_real_pipeline_reports_stages_up_to_merging(real_result):
     _, stages = real_result
-    assert stages[:5] == [
-        Stage.RECONSTRUCTING, Stage.FUSING, Stage.SUPERPOINTS, Stage.MASKING, Stage.MERGING,
+    assert stages[:6] == [
+        Stage.RECONSTRUCTING, Stage.FUSING, Stage.ALIGNING, Stage.SUPERPOINTS, Stage.MASKING,
+        Stage.MERGING,
     ]  # fmt: skip
 
 

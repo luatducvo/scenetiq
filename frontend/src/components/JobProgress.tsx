@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { getJob, type BackendConfig, type Job } from '../api'
 
-const STAGES = ['reconstructing', 'fusing', 'superpoints', 'masking', 'merging', 'embedding']
+const STAGES = [
+  'reconstructing',
+  'fusing',
+  'aligning',
+  'superpoints',
+  'masking',
+  'merging',
+  'embedding',
+]
 
 interface Props {
   config: BackendConfig

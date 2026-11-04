@@ -70,10 +70,11 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 - The stages run in this order, and stage names are reported through `on_stage`:
   1. **Reconstructing.** DA3 `DA3NESTED-GIANT-LARGE-1.1` gives metric depth, confidence, extrinsics and intrinsics for every View (ADR 0001).
   2. **Fusing.** TSDF fusion of the DA3 depth (with confidence filtering) produces a mesh. The mesh vertices are the Reconstruction's point cloud, about 1–2 cm voxel (ADR 0002).
-  3. **Superpoints.** The vendored ScanNet Segmentator runs on the fused mesh.
-  4. **Masking.** SAM2 automatic mask generation, with no prompts, runs on every View (ADR 0003).
-  5. **Merging.** The vendored MV3DIS, refactored to take in-memory inputs (points, superpoints, depth, poses, intrinsics, Masks), uses 3D-guided matching to produce class-agnostic Instances. Its depth-consistency visibility check runs against depth rendered from or consistent with the fused geometry.
-  6. **Embedding.** SigLIP2 (giant variant, `google/siglip2-giant-opt-patch16-384`, the largest available; chosen over "large" since 80GB VRAM allows it) encodes multi-view crops of each Instance from the Views where it is visible. These are aggregated into one embedding per Instance.
+  3. **Aligning.** Gravity alignment rotates the points and cameras so that physical up is −Y (`.scratch/gravity-alignment/spec.md`).
+  4. **Superpoints.** The vendored ScanNet Segmentator runs on the fused mesh.
+  5. **Masking.** SAM2 automatic mask generation, with no prompts, runs on every View (ADR 0003).
+  6. **Merging.** The vendored MV3DIS, refactored to take in-memory inputs (points, superpoints, depth, poses, intrinsics, Masks), uses 3D-guided matching to produce class-agnostic Instances. Its depth-consistency visibility check runs against depth rendered from or consistent with the fused geometry.
+  7. **Embedding.** SigLIP2 (giant variant, `google/siglip2-giant-opt-patch16-384`, the largest available; chosen over "large" since 80GB VRAM allows it) encodes multi-view crops of each Instance from the Views where it is visible. These are aggregated into one embedding per Instance.
 - Coordinate and unit conversions sit in small pure adapter functions:
   - DA3 world-to-camera 3×4 → camera-to-world 4×4
   - float metres for depth

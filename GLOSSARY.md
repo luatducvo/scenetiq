@@ -23,8 +23,12 @@ _Avoid_: Frame skip, sampling rate
 ## Reconstruction
 
 **Reconstruction**:
-The 3D result of one Capture: a point cloud of the Scene plus the cameras of every View the View stride selected.
+The 3D result of one Capture: a Gravity-aligned point cloud of the Scene plus the cameras of every View the View stride selected.
 _Avoid_: Model, 3D scan, map
+
+**Gravity alignment**:
+The rotation that places a Reconstruction so that the Scene's physical up matches the conventional up direction. It says nothing about which way the Scene faces horizontally.
+_Avoid_: Leveling, calibration, upright, orientation
 
 **Mask**:
 A candidate object region in a single View, produced without any class label. Masks are inputs to Instances, never shown to the user as results.

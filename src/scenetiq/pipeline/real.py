@@ -73,6 +73,8 @@ class RealPipeline:
         geometry = fuse(view_data, opts.fusion)
         points = geometry.vertices
 
+        on_stage(Stage.ALIGNING)
+
         on_stage(Stage.SUPERPOINTS)
         superpoints = opts.superpoints
         if superpoints.primitives == "superpoints":

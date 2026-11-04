@@ -22,6 +22,7 @@ class Stage(StrEnum):
 
     RECONSTRUCTING = "reconstructing"
     FUSING = "fusing"
+    ALIGNING = "aligning"
     SUPERPOINTS = "superpoints"
     MASKING = "masking"
     MERGING = "merging"
