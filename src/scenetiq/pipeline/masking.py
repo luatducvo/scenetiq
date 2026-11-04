@@ -11,6 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import SAM2Options
+from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import ViewData
 
 MAX_MASKS_PER_VIEW = 255
@@ -49,7 +50,7 @@ def select_masks(
 
 
 class SAM2Masker:
-    """SAM2 automatic mask generation; the model loads on first use."""
+    """SAM2 automatic mask generation; the model is on the GPU only during :meth:`masks_for`."""
 
     def __init__(self, options: SAM2Options | None = None, device: str = "cuda") -> None:
         """Configure the stage; nothing is loaded until :meth:`masks_for`."""
@@ -74,6 +75,13 @@ class SAM2Masker:
 
     def masks_for(self, view_data: ViewData) -> list[ViewMasks]:
         """Generate Masks for every View, in View order (a View may get none)."""
+        try:
+            return self._generate(view_data)
+        finally:
+            self._generator = None
+            free_gpu_memory()
+
+    def _generate(self, view_data: ViewData) -> list[ViewMasks]:
         import torch
 
         generator = self._load()

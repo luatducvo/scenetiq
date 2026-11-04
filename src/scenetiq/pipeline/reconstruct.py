@@ -11,6 +11,7 @@ import numpy as np
 from scenetiq.config import DA3Options
 from scenetiq.domain import View
 from scenetiq.pipeline.adapters import camera_from_da3, confident_depth
+from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import ViewData
 
 
@@ -25,7 +26,8 @@ class Reconstructor(Protocol):
 class DA3Reconstructor:
     """Depth Anything 3 behind the :class:`Reconstructor` interface.
 
-    The model loads on first use and stays on the GPU between jobs.
+    The model loads for each :meth:`reconstruct` call and leaves the GPU when it ends,
+    so later stages have that memory.
     """
 
     def __init__(self, options: DA3Options | None = None, device: str = "cuda") -> None:
@@ -41,19 +43,26 @@ class DA3Reconstructor:
             self._model = DepthAnything3.from_pretrained(self.options.model_id).to(self.device)
         return self._model
 
-    def reconstruct(self, views: list[View]) -> ViewData:
-        """Run DA3 on every View and return metric depth, cameras and resized images."""
+    def _predict(self, views: list[View]) -> Any:
         import torch
 
         model = self._load()
         with torch.inference_mode():
-            pred = model.inference(
+            return model.inference(
                 image=[str(v.path) for v in views],
                 process_res=self.options.process_res,
                 process_res_method=self.options.process_res_method,
                 ref_view_strategy=self.options.ref_view_strategy,
                 use_ray_pose=self.options.use_ray_pose,
             )
+
+    def reconstruct(self, views: list[View]) -> ViewData:
+        """Run DA3 on every View and return metric depth, cameras and resized images."""
+        try:
+            pred = self._predict(views)
+        finally:
+            self._model = None
+            free_gpu_memory()
         depth = np.asarray(pred.depth, dtype=np.float32)
         conf = np.asarray(pred.conf, dtype=np.float32)
         images = np.asarray(pred.processed_images, dtype=np.uint8)

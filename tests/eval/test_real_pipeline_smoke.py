@@ -56,6 +56,31 @@ def test_real_reconstruction_has_consistent_instances(real_result):
         assert np.all(inst.centroid <= inst.bbox_max)
 
 
+def test_only_siglip2_stays_on_the_gpu_after_a_run(real_result):
+    import torch
+
+    # SigLIP2 at bf16 is 3.74 GB; with SAM2 (0.90 GB) left behind it would be 4.64 GB.
+    assert torch.cuda.memory_allocated() < 4_500_000_000
+
+
+def test_threads_sharing_siglip2_load_it_once():
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from scenetiq.pipeline.siglip import SigLIP2Encoder
+
+    encoder = SigLIP2Encoder()
+    barrier = Barrier(2)
+
+    def load(_: int):
+        barrier.wait()
+        return encoder._load()[0]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.map(load, range(2))
+    assert first is second
+
+
 def test_superpoints_cover_every_point_of_the_fused_mesh(smoke_capture: Capture):
     from scenetiq.pipeline.fusion import fuse
     from scenetiq.pipeline.reconstruct import DA3Reconstructor

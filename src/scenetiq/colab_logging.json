@@ -42,6 +42,7 @@
     "uvicorn": { "handlers": ["default"], "level": "ERROR", "propagate": false },
     "uvicorn.error": { "level": "ERROR" },
     "uvicorn.access": { "handlers": ["access"], "level": "INFO", "propagate": false },
-    "scenetiq.progress": { "handlers": ["progress"], "level": "INFO", "propagate": false }
+    "scenetiq.progress": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.gpu": { "handlers": ["progress"], "level": "INFO", "propagate": false }
   }
 }

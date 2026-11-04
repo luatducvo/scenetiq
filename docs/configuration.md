@@ -56,6 +56,15 @@ Number of Views reconstructed = uploaded photos ÷ `view_stride`, rounded up. Fo
 
 As a rough guide, peak VRAM ≈ 10 GB + 0.08–0.11 GB per View, for 3:2 or 4:3 photos at `process_res` 504. This is an estimate from published DA3 figures and the model sizes; it has not been measured on this pipeline.
 
+To measure a real run, read the notebook's log. Each job prints the Merging input size and one line per GPU stage. For example (these numbers are illustrative):
+
+```
+merge-input points=1200000 primitives=30000
+gpu-memory stage=merging peak_allocated=24.50GB peak_reserved=26.00GB allocated_after=3.74GB
+```
+
+DA3 and SAM2 leave the GPU when their stage ends and load again for the next job. SigLIP2 stays, so Queries answer without loading it again.
+
 ## Stage settings
 
 ### `da3`: depth and cameras

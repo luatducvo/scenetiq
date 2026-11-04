@@ -1,10 +1,12 @@
 """SigLIP2: one model encodes Instance crops (Embedding stage) and Query text.
 
 The same instance serves as the Pipeline's image encoder and the API's
-``TextEncoder``, so the model is loaded once per process.
+``TextEncoder``, so the model is loaded once per process and stays on the GPU
+for Queries. Queries and the job run on different threads, so loading takes a lock.
 """
 
 import math
+import threading
 from typing import Any
 
 import numpy as np
@@ -31,21 +33,23 @@ class SigLIP2Encoder:
         self._processor: Any = None
         self._scale = 1.0
         self._bias = 0.0
+        self._load_lock = threading.Lock()
 
     def _load(self) -> tuple[Any, Any]:
-        if self._model is None:
-            import torch
-            from transformers import AutoModel, AutoProcessor
+        with self._load_lock:
+            if self._model is None:
+                import torch
+                from transformers import AutoModel, AutoProcessor
 
-            model = AutoModel.from_pretrained(self.options.model_id, torch_dtype=torch.bfloat16).to(
-                self.device
-            )
-            model.eval()
-            self._processor = AutoProcessor.from_pretrained(self.options.model_id)
-            self._scale = math.exp(float(model.logit_scale.float().item()))
-            self._bias = float(model.logit_bias.float().item())
-            self._model = model
-        return self._model, self._processor
+                model = AutoModel.from_pretrained(
+                    self.options.model_id, torch_dtype=torch.bfloat16
+                ).to(self.device)
+                model.eval()
+                self._processor = AutoProcessor.from_pretrained(self.options.model_id)
+                self._scale = math.exp(float(model.logit_scale.float().item()))
+                self._bias = float(model.logit_bias.float().item())
+                self._model = model
+            return self._model, self._processor
 
     def encode_images(self, images: list[Any]) -> FloatArray:
         """Return ``(len(images), D)`` L2-normalised embeddings of PIL images."""

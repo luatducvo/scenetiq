@@ -52,6 +52,9 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 - **Scores:** `TextEncoder.to_score` turns cosine similarity into the score the Match threshold applies to. SigLIP2 uses its sigmoid match probability; the fake encoder uses cosine similarity.
   - `DEFAULT_MATCH_THRESHOLD` (0.5) has not been validated against ground truth, and the repo has no tool that measures it. Tune it per deployment with `match_threshold` in the config.
 - **Configuration** lives only in `scenetiq.config`: every default, including the stage Options. Add a new setting there, and pass it to its stage in `server.build_components`. The notebook's `CONFIG` cell overrides it through `SCENETIQ_CONFIG`; only the token travels separately.
+- **GPU memory:** DA3 and SAM2 leave the GPU when their stage ends, also on failure. SigLIP2 stays for Queries, so its load takes a lock (Queries and the job run on different threads).
+  - A stage's output must hold no GPU tensors, or releasing its model frees nothing.
+  - Each job logs peak VRAM per stage through `scenetiq.gpu`.
 - **View limits apply to uploaded photos.** Nothing checks the View count against GPU memory: DA3 takes every View left after the View stride in one forward pass, so an oversized Capture fails with OOM.
 - **Point order is a contract.** The PLY, `instance_ids.bin` and the MV3DIS input all use the TSDF mesh vertex order. Never reorder or filter points after fusion.
 - **Request size:** Cloudflare returns 413 for large bodies (105 MB was refused), so never send a whole Capture in one request (ADR 0006).
