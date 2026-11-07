@@ -10,7 +10,7 @@ import {
   type InstanceInfo,
   type QueryResult,
 } from '../api'
-import { highlightColors, matchColor } from '../highlight'
+import { highlightColors, instanceColors, matchColor } from '../highlight'
 import { PointCloudCanvas } from './PointCloudCanvas'
 
 interface Props {
@@ -36,12 +36,14 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   const [result, setResult] = useState<QueryResult | null>(null)
   const [querying, setQuerying] = useState(false)
   const [queryError, setQueryError] = useState<string | null>(null)
+  const [showInstances, setShowInstances] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     setScene(null)
     setError(null)
     setResult(null)
+    setShowInstances(false)
     Promise.all([
       getPointCloud(config, sceneId),
       getInstanceIds(config, sceneId),
@@ -78,12 +80,15 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
 
-  // Recolour points whenever the Query result changes.
+  // Recolour points whenever the Query result or the view mode changes; a Query result wins.
   useEffect(() => {
     if (!scene) return
-    const colors = highlightColors(scene.baseColors, scene.instanceIds, result?.matches ?? [])
+    const colors =
+      showInstances && !result
+        ? instanceColors(scene.instanceIds)
+        : highlightColors(scene.baseColors, scene.instanceIds, result?.matches ?? [])
     scene.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  }, [scene, result])
+  }, [scene, result, showInstances])
 
   const boxes = useMemo(() => {
     if (!scene || !result) return []
@@ -151,6 +156,15 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
               </button>
             )}
           </form>
+          <button
+            type="button"
+            aria-pressed={showInstances}
+            disabled={!scene || result !== null}
+            title={result ? 'Clear the Query to view Instances' : undefined}
+            onClick={() => setShowInstances((shown) => !shown)}
+          >
+            {showInstances ? 'Original colours' : 'Instances'}
+          </button>
           {document.fullscreenEnabled && (
             <button type="button" onClick={toggleFullscreen}>
               {fullscreen ? 'Exit full screen' : 'Full screen'}

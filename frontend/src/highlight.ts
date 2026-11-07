@@ -1,3 +1,4 @@
+import * as THREE from 'three'
 import type { MatchInfo } from './api'
 
 /** Distinct highlight colours for ranked Matches (RGB 0-1). */
@@ -11,6 +12,48 @@ const MATCH_COLORS:[number, number, number][] = [
 
 export function matchColor(rank: number): [number, number, number] {
   return MATCH_COLORS[rank % MATCH_COLORS.length]
+}
+
+/** Stepping the hue by the golden ratio keeps consecutive Instance ids far apart. */
+const HUE_STEP = 0.618034
+const INSTANCE_LIGHTNESS = [0.5, 0.65, 0.38]
+const INSTANCE_SATURATION = 0.85
+const NO_INSTANCE_LIGHTNESS = 0.3
+
+/**
+ * The colour of an Instance, which depends only on its id; a negative id means no Instance.
+ *
+ * The result is linear, like the colours PLYLoader returns, because the renderer converts
+ * every vertex colour to sRGB. Picking in sRGB here makes what is shown match what is picked.
+ */
+export function instanceColor(instanceId: number): [number, number, number] {
+  const color = new THREE.Color()
+  if (instanceId < 0) {
+    color.setHSL(0, 0, NO_INSTANCE_LIGHTNESS, THREE.SRGBColorSpace)
+  } else {
+    const hue = (instanceId * HUE_STEP) % 1
+    const lightness = INSTANCE_LIGHTNESS[instanceId % INSTANCE_LIGHTNESS.length]
+    color.setHSL(hue, INSTANCE_SATURATION, lightness, THREE.SRGBColorSpace)
+  }
+  return [color.r, color.g, color.b]
+}
+
+/** Colour every point by its Instance, to inspect how the Scene was split into Instances. */
+export function instanceColors(instanceIds: Int32Array): Float32Array {
+  const out = new Float32Array(instanceIds.length * 3)
+  const cache = new Map<number, [number, number, number]>()
+  for (let p = 0; p < instanceIds.length; p++) {
+    const id = instanceIds[p]
+    let color = cache.get(id)
+    if (!color) {
+      color = instanceColor(id)
+      cache.set(id, color)
+    }
+    out[3 * p] = color[0]
+    out[3 * p + 1] = color[1]
+    out[3 * p + 2] = color[2]
+  }
+  return out
 }
 
 /**

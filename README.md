@@ -48,6 +48,7 @@ The header shows the backend's status from when the page loaded; click **Ping** 
    - Drag to orbit, right-drag to pan, scroll to zoom.
    - Type a Query to highlight and box the matching objects.
    - A **low confidence** badge means nothing matched well; you are seeing the closest object.
+   - **Instances** gives each Instance its own colour, to check how the Scene was split. Grey points belong to no Instance. Clear a Query first; its highlight takes priority.
 4. **Scenes:** reopen or delete processed Scenes.
 
 **Photo tips:**
