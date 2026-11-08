@@ -39,8 +39,16 @@ One distinct physical object in a Reconstruction: the set of points that belong 
 _Avoid_: Object, segment, mask, cluster
 
 **Caption**:
-What a vision-language model reads from an Instance's Views: a Name, up to three Synonyms, Attributes (colour, material…) and Use. Not drawn from a fixed class list. Only the Name is shown to the user.
+What a vision-language model reads from an Instance's Views: a Name, up to three Synonyms, and one Description for each Aspect. Not drawn from a fixed class list. Only the Name is shown to the user.
 _Avoid_: Label, class, tag, annotation
+
+**Aspect**:
+One of the fixed sides of an Instance that a Caption describes: Identity (what it is and what else it is called), Appearance (colour, shape, relative size), Material (what it is made of, its parts) and Use (what it is for).
+_Avoid_: Facet, field, attribute
+
+**Description**:
+One short sentence of a Caption about one Aspect of an Instance. It may be empty when the Views do not show that Aspect.
+_Avoid_: Sentence, caption (for a single sentence)
 
 ## Querying
 
@@ -49,7 +57,7 @@ A free-text description from the user (e.g. "red chair") asked against one Recon
 _Avoid_: Search, prompt, question
 
 **Match**:
-One of the top-K Instances for a Query, ranked by fusing image similarity with Caption similarity; carries a normalised fused score. A Query on a Reconstruction with Instances always has at least one Match.
+One of the top-K Instances for a Query, ranked by fusing image similarity with the similarity of its best-matching Description; carries a normalised fused score. A Query on a Reconstruction with Instances always has at least one Match.
 _Avoid_: Hit, result, detection, low-confidence match
 
 **Spatial reasoning**:

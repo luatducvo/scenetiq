@@ -19,4 +19,7 @@ geocalib @ git+https://github.com/cvg/GeoCalib.git@1dedb29f94fc11b896c5f57200597
 tqdm>=4.66
 # SigLIP2 (google/siglip2-giant-opt-patch16-384), Qwen3-VL-8B-Instruct and Qwen3-Embedding-0.6B
 # (all Apache-2.0) via Hugging Face transformers; Qwen3-VL needs transformers >= 4.57 (ADR 0008)
-transformers==5.22.1
+transformers==5.22.2
+# JSON-schema constrained decoding for the Captioning stage (Apache-2.0). It requires torch with
+# no upper bound, so Colab's CUDA torch stays; check torch.__version__ after installing anyway.
+xgrammar==0.2.8

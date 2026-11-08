@@ -234,8 +234,14 @@ export interface MatchInfo {
   /** Fused rank score in [0, 1], relative to this Query only. */
   score: number
   image_score: number
+  /** Similarity of the best-matching Description, or null without a Caption. */
   caption_score: number | null
+  /** The Aspect of that Description, or null without a Caption. */
+  caption_aspect: Aspect | null
 }
+
+/** A fixed side of an Instance that a Caption describes. */
+export type Aspect = 'identity' | 'appearance' | 'material' | 'use'
 
 export interface QueryResult {
   matches: MatchInfo[]

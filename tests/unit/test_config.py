@@ -146,3 +146,9 @@ def test_query_ranking_defaults_and_the_removed_threshold():
 def test_query_ranking_that_cannot_work_is_refused(overrides: dict, named: str):
     with pytest.raises(ValueError, match=named):
         Settings.from_overrides("tok", overrides)
+
+
+def test_captioning_leaves_room_for_four_descriptions():
+    # Name, three Synonyms and four Descriptions of up to 200 characters need about 250
+    # tokens; 128 cut replies short.
+    assert Settings.from_overrides("tok", {}).captioning.max_new_tokens == 320

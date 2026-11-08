@@ -7,8 +7,9 @@ Files:
         Instance.
     ``embeddings.npy``: ``(K, D)`` float32 image embeddings, row ``i`` belongs to
         ``instances.json[i]``.
-    ``caption_embeddings.npy``: ``(K, D)`` float32 Caption embeddings aligned the same way,
-        a zero row where an Instance has no Caption. Absent when no Instance has one.
+    ``caption_embeddings.npy``: ``(K, A, D)`` float32 Description embeddings aligned the
+        same way, one row per Aspect in Aspect order; a zero row where a Description is
+        empty or the Instance has no Caption. Absent when no Instance has a Caption.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scenetiq.domain import Caption, FloatArray, Instance, Reconstruction
+from scenetiq.domain import Aspect, Caption, FloatArray, Instance, Reconstruction
 
 POINTS_FILE = "points.ply"
 INSTANCE_IDS_FILE = "instance_ids.bin"
@@ -79,13 +80,14 @@ def save_reconstruction(directory: Path, reconstruction: Reconstruction) -> None
     with_embedding = [inst.embedding for inst in instances if inst.embedding is not None]
     if instances and len(with_embedding) == len(instances):
         np.save(directory / EMBEDDINGS_FILE, np.stack(with_embedding).astype(np.float32))
-    captioned = [inst.caption_embedding for inst in instances if inst.caption_embedding is not None]
-    if captioned:
-        zero = np.zeros_like(captioned[0], dtype=np.float32)
-        rows = [
-            zero if inst.caption_embedding is None else inst.caption_embedding for inst in instances
-        ]
-        np.save(directory / CAPTION_EMBEDDINGS_FILE, np.stack(rows).astype(np.float32))
+    vectors = [v for inst in instances for v in inst.caption_embeddings.values()]
+    if vectors:
+        stored = np.zeros((len(instances), len(Aspect), len(vectors[0])), dtype=np.float32)
+        for row, inst in enumerate(instances):
+            for slot, aspect in enumerate(Aspect):
+                if aspect in inst.caption_embeddings:
+                    stored[row, slot] = inst.caption_embeddings[aspect]
+        np.save(directory / CAPTION_EMBEDDINGS_FILE, stored)
 
 
 def load_instances(directory: Path) -> list[Instance]:
@@ -106,12 +108,19 @@ def load_instances(directory: Path) -> list[Instance]:
                 bbox_max=np.asarray(row["bbox_max"], dtype=np.float32),
                 embedding=None if embeddings is None else embeddings[i],
                 caption=caption,
-                caption_embedding=(
-                    None if caption is None or caption_embeddings is None else caption_embeddings[i]
+                caption_embeddings=(
+                    {}
+                    if caption is None or caption_embeddings is None
+                    else _description_embeddings(caption_embeddings[i])
                 ),
             )
         )
     return instances
+
+
+def _description_embeddings(rows: np.ndarray) -> dict[Aspect, FloatArray]:
+    """The non-zero rows of one Instance's stored ``(A, D)`` block, by Aspect."""
+    return {aspect: rows[slot] for slot, aspect in enumerate(Aspect) if np.any(rows[slot])}
 
 
 def _caption_json(caption: Caption | None) -> dict | None:
@@ -120,8 +129,7 @@ def _caption_json(caption: Caption | None) -> dict | None:
     return {
         "name": caption.name,
         "synonyms": list(caption.synonyms),
-        "attributes": list(caption.attributes),
-        "use": caption.use,
+        **{aspect.value: caption.description(aspect) for aspect in Aspect},
     }
 
 
@@ -131,6 +139,5 @@ def _caption_from_json(raw: dict | None) -> Caption | None:
     return Caption(
         name=raw["name"],
         synonyms=tuple(raw["synonyms"]),
-        attributes=tuple(raw["attributes"]),
-        use=raw["use"],
+        **{aspect.value: raw[aspect.value] for aspect in Aspect},
     )

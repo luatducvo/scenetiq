@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from scenetiq.artifacts import INSTANCE_IDS_FILE, POINTS_FILE, load_instances
 from scenetiq.config import Settings
-from scenetiq.domain import CaptionEncoder, Capture, Pipeline, TextEncoder, View
+from scenetiq.domain import Aspect, CaptionEncoder, Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.query import MissingEmbeddingsError, run_query
 from scenetiq.runtime_log import UploadProgress, report_progress
@@ -218,7 +218,7 @@ def create_app(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
         instances = load_instances(directory)
         # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
-        captioned = any(inst.caption_embedding is not None for inst in instances)
+        captioned = any(inst.caption_embeddings for inst in instances)
         try:
             matches = run_query(
                 instances,
@@ -236,6 +236,7 @@ def create_app(
                     score=m.score,
                     image_score=m.image_score,
                     caption_score=m.caption_score,
+                    caption_aspect=m.caption_aspect,
                 )
                 for m in matches
             ]
@@ -274,12 +275,17 @@ class QueryIn(BaseModel):
 
 
 class MatchOut(BaseModel):
-    """One Match: an Instance id, its normalised fused score and the per-channel similarities."""
+    """One Match: an Instance id, its normalised fused score and the per-channel similarities.
+
+    ``caption_score`` is the similarity of the best-matching Description and
+    ``caption_aspect`` its Aspect; both are null for an Instance without a Caption.
+    """
 
     instance_id: int
     score: float
     image_score: float
     caption_score: float | None
+    caption_aspect: Aspect | None
 
 
 class QueryOut(BaseModel):

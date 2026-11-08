@@ -20,7 +20,7 @@ def build_instances(
         points: ``(N, 3)`` positions in metres.
         instance_ids: ``(N,)`` Instance id per point, ``-1`` for none.
         embeddings: Optional image embedding per Instance id.
-        captions: Optional Caption, with its embedding, per Instance id.
+        captions: Optional Caption, with its Description embeddings, per Instance id.
 
     Returns:
         Instances sorted by id, each with its centroid and axis-aligned bounding box.
@@ -41,7 +41,7 @@ def build_instances(
                 bbox_max=member.max(axis=0).astype(np.float32),
                 embedding=embeddings.get(int(iid)),
                 caption=None if embedded is None else embedded.caption,
-                caption_embedding=None if embedded is None else embedded.embedding,
+                caption_embeddings={} if embedded is None else dict(embedded.embeddings),
             )
         )
     return instances

@@ -11,6 +11,7 @@ import threading
 import numpy as np
 
 from scenetiq.domain import (
+    Aspect,
     Caption,
     Capture,
     EmbeddedCaption,
@@ -23,8 +24,8 @@ from scenetiq.geometry import build_instances, l2_normalize
 
 EMBEDDING_DIM = 8
 """Size of the fake image embeddings and Query embeddings."""
-CAPTION_EMBEDDING_DIM = 4
-"""Size of the fake Caption embeddings and Caption Query embeddings."""
+CAPTION_EMBEDDING_DIM = 7
+"""Size of the fake Description embeddings and Caption Query embeddings."""
 
 
 def _basis(i: int, dim: int = EMBEDDING_DIM) -> FloatArray:
@@ -46,34 +47,64 @@ FAKE_TEXT_EMBEDDINGS: dict[str, FloatArray] = {
     "furniture light": l2_normalize([0.0, 0.7, 0.6, 0.3873, 0, 0, 0, 0]),
     # Looks most like the lamp (0.5), then the table (0.3), then the chair (0.1).
     "wooden thing": l2_normalize([0.1, 0.3, 0.5, 0, 0, 0, 0, 0.806226]),
+    # Looks most like the lamp (0.6), then the chair (0.2), then the table (0.1).
+    "red fabric": l2_normalize([0.2, 0.1, 0.6, 0, 0, 0, 0, 0.768115]),
 }
 """Known Query texts. Any other text weakly resembles the chair (score 0.3)."""
 
 UNKNOWN_TEXT_EMBEDDING = l2_normalize([0.3, 0, 0, 0, 0, 0, 0, 0.9539])
 """Image-space embedding of any other Query text: weakly resembles the chair (0.3)."""
 
+
+def _caption_basis(i: int) -> FloatArray:
+    return _basis(i, CAPTION_EMBEDDING_DIM)
+
+
 FAKE_CAPTIONS: dict[int, EmbeddedCaption] = {
     0: EmbeddedCaption(
-        Caption("chair", ("seat",), ("red", "fabric"), "sitting"),
-        _basis(0, CAPTION_EMBEDDING_DIM),
+        Caption(
+            "chair",
+            ("seat",),
+            identity="A chair, also called a seat.",
+            appearance="It is red with a fabric cushion.",
+        ),
+        {Aspect.IDENTITY: _caption_basis(0), Aspect.APPEARANCE: _caption_basis(2)},
     ),
     1: EmbeddedCaption(
-        Caption("table", ("desk",), ("wooden",), "putting things on"),
-        _basis(1, CAPTION_EMBEDDING_DIM),
+        Caption(
+            "table",
+            ("desk",),
+            identity="A table, also called a desk.",
+            appearance="It is low and rectangular.",
+            material="It is made of wood.",
+            use="It is used for putting things on.",
+        ),
+        {
+            Aspect.IDENTITY: _caption_basis(1),
+            Aspect.APPEARANCE: _caption_basis(5),
+            Aspect.MATERIAL: _caption_basis(3),
+            Aspect.USE: _caption_basis(4),
+        },
     ),
 }
-"""Captions of the fake Instances; the lamp (2) has none."""
+"""Captions of the fake Instances. The chair has no Material or Use Description; the lamp
+(2) has no Caption."""
 
 FAKE_CAPTION_QUERY_EMBEDDINGS: dict[str, FloatArray] = {
-    "red chair": _basis(0, CAPTION_EMBEDDING_DIM),
-    "chair": _basis(0, CAPTION_EMBEDDING_DIM),
-    "table": _basis(1, CAPTION_EMBEDDING_DIM),
-    "wooden thing": _basis(1, CAPTION_EMBEDDING_DIM),
+    "red chair": _caption_basis(0),
+    "chair": _caption_basis(0),
+    "table": _caption_basis(1),
+    # The table's Material Description.
+    "wooden thing": _caption_basis(3),
+    # The chair's Appearance (0.8) and the table's Identity (0.6).
+    "red fabric": l2_normalize([0.0, 0.6, 0.8, 0, 0, 0, 0]),
+    # Unlike the chair's Identity (-0.6) and Appearance (-0.8); orthogonal to the table.
+    "metal legs": l2_normalize([-0.6, 0.0, -0.8, 0, 0, 0, 0]),
 }
-"""Known Query texts in the Caption space. Any other text resembles no Caption."""
+"""Known Query texts in the Caption space. Any other text resembles no Description."""
 
-UNKNOWN_CAPTION_QUERY_EMBEDDING = _basis(3, CAPTION_EMBEDDING_DIM)
-"""Caption-space embedding of any other Query text: orthogonal to every fake Caption."""
+UNKNOWN_CAPTION_QUERY_EMBEDDING = _caption_basis(6)
+"""Caption-space embedding of any other Query text: orthogonal to every fake Description."""
 
 
 def fake_reconstruction(with_captions: bool = True) -> Reconstruction:
@@ -154,7 +185,7 @@ class FakeCaptionEncoder:
     """Maps the texts in :data:`FAKE_CAPTION_QUERY_EMBEDDINGS` to fixed vectors."""
 
     def encode_documents(self, texts: list[str]) -> FloatArray:
-        """Return one fixed vector per document: its Query embedding, if known."""
+        """Return one fixed vector per Description: its Query embedding, if known."""
         return np.stack([self.encode_query(t) for t in texts]).astype(np.float32)
 
     def encode_query(self, text: str) -> FloatArray:

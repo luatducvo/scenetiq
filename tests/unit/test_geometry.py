@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Caption, EmbeddedCaption, Instance
+from scenetiq.domain import Aspect, Caption, EmbeddedCaption, Instance
 from scenetiq.geometry import build_instances, l2_normalize
 
 
@@ -36,19 +36,21 @@ def test_l2_normalize_gives_unit_length_and_keeps_zero():
     np.testing.assert_allclose(l2_normalize([0, 0]), [0, 0])
 
 
-def test_instances_carry_the_caption_and_embedding_given_for_their_id():
+def test_instances_carry_the_caption_and_embeddings_given_for_their_id():
     points = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=np.float32)
     ids = np.array([3, 5], dtype=np.int32)
-    sofa = Caption("sofa", ("couch",))
+    sofa = Caption("sofa", ("couch",), identity="A sofa.")
     vector = np.array([0.6, 0.8], dtype=np.float32)
-    instances = build_instances(points, ids, captions={5: EmbeddedCaption(sofa, vector)})
+    embedded = EmbeddedCaption(sofa, {Aspect.IDENTITY: vector})
+    instances = build_instances(points, ids, captions={5: embedded})
     assert instances[0].caption is None
-    assert instances[0].caption_embedding is None
+    assert instances[0].caption_embeddings == {}
     assert instances[1].caption == sofa
-    np.testing.assert_array_equal(instances[1].caption_embedding, vector)
+    assert list(instances[1].caption_embeddings) == [Aspect.IDENTITY]
+    np.testing.assert_array_equal(instances[1].caption_embeddings[Aspect.IDENTITY], vector)
 
 
-def test_an_instance_cannot_have_a_caption_embedding_without_a_caption():
+def test_an_instance_cannot_have_caption_embeddings_without_a_caption():
     zero = np.zeros(3, dtype=np.float32)
     with pytest.raises(ValueError, match="Caption"):
-        Instance(0, zero, zero, zero, caption_embedding=np.ones(2, dtype=np.float32))
+        Instance(0, zero, zero, zero, caption_embeddings={Aspect.USE: np.ones(2, dtype=np.float32)})

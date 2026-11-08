@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Caption, Instance
-from scenetiq.query import rank_by_similarity, rrf_scores, run_query
+from scenetiq.domain import Aspect, Caption, Instance
+from scenetiq.query import best_description, rank_by_similarity, rrf_scores, run_query
 
 
 def _instance(iid: int, image: list[float], caption: list[float] | None = None) -> Instance:
@@ -14,8 +14,45 @@ def _instance(iid: int, image: list[float], caption: list[float] | None = None) 
         bbox_max=zero,
         embedding=np.asarray(image, dtype=np.float32),
         caption=None if caption is None else Caption(f"thing {iid}"),
-        caption_embedding=None if caption is None else np.asarray(caption, dtype=np.float32),
+        caption_embeddings=(
+            {} if caption is None else {Aspect.IDENTITY: np.asarray(caption, dtype=np.float32)}
+        ),
     )
+
+
+def _vectors(**by_aspect: list[float]) -> dict[Aspect, np.ndarray]:
+    return {Aspect(a): np.asarray(v, dtype=np.float32) for a, v in by_aspect.items()}
+
+
+def test_the_best_description_is_the_one_most_similar_to_the_query():
+    embeddings = _vectors(identity=[1.0, 0.0], appearance=[0.6, 0.8], use=[0.0, -1.0])
+    # Query (0, 1): identity 0, appearance 0.8, use -1.
+    assert best_description(embeddings, np.array([0.0, 1.0])) == (
+        pytest.approx(0.8),
+        Aspect.APPEARANCE,
+    )
+
+
+def test_an_aspect_without_a_description_cannot_be_the_best():
+    # Query (0.6, 0.8): identity -1.0, material -0.6. Appearance and use have no
+    # Description, so they do not count as similarity 0 and the best stays negative.
+    embeddings = _vectors(identity=[-0.6, -0.8], material=[-1.0, 0.0])
+    assert best_description(embeddings, np.array([0.6, 0.8])) == (
+        pytest.approx(-0.6),
+        Aspect.MATERIAL,
+    )
+
+
+def test_tied_descriptions_go_to_the_first_aspect_in_order():
+    embeddings = _vectors(use=[1.0, 0.0], appearance=[1.0, 0.0])
+    assert best_description(embeddings, np.array([1.0, 0.0])) == (
+        pytest.approx(1.0),
+        Aspect.APPEARANCE,
+    )
+
+
+def test_no_descriptions_have_no_best():
+    assert best_description({}, np.array([1.0, 0.0])) is None
 
 
 def test_rrf_sums_reciprocal_ranks_over_the_rankings_an_instance_appears_in():

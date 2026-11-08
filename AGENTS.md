@@ -8,7 +8,8 @@
 
 Python 3.13 with uv (Colab's Python); React + Vite + TS in `frontend/`. Human-facing setup and usage are in `README.md`. The current spec is `.scratch/scene-reconstruction-query/spec.md`.
 
-- Use the `GLOSSARY.md` terms (Scene, Capture, View, Reconstruction, Mask, Instance, Caption, Query, Match) in names, docstrings and tests, and avoid the terms it lists under *Avoid*.- Respect `docs/adr/`. When a decision changes, update or supersede its ADR in the same change.
+- Use the `GLOSSARY.md` terms (Scene, Capture, View, Reconstruction, Mask, Instance, Caption, Aspect, Description, Query, Match) in names, docstrings and tests, and avoid the terms it lists under *Avoid*.
+- Respect `docs/adr/`. When a decision changes, update or supersede its ADR in the same change.
 
 ### Commands
 
@@ -37,11 +38,12 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 
 ### Non-obvious constraints
 
-- **GPU imports are lazy.** `torch`, `open3d`, `sam2`, `transformers` and the vendored `scenetiq.vendor.depth_anything_3` are imported only inside functions, so the package imports and tests on CPU. ty whitelists the third-party ones in `[tool.ty.analysis]`. Never import them at module top level.
+- **GPU imports are lazy.** `torch`, `open3d`, `sam2`, `transformers`, `xgrammar` and the vendored `scenetiq.vendor.depth_anything_3` are imported only inside functions, so the package imports and tests on CPU. ty whitelists the third-party ones in `[tool.ty.analysis]`. Never import them at module top level.
 - **The GPU stack lives in `requirements-gpu.txt`, not `pyproject.toml`**, so that `uv lock` still resolves on CPU-only machines.
   - Install it with `uv pip install --system -e . -r requirements-gpu.txt`. Do not use `uv sync`: `--system` keeps Colab's CUDA-matched torch.
   - DA3 is vendored, not installed (ADR 0005): upstream pins `numpy<2` and Python `<=3.13`, which Colab no longer satisfies. Its runtime dependencies are listed by hand in `requirements-gpu.txt`. Do not add `xformers`: its wheels pin a torch version and can replace Colab's CUDA torch.
   - Install SAM2 only from Meta's GitHub repo. The PyPI `sam2` package is a third-party upload.
+  - `xgrammar` and `transformers` are pinned together. Before changing either pin, check on Colab that installing it leaves `torch.__version__` unchanged.
 - **TSDF uses Open3D's tensor `VoxelBlockGrid`.** The legacy `ScalableTSDFVolume` keeps almost nothing with metric depth in 0.20.0 ([Open3D#7592](https://github.com/isl-org/Open3D/issues/7592)), and no older release has Python 3.13 wheels. `tests/unit/test_fusion.py` needs open3d, so the CPU suite skips it: after changing fusion, run `uv run --with open3d==0.20.0 pytest tests/unit/test_fusion.py`.
 - **Vendored code** is in `src/scenetiq/vendor/`, excluded from ruff and ty.
   - Each directory needs `LICENSE` and `PROVENANCE.md` (upstream URL, pinned commit, every local modification).
@@ -51,9 +53,11 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
   - `point_level=True` is broken upstream and would allocate N×N matrices, so always pass primitive ids.
   - The mask label map is `uint8`, so the Masking stage caps Masks at 255 per View.
 - **Matches are top-K by Reciprocal Rank Fusion, with no threshold** (ADR 0008). A Match's score is the fused value divided by its maximum, `rankings / (rrf_k + 1)`, so it is relative to one Query and says nothing absolute. Do not reintroduce a relevance threshold or a Low-confidence Match.
-  - An Instance without a Caption gets only its image rank. A Reconstruction where no Instance got a Caption is normalised over one ranking.
+  - The Caption ranking scores an Instance by its best-matching Description (max), not a mean and not one channel per Aspect. An Instance without a Caption gets only its image rank. A Reconstruction where no Instance got a Caption is normalised over one ranking.
+  - **Aspect order is a storage contract:** `caption_embeddings.npy` keeps one row per Aspect in `Aspect` order, and the prompt and parser use the Aspect values as JSON keys. Never reorder or rename `Aspect` members.
   - `query_top_k`, `rrf_k` and the Captioning defaults have not been validated against ground truth, and the repo has no tool that measures them.
 - **Configuration** lives only in `scenetiq.config`: every default, including the stage Options. Add a new setting there, and pass it to its stage in `server.build_components`. The notebook's `CONFIG` cell overrides it through `SCENETIQ_CONFIG`; only the token travels separately.
+- **Captioning replies are schema-forced** by xgrammar's transformers logits processor (ADR 0008). A processor keeps matcher state, so build a new one for every `generate` call; the compiled grammar is reused. Its vocabulary is sized by the model's output layer, not the tokenizer, which is smaller; this is not yet verified on Colab (`.scratch/aspect-captioning/issues/03-colab-acceptance.md`). Keep `parse_caption` as a second check: a reply can still be cut off at `max_new_tokens`.
 - **GPU memory:** DA3, SAM2 and Qwen3-VL leave the GPU when their stage ends, also on failure (`RealPipeline` calls `Captioner.release()` in a `finally`). SigLIP2 and Qwen3-Embedding stay for Queries, so their loads take a lock (Queries and the job run on different threads). One instance of each is shared by the Pipeline and the API: build them once in `server.build_components`.
   - A stage's output must hold no GPU tensors, or releasing its model frees nothing.
   - Each job logs peak VRAM per stage through `scenetiq.gpu`.

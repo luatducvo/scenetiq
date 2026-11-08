@@ -30,7 +30,7 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder, Caption
         from scenetiq.pipeline.siglip import SigLIP2Encoder
 
         encoder = SigLIP2Encoder(settings.siglip)  # one model for Instance crops and Query text
-        caption_encoder = Qwen3TextEmbedder(settings.caption_embedding)  # Captions and Query text
+        caption_encoder = Qwen3TextEmbedder(settings.caption_embedding)  # Descriptions, Queries
         pipeline = RealPipeline(
             reconstructor=DA3Reconstructor(settings.da3),
             masker=SAM2Masker(settings.sam2),

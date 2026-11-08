@@ -54,17 +54,21 @@ def test_real_pipeline_reports_every_stage(real_result):
     ]  # fmt: skip
 
 
-def test_some_instances_get_a_caption_with_an_embedding(real_result):
+def test_some_instances_get_a_caption_with_description_embeddings(real_result):
     rec, _ = real_result
     captioned = [inst for inst in rec.instances if inst.caption is not None]
-    print(f"captions: {[(i.instance_id, i.caption.name) for i in captioned if i.caption]}")
+    for inst in captioned:
+        print(f"caption {inst.instance_id}: {inst.caption}")
     assert captioned, "no Instance got a Caption"
     for inst in captioned:
         assert inst.caption is not None
         assert inst.caption.name
         assert len(inst.caption.synonyms) <= 3
-        assert inst.caption_embedding is not None
-        assert float(np.linalg.norm(inst.caption_embedding)) == pytest.approx(1.0, abs=1e-3)
+        # Every non-empty Description, and only those, has a unit-length embedding.
+        assert inst.caption.identity, "Identity is filled in from the Name when empty"
+        assert list(inst.caption_embeddings) == list(inst.caption.descriptions())
+        for vector in inst.caption_embeddings.values():
+            assert float(np.linalg.norm(vector)) == pytest.approx(1.0, abs=1e-3)
 
 
 def test_cameras_of_upright_photos_end_up_with_up_near_minus_y(real_result):
@@ -127,19 +131,30 @@ def test_a_query_returns_the_configured_number_of_matches(real_result, encoder, 
     )
     assert len(matches) == min(settings.query_top_k, len(rec.instances))
     assert all(0.0 < m.score <= 1.0 for m in matches)
+    for m in matches:
+        assert (m.caption_aspect is None) == (m.caption_score is None)
+    # Over every Instance, the Caption channel must name an Aspect for the captioned ones.
+    everything = run_query(
+        rec.instances,
+        encoder.encode("a chair"),
+        len(rec.instances),
+        settings.rrf_k,
+        caption_encoder.encode_query("a chair"),
+    )
+    assert any(m.caption_aspect is not None for m in everything)
 
 
-def test_qwen3_embedding_ranks_the_caption_a_query_describes_first(caption_encoder):
+def test_qwen3_embedding_ranks_the_description_a_query_describes_first(caption_encoder):
     documents = caption_encoder.encode_documents(
         [
-            "chair; also: seat; red, fabric; used for sitting",
-            "table; also: desk; wooden; used for putting things on",
-            "lamp; also: light; metal; used for lighting",
+            "It is used for sitting.",
+            "It is made of polished wood.",
+            "A lamp, also called a light.",
         ]
     )
     assert documents.shape[0] == 3
     np.testing.assert_allclose(np.linalg.norm(documents, axis=1), 1.0, atol=1e-3)
-    for text, expected in [("something to sit on", 0), ("wooden desk", 1), ("cái đèn", 2)]:
+    for text, expected in [("something to sit on", 0), ("a wooden thing", 1), ("cái đèn", 2)]:
         similarities = documents @ caption_encoder.encode_query(text)
         assert int(np.argmax(similarities)) == expected, (text, similarities)
 

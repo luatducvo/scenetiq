@@ -186,24 +186,25 @@ class CaptioningOptions:
         context_expand: Context added around the Instance's tight box, as a fraction of
             its size; the tight box is drawn on the crop.
         max_pixels: Pixel budget per image in the model's processor.
-        max_new_tokens: Longest reply generated per Instance.
+        max_new_tokens: Longest reply generated per Instance; a reply cut off here gets
+            no Caption.
     """
 
     model_id: str = "Qwen/Qwen3-VL-8B-Instruct"
     views_per_instance: int = 3
     context_expand: float = 0.6
     max_pixels: int = 448 * 448
-    max_new_tokens: int = 128
+    max_new_tokens: int = 320
 
 
 @dataclass(frozen=True)
 class CaptionEmbeddingOptions:
-    """Settings of the text model that embeds Captions and Query text (ADR 0008).
+    """Settings of the text model that embeds Descriptions and Query text (ADR 0008).
 
     Attributes:
         model_id: Hugging Face id of the text embedding model.
-        query_instruction: Task description prefixed to Query text (not to Captions).
-        batch_size: Caption documents encoded per forward pass.
+        query_instruction: Task description prefixed to Query text (not to Descriptions).
+        batch_size: Descriptions encoded per forward pass.
         max_length: Longest input, in tokens.
     """
 
@@ -238,7 +239,7 @@ class Settings:
         embedding: Embedding stage.
         siglip: The encoder of Instance crops and Query text.
         captioning: Captioning stage.
-        caption_embedding: The encoder of Captions and Query text.
+        caption_embedding: The encoder of Descriptions and Query text.
 
     Raises:
         ValueError: If ``min_views`` is below 1 or above ``max_views``, or ``view_stride``

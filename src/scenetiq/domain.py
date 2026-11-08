@@ -1,4 +1,4 @@
-"""Core domain types: Capture, View, Reconstruction, Instance, Caption and pipeline Stages.
+"""Core domain types: Capture, View, Reconstruction, Instance, Caption, Aspect and Stages.
 
 Terms follow ``GLOSSARY.md``.
 """
@@ -64,6 +64,18 @@ class Camera:
     height: int
 
 
+class Aspect(StrEnum):
+    """A fixed side of an Instance that a Caption describes in one Description.
+
+    The order is fixed: prompt, storage and scoring all follow it.
+    """
+
+    IDENTITY = "identity"
+    APPEARANCE = "appearance"
+    MATERIAL = "material"
+    USE = "use"
+
+
 @dataclass(frozen=True)
 class Caption:
     """What a vision-language model reads from an Instance's Views.
@@ -71,27 +83,40 @@ class Caption:
     Attributes:
         name: Short free-text name of the Instance; never empty.
         synonyms: Up to three other names for it.
-        attributes: Visible properties such as colour and material.
-        use: What the Instance is used for.
+        identity: Description of what it is and what else it is called.
+        appearance: Description of its colour, shape and relative size.
+        material: Description of what it is made of and its parts.
+        use: Description of what it is used for.
     """
 
     name: str
     synonyms: tuple[str, ...] = ()
-    attributes: tuple[str, ...] = ()
+    identity: str = ""
+    appearance: str = ""
+    material: str = ""
     use: str = ""
+
+    def description(self, aspect: Aspect) -> str:
+        """The Description of ``aspect``, empty when the model gave none."""
+        return getattr(self, aspect.value)
+
+    def descriptions(self) -> dict[Aspect, str]:
+        """The non-empty Descriptions, in Aspect order."""
+        return {a: self.description(a) for a in Aspect if self.description(a)}
 
 
 @dataclass(frozen=True, eq=False)
 class EmbeddedCaption:
-    """A Caption together with its L2-normalised embedding, as the Captioning stage outputs it.
+    """A Caption with the embeddings of its Descriptions, as the Captioning stage outputs it.
 
     Attributes:
         caption: The Caption.
-        embedding: Embedding of the Caption's document in the Caption encoder's space.
+        embeddings: L2-normalised embedding of every non-empty Description, by Aspect,
+            in the Caption encoder's space.
     """
 
     caption: Caption
-    embedding: FloatArray
+    embeddings: dict[Aspect, FloatArray]
 
 
 @dataclass
@@ -106,7 +131,8 @@ class Instance:
         embedding: L2-normalised image embedding, or ``None`` before the
             Embedding stage has run.
         caption: The Instance's Caption, or ``None`` when it has none.
-        caption_embedding: L2-normalised embedding of the Caption, or ``None``.
+        caption_embeddings: L2-normalised embedding of each non-empty Description of the
+            Caption, by Aspect; empty without a Caption.
     """
 
     instance_id: int
@@ -115,12 +141,12 @@ class Instance:
     bbox_max: FloatArray
     embedding: FloatArray | None = None
     caption: Caption | None = None
-    caption_embedding: FloatArray | None = None
+    caption_embeddings: dict[Aspect, FloatArray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Refuse a Caption embedding that has no Caption."""
-        if self.caption_embedding is not None and self.caption is None:
-            raise ValueError(f"Instance {self.instance_id} has a Caption embedding but no Caption")
+        """Refuse Caption embeddings that have no Caption."""
+        if self.caption_embeddings and self.caption is None:
+            raise ValueError(f"Instance {self.instance_id} has Caption embeddings but no Caption")
 
 
 @dataclass
@@ -162,10 +188,10 @@ class TextEncoder(Protocol):
 
 
 class CaptionEncoder(Protocol):
-    """Embeds Caption documents and Query text into one text space (ADR 0008)."""
+    """Embeds Descriptions and Query text into one text space (ADR 0008)."""
 
     def encode_documents(self, texts: list[str]) -> FloatArray:
-        """Return ``(len(texts), D)`` L2-normalised embeddings of Caption documents."""
+        """Return ``(len(texts), D)`` L2-normalised embeddings of Descriptions."""
         ...
 
     def encode_query(self, text: str) -> FloatArray:

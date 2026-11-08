@@ -8,18 +8,36 @@ from PIL import Image
 
 import scenetiq
 from scenetiq.config import CaptioningOptions
-from scenetiq.domain import Camera, Caption
+from scenetiq.domain import Aspect, Camera, Caption
 from scenetiq.pipeline.captioning import (
+    CAPTION_SCHEMA,
     CAPTIONING_LOGGER,
+    MAX_SYNONYMS,
+    UnusableReplyError,
     boxed_crop,
-    caption_document,
     caption_instances,
+    embed_descriptions,
     parse_caption,
 )
 from scenetiq.pipeline.embedding import PlannedView
 
-SOFA = '{"name": "sofa", "synonyms": ["couch", "settee"], "attributes": ["grey", "fabric"], "use": "sitting"}'  # noqa: E501
-SOFA_CAPTION = Caption("sofa", ("couch", "settee"), ("grey", "fabric"), "sitting")
+SOFA_REPLY = {
+    "name": "sofa",
+    "synonyms": ["couch", "settee"],
+    "identity": "A two-seat sofa.",
+    "appearance": "It is grey with wide armrests.",
+    "material": "It is upholstered in fabric with wooden legs.",
+    "use": "It is used for sitting.",
+}
+SOFA = json.dumps(SOFA_REPLY)
+SOFA_CAPTION = Caption(
+    "sofa",
+    ("couch", "settee"),
+    identity="A two-seat sofa.",
+    appearance="It is grey with wide armrests.",
+    material="It is upholstered in fabric with wooden legs.",
+    use="It is used for sitting.",
+)
 
 
 def test_a_json_reply_becomes_a_caption():
@@ -32,39 +50,70 @@ def test_json_in_code_fences_or_among_other_text_is_found():
 
 
 def test_synonyms_beyond_three_are_dropped():
-    reply = '{"name": "sofa", "synonyms": ["couch", "settee", "divan", "lounge"]}'
-    assert parse_caption(reply) == Caption("sofa", ("couch", "settee", "divan"))
+    reply = json.dumps({**SOFA_REPLY, "synonyms": ["couch", "settee", "divan", "lounge"]})
+    assert parse_caption(reply).synonyms == ("couch", "settee", "divan")
 
 
-def test_missing_fields_default_and_text_is_trimmed():
-    assert parse_caption('{"name": "  lamp "}') == Caption("lamp")
-    # A single string where a list belongs is one item; non-text items are dropped.
-    reply = '{"name": "mug", "synonyms": "cup", "attributes": ["white", 3], "use": null}'
-    assert parse_caption(reply) == Caption("mug", ("cup",), ("white",), "")
+def test_text_is_trimmed_and_unknown_or_non_text_values_are_ignored():
+    reply = json.dumps(
+        {
+            "name": "  mug ",
+            "synonyms": "cup",  # a single string where a list belongs is one item
+            "identity": " A white mug. ",
+            "appearance": 3,
+            "material": None,
+            "colour": "white",
+        }
+    )
+    assert parse_caption(reply) == Caption("mug", ("cup",), identity="A white mug.")
+
+
+def test_empty_descriptions_stay_empty_and_are_left_out_of_the_descriptions():
+    reply = json.dumps({**SOFA_REPLY, "appearance": "", "use": "  "})
+    caption = parse_caption(reply)
+    assert caption.appearance == ""
+    assert caption.use == ""
+    assert list(caption.descriptions()) == [Aspect.IDENTITY, Aspect.MATERIAL]
 
 
 @pytest.mark.parametrize(
-    "reply",
+    ("synonyms", "identity"),
     [
-        "I cannot tell what this is.",
-        '{"name": ',
-        '{"name": "   "}',
-        '{"synonyms": ["couch"]}',
-        '{"name": 5}',
-        '["sofa"]',
-        "",
+        (["couch", "settee"], "A sofa, also called a couch or settee."),
+        (["couch"], "A sofa, also called a couch."),
+        (["couch", "settee", "divan"], "A sofa, also called a couch, settee or divan."),
+        ([], "A sofa."),
     ],
 )
-def test_a_reply_without_a_usable_name_gives_no_caption(reply: str):
-    assert parse_caption(reply) is None
+def test_an_empty_identity_is_written_from_the_name_and_synonyms(
+    synonyms: list[str], identity: str
+):
+    reply = json.dumps({**SOFA_REPLY, "synonyms": synonyms, "identity": ""})
+    assert parse_caption(reply).identity == identity
 
 
-def test_the_caption_document_joins_every_part():
-    assert (
-        caption_document(SOFA_CAPTION)
-        == "sofa; also: couch, settee; grey, fabric; used for sitting"
-    )
-    assert caption_document(Caption("lamp")) == "lamp"
+def test_a_name_starting_with_a_vowel_gets_an():
+    reply = json.dumps({"name": "armchair", "synonyms": []})
+    assert parse_caption(reply).identity == "An armchair."
+
+
+@pytest.mark.parametrize(
+    ("reply", "reason"),
+    [
+        ("I cannot tell what this is.", "no JSON object"),
+        ('{"name": "sofa", "identity": "A two-se', "no JSON object"),
+        ('{"name": ', "no JSON object"),
+        ('{"name": "sofa",, }', "not valid JSON"),
+        ('["sofa"]', "no JSON object"),
+        ('{"name": "   "}', "no name"),
+        ('{"synonyms": ["couch"]}', "no name"),
+        ('{"name": 5}', "no name"),
+        ("", "no JSON object"),
+    ],
+)
+def test_a_reply_without_a_usable_name_is_refused_with_the_reason(reply: str, reason: str):
+    with pytest.raises(UnusableReplyError, match=reason):
+        parse_caption(reply)
 
 
 def test_boxed_crop_adds_context_and_draws_the_tight_box():
@@ -129,6 +178,10 @@ def test_each_instance_is_described_once_from_its_first_views(
     # grown by 0.6 * 21 = 12.6 px per side to columns 7..53, so 47 px wide.
     assert captioner.calls[0][0].size == (47, 47)
     assert captions == {4: SOFA_CAPTION}
+    # Instance 7's reply ("no idea") is unusable: logged with the reason and the reply.
+    assert any(
+        "instance=7" in m and "no JSON object" in m and "no idea" in m for m in caplog.messages
+    )
     assert "captioning captioned=1 uncaptioned=2" in caplog.messages
 
 
@@ -146,3 +199,63 @@ def test_images_are_shrunk_to_the_pixel_budget_keeping_their_shape():
     assert fit_pixels(100, 80, 8000) == (100, 80)
     # 400 x 300 = 120,000 px; a 30,000 px budget halves each side.
     assert fit_pixels(400, 300, 30_000) == (200, 150)
+
+
+def test_the_reply_schema_requires_name_synonyms_and_one_description_per_aspect():
+    assert CAPTION_SCHEMA["required"] == [
+        "name",
+        "synonyms",
+        "identity",
+        "appearance",
+        "material",
+        "use",
+    ]
+    assert set(CAPTION_SCHEMA["properties"]) == set(CAPTION_SCHEMA["required"])
+    assert CAPTION_SCHEMA["additionalProperties"] is False
+    assert CAPTION_SCHEMA["properties"]["name"]["minLength"] == 1
+    assert CAPTION_SCHEMA["properties"]["synonyms"]["maxItems"] == MAX_SYNONYMS == 3
+    for aspect in ("identity", "appearance", "material", "use"):
+        assert CAPTION_SCHEMA["properties"][aspect] == {"type": "string", "maxLength": 200}
+
+
+def test_every_reply_the_schema_allows_becomes_a_caption():
+    # The tightest reply the schema accepts: a one-letter Name, nothing else filled in.
+    reply = {"name": "x", "synonyms": [], **dict.fromkeys(("identity", "appearance"), "")}
+    reply |= dict.fromkeys(("material", "use"), "")
+    assert parse_caption(json.dumps(reply)) == Caption("x", identity="A x.")
+
+
+class _ListingEncoder:
+    """Embeds the n-th document it is given as the basis vector e_n."""
+
+    def __init__(self) -> None:
+        self.documents: list[str] = []
+
+    def encode_documents(self, texts: list[str]) -> np.ndarray:
+        self.documents.extend(texts)
+        return np.eye(len(texts), dtype=np.float32)
+
+    def encode_query(self, text: str) -> np.ndarray:
+        raise AssertionError("not used")
+
+
+def test_each_non_empty_description_is_embedded_once_and_kept_under_its_aspect():
+    lamp = Caption("lamp", identity="A lamp.", use="It lights a room.")
+    encoder = _ListingEncoder()
+
+    embedded = embed_descriptions({4: SOFA_CAPTION, 9: lamp}, encoder)
+
+    # Documents in Instance order, then Aspect order: four for the sofa, two for the lamp.
+    assert encoder.documents == [
+        "A two-seat sofa.",
+        "It is grey with wide armrests.",
+        "It is upholstered in fabric with wooden legs.",
+        "It is used for sitting.",
+        "A lamp.",
+        "It lights a room.",
+    ]
+    assert embedded[4].caption == SOFA_CAPTION
+    assert list(embedded[4].embeddings) == list(Aspect)
+    assert list(embedded[9].embeddings) == [Aspect.IDENTITY, Aspect.USE]
+    # The lamp's Use is the sixth document, so it is e_5.
+    np.testing.assert_array_equal(embedded[9].embeddings[Aspect.USE], np.eye(6)[5])

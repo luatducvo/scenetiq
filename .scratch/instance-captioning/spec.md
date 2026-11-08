@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+> Superseded in part by `.scratch/aspect-captioning/spec.md`: a Caption is now a Name, Synonyms and one Description per Aspect (Attributes and Use are gone), each Description is embedded on its own, and the Caption ranking uses an Instance's best Description.
+
 Vocabulary follows `GLOSSARY.md` (Caption, Match and Instance were redefined for this work). Respect the ADRs in `docs/adr/`, in particular 0008 (Captions, separate text embedding model, RRF top-K) and 0007 (up is −Y).
 
 ## Problem Statement

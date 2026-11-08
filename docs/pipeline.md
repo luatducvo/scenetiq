@@ -41,7 +41,7 @@ Thứ tự nằm trong `RealPipeline.run` của [real.py](../src/scenetiq/pipeli
 | 5 | Masking | SAM2 | Các Mask không nhãn của từng View |
 | 6 | Merging | MV3DIS | Id Instance của từng điểm |
 | 7 | Embedding | SigLIP2 | Một vector ảnh của từng Instance |
-| 8 | Captioning | Qwen3-VL-8B + Qwen3-Embedding | Caption và vector Caption của từng Instance (nếu đọc được) |
+| 8 | Captioning | Qwen3-VL-8B + Qwen3-Embedding | Caption (Name, Synonyms, 4 Description) và một vector cho mỗi Description của từng Instance (nếu đọc được) |
 
 ### 1. Reconstructing
 
@@ -127,9 +127,9 @@ Với mỗi Instance còn lại sau Embedding:
 
 1. Lấy tối đa 3 View tốt nhất trong kế hoạch của Embedding.
 2. Cắt từ ảnh gốc với 60% bối cảnh quanh Instance, vẽ khung đỏ quanh Instance, rồi thu nhỏ về tối đa 448 × 448 px.
-3. Gửi các crop trong **một prompt** cho Qwen3-VL-8B, yêu cầu trả JSON `{name, synonyms, attributes, use}` bằng tiếng Anh.
-4. Đọc JSON một cách dễ dãi (chấp nhận code fence, chữ thừa), giữ tối đa 3 synonym. Câu trả lời không có `name` thì Instance không có Caption, job vẫn chạy tiếp.
-5. Ghép Caption thành một văn bản, ví dụ `"sofa; also: couch, settee; grey, fabric; used for sitting"`, rồi mã hóa bằng Qwen3-Embedding.
+3. Gửi các crop trong **một prompt** cho Qwen3-VL-8B, yêu cầu trả JSON bằng tiếng Anh gồm `name`, `synonyms` và **một câu (Description) cho mỗi Aspect**: `identity` (là gì, tên gọi khác), `appearance` (màu, hình dáng, kích thước), `material` (chất liệu, bộ phận), `use` (công dụng). Description được để trống nếu ảnh không cho thấy Aspect đó. Câu trả lời bị **ép theo một JSON schema cố định** bằng xgrammar ngay khi sinh từng token (đủ mọi key, tối đa 3 synonym, mỗi chuỗi có giới hạn độ dài), nên chỉ còn một cách mất Caption: bị cắt ở `max_new_tokens`.
+4. Đọc JSON một cách dễ dãi (chấp nhận code fence, chữ thừa), giữ tối đa 3 synonym. Câu trả lời không có `name` thì Instance không có Caption, lý do được ghi log, job vẫn chạy tiếp. `identity` trống thì được viết từ Name và Synonyms, ví dụ `"A sofa, also called a couch or settee."`.
+5. Mã hóa **từng Description không trống thành một vector riêng** bằng Qwen3-Embedding.
 
 Qwen3-VL rời GPU khi stage kết thúc, kể cả khi lỗi. Qwen3-Embedding ở lại GPU cùng SigLIP2 để phục vụ Query. Mỗi job ghi một dòng `captioning captioned=… uncaptioned=…` lên notebook.
 
@@ -141,9 +141,9 @@ Sau stage 8, centroid và bounding box được tính, rồi [artifacts.py](../s
 |---|---|
 | `points.ply` | Tọa độ xyz theo mét và màu rgb |
 | `instance_ids.bin` | Id Instance của từng điểm, cùng thứ tự với PLY |
-| `instances.json` | Id, centroid, bounding box và Caption (hoặc null) |
+| `instances.json` | Id, centroid, bounding box và Caption (Name, Synonyms, 4 Description) hoặc null |
 | `embeddings.npy` | Vector ảnh của từng Instance |
-| `caption_embeddings.npy` | Vector Caption, cùng thứ tự; hàng 0 cho Instance không có Caption. Không có file nếu không Instance nào có Caption |
+| `caption_embeddings.npy` | Shape (Instance, Aspect, D): một vector cho mỗi Description theo thứ tự Aspect; hàng 0 cho Description trống hoặc Instance không có Caption. Không có file nếu không Instance nào có Caption |
 
 Dữ liệu nằm ở `/content/scenetiq-data`, nên **mất khi runtime Colab kết thúc**.
 
@@ -152,9 +152,9 @@ Dữ liệu nằm ở `/content/scenetiq-data`, nên **mất khi runtime Colab k
 Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red chair"`:
 
 1. Câu được chuyển thành chữ thường, bọc thành `"This is a photo of red chair."` rồi mã hóa bằng SigLIP2. Nếu Scene có Caption, câu gốc cũng được mã hóa bằng Qwen3-Embedding, có thêm query instruction; Scene không có Caption thì không cần nạp model này.
-2. Xếp hạng mọi Instance theo cosine với vector ảnh, và xếp hạng các Instance có Caption theo cosine với vector Caption.
+2. Xếp hạng mọi Instance theo cosine với vector ảnh, và xếp hạng các Instance có Caption theo cosine của **Description giống Query nhất** (max trên các Description của nó).
 3. Gộp hai bảng bằng Reciprocal Rank Fusion: mỗi bảng cộng `1 / (rrf_k + hạng)`, với `rrf_k = 60`. Instance không có Caption chỉ có phần của bảng ảnh.
-4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score` và `caption_score` (cosine thô) để debug.
+4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score`, `caption_score` (cosine thô của Description tốt nhất) và `caption_aspect` (Aspect của Description đó) để debug.
 5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene không Instance nào có Caption thì chỉ xếp theo ảnh.
 
 Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box.

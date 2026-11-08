@@ -39,7 +39,15 @@ def test_query_returns_the_best_instance_with_a_full_score(client: TestClient):
     result = _query(client, scene, "red chair")
     # First in both rankings: (1/61 + 1/61) / (2/61) = 1.
     assert result == {
-        "matches": [{"instance_id": 0, "score": 1.0, "image_score": 1.0, "caption_score": 1.0}]
+        "matches": [
+            {
+                "instance_id": 0,
+                "score": 1.0,
+                "image_score": 1.0,
+                "caption_score": 1.0,
+                "caption_aspect": "identity",
+            }
+        ]
     }
 
 
@@ -50,7 +58,8 @@ def test_a_caption_lifts_an_instance_its_image_ranks_lower(
     scene = _ready_scene(client)
     result = _query(client, scene, "wooden thing")
     # Image ranking: lamp 0.5, table 0.3, chair 0.1. Caption ranking (lamp has no Caption):
-    # table 1.0, chair 0.0. Fused over two channels, out of a maximum of 2/61:
+    # table 1.0 (its Material Description), chair 0.0 (every Description orthogonal, so the
+    # first Aspect, Identity, wins the tie). Fused over two channels, out of 2/61:
     # table (1/62 + 1/61) -> 0.991935, chair (1/63 + 1/62) -> 0.976062, lamp 1/61 -> 0.5.
     assert [m["instance_id"] for m in result["matches"]] == [1, 0, 2]
     assert [m["score"] for m in result["matches"]] == pytest.approx(
@@ -62,6 +71,49 @@ def test_a_caption_lifts_an_instance_its_image_ranks_lower(
         None,
     ]
     assert [m["image_score"] for m in result["matches"]] == pytest.approx([0.3, 0.1, 0.5], abs=1e-3)
+    assert [m["caption_aspect"] for m in result["matches"]] == ["material", "identity", None]
+
+
+def test_a_query_matching_another_aspect_of_another_instance_flips_the_result(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client = make_client(settings=_settings(tmp_path, query_top_k=3))
+    scene = _ready_scene(client)
+    result = _query(client, scene, "red fabric")
+    # Image ranking: lamp 0.6, chair 0.2, table 0.1. Caption query (0, 0.6, 0.8, 0, ...):
+    # the chair's best Description is Appearance (0.8), the table's is Identity (0.6).
+    # chair (1/62 + 1/61) -> 0.991935, table (1/63 + 1/62) -> 0.976062, lamp 1/61 -> 0.5.
+    assert [m["instance_id"] for m in result["matches"]] == [0, 1, 2]
+    assert [m["score"] for m in result["matches"]] == pytest.approx(
+        [0.991935, 0.976062, 0.5], abs=1e-6
+    )
+    assert [m["caption_aspect"] for m in result["matches"]] == ["appearance", "identity", None]
+    assert [m["caption_score"] for m in result["matches"]] == [
+        pytest.approx(0.8),
+        pytest.approx(0.6),
+        None,
+    ]
+
+
+def test_an_instance_is_scored_only_over_the_descriptions_it_has(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client = make_client(settings=_settings(tmp_path, query_top_k=3))
+    scene = _ready_scene(client)
+    result = _query(client, scene, "metal legs")
+    # The chair has only Identity and Appearance Descriptions. The Caption query
+    # (-0.6, 0, -0.8, 0, ...) gives them -0.6 and -0.8, so its best is Identity at -0.6; its
+    # missing Material and Use do not count as 0. The table's Descriptions are all
+    # orthogonal (0.0, Identity first). Caption ranking: table, chair. Image ranking
+    # (unknown text resembles the chair, 0.3): chair, table 0, lamp 0.
+    # Both fuse to 1/61 + 1/62 -> 0.991935; the higher image similarity puts the chair first.
+    # The lamp is third in the image ranking only: (1/63) / (2/61) -> 0.484127.
+    matches = result["matches"]
+    assert [m["instance_id"] for m in matches] == [0, 1, 2]
+    assert [m["score"] for m in matches] == pytest.approx([0.991935, 0.991935, 0.484127], abs=1e-6)
+    assert matches[0]["caption_score"] == pytest.approx(-0.6)
+    assert matches[0]["caption_aspect"] == "identity"
+    assert matches[1]["caption_score"] == pytest.approx(0.0)
 
 
 def test_matches_are_the_top_k_ranked_by_fused_rank(
@@ -70,6 +122,7 @@ def test_matches_are_the_top_k_ranked_by_fused_rank(
     client = _uncaptioned_client(make_client, _settings(tmp_path, query_top_k=2))
     scene = _ready_scene(client)
     result = _query(client, scene, "furniture light")
+    assert {m["caption_aspect"] for m in result["matches"]} == {None}
     # Image similarities: table 0.7, lamp 0.6, chair 0. With one ranking and rrf_k = 60
     # the normalised score is 61 / (60 + rank): 1 for rank 1, 61/62 for rank 2.
     assert [m["instance_id"] for m in result["matches"]] == [1, 2]
@@ -180,7 +233,8 @@ def test_instances_report_only_the_name_of_their_caption(client: TestClient):
     scene = _ready_scene(client)
     instances = client.get(f"/scenes/{scene}/instances", headers=AUTH).json()
     assert [i["name"] for i in instances] == ["chair", "table", None]
-    assert {"synonyms", "attributes", "use", "caption"}.isdisjoint(instances[0])
+    hidden = {"synonyms", "identity", "appearance", "material", "use", "caption"}
+    assert hidden.isdisjoint(instances[0])
 
 
 def test_instances_of_a_scene_without_captions_have_no_name(

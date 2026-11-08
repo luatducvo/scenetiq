@@ -1,16 +1,16 @@
 """Open-vocabulary Query over the Instances of a Reconstruction (ADR 0008).
 
-A Query is ranked against every Instance's image embedding and against the Caption embedding
-of every Instance that has one. The rankings are fused with Reciprocal Rank Fusion and the
-top K Instances are the Matches.
+A Query is ranked against every Instance's image embedding and, for every Instance with a
+Caption, against its best-matching Description. The rankings are fused with Reciprocal Rank
+Fusion and the top K Instances are the Matches.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
-from scenetiq.domain import FloatArray, Instance
+from scenetiq.domain import Aspect, FloatArray, Instance
 
 
 class MissingEmbeddingsError(ValueError):
@@ -25,14 +25,38 @@ class Match:
         instance_id: The Matched Instance.
         score: Fused rank score normalised to [0, 1]; relative to this Query only.
         image_score: Cosine similarity of the Query to the Instance's image embedding.
-        caption_score: Cosine similarity of the Query to the Instance's Caption, or
-            ``None`` when it has none.
+        caption_score: Cosine similarity of the Query to the Instance's best-matching
+            Description, or ``None`` when it has no Caption.
+        caption_aspect: The Aspect of that Description, or ``None`` without a Caption.
     """
 
     instance_id: int
     score: float
     image_score: float
     caption_score: float | None = None
+    caption_aspect: Aspect | None = None
+
+
+def best_description(
+    embeddings: Mapping[Aspect, FloatArray], query: FloatArray
+) -> tuple[float, Aspect] | None:
+    """The Description most similar to a Query.
+
+    Args:
+        embeddings: L2-normalised embedding of each Description an Instance has, by Aspect.
+        query: L2-normalised Query embedding in the Caption space.
+
+    Returns:
+        The best cosine similarity and its Aspect, ties going to the earlier Aspect, or
+        ``None`` when there are no Descriptions.
+    """
+    best: tuple[float, Aspect] | None = None
+    for aspect in Aspect:
+        if aspect in embeddings:
+            similarity = float(np.asarray(embeddings[aspect], np.float32) @ query)
+            if best is None or similarity > best[0]:
+                best = (similarity, aspect)
+    return best
 
 
 def rank_by_similarity(ids: Sequence[int], similarities: Sequence[float]) -> list[int]:
@@ -72,7 +96,8 @@ def run_query(
         top_k: How many Matches to return at most.
         rrf_k: The Reciprocal Rank Fusion constant.
         caption_query: L2-normalised embedding of the Query text in the Caption space;
-            the Caption ranking is skipped when omitted.
+            the Caption ranking, by each Instance's best Description, is skipped when
+            omitted.
 
     Returns:
         Up to ``top_k`` Matches, best first, ties broken by image similarity then
@@ -93,17 +118,20 @@ def run_query(
     image = dict(zip(ids, (matrix @ np.asarray(image_query, np.float32)).tolist(), strict=True))
 
     rankings = [rank_by_similarity(ids, [image[i] for i in ids])]
-    caption: dict[int, float] = {}
+    caption: dict[int, tuple[float, Aspect]] = {}
     if caption_query is not None:
         query = np.asarray(caption_query, np.float32)
-        caption = {
-            inst.instance_id: float(inst.caption_embedding @ query)
-            for inst in instances
-            if inst.caption_embedding is not None
-        }
+        for inst in instances:
+            found = best_description(inst.caption_embeddings, query)
+            if found is not None:
+                caption[inst.instance_id] = found
         if caption:
-            rankings.append(rank_by_similarity(list(caption), list(caption.values())))
+            rankings.append(rank_by_similarity(list(caption), [c[0] for c in caption.values()]))
     fused = rrf_scores(rankings, rrf_k)
     best = len(rankings) / (rrf_k + 1)
     order = sorted(ids, key=lambda i: (-fused[i], -image[i], i))
-    return [Match(i, fused[i] / best, image[i], caption.get(i)) for i in order[:top_k]]
+    matches = []
+    for i in order[:top_k]:
+        caption_score, caption_aspect = caption.get(i, (None, None))
+        matches.append(Match(i, fused[i] / best, image[i], caption_score, caption_aspect))
+    return matches

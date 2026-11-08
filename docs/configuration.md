@@ -168,15 +168,15 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 | `views_per_instance` | `3` | How many of the Instance's best Views go into its prompt. At most `embedding.views_per_instance`. |
 | `context_expand` | `0.6` | Context added around the Instance's tight box, as a fraction of its size. The tight box is drawn in red on each crop, and the prompt refers to it as the red box. |
 | `max_pixels` | `200704` | Pixel budget per crop (448 × 448). Larger crops are shrunk, keeping their shape. |
-| `max_new_tokens` | `128` | Longest reply per Instance. A reply cut short has no valid JSON, so that Instance gets no Caption. |
+| `max_new_tokens` | `320` | Longest reply per Instance. The reply is forced to follow a fixed JSON schema (Name, up to three Synonyms, one Description per Aspect), so the only way to lose a Caption is a reply cut short here; the log then says why. |
 
-### `caption_embedding`: Captions and Query text
+### `caption_embedding`: Descriptions and Query text
 
 | Key | Default | Meaning |
 |---|---|---|
-| `model_id` | `Qwen/Qwen3-Embedding-0.6B` | Text embedding model. It stays on the GPU for Queries (about 1.2 GB). Scenes store Caption embeddings from the model that built them, so a new model cannot rank older Scenes' Captions correctly. |
-| `query_instruction` | `Given a description of an object in a scene, retrieve the caption of that object` | Task description put before Query text, not before Captions. |
-| `batch_size` | `32` | Captions encoded per forward pass. |
+| `model_id` | `Qwen/Qwen3-Embedding-0.6B` | Text embedding model. It stays on the GPU for Queries (about 1.2 GB). Scenes store Description embeddings from the model that built them, so a new model cannot rank older Scenes' Captions correctly. |
+| `query_instruction` | `Given a description of an object in a scene, retrieve the caption of that object` | Task description put before Query text, not before Descriptions. |
+| `batch_size` | `32` | Descriptions encoded per forward pass. |
 | `max_length` | `256` | Longest input in tokens; longer text is cut. |
 
 ## Invalid configuration

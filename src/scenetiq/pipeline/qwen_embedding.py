@@ -1,4 +1,4 @@
-"""Qwen3-Embedding: embeds Caption documents (Captioning stage) and Query text (ADR 0008).
+"""Qwen3-Embedding: embeds Descriptions (Captioning stage) and Query text (ADR 0008).
 
 The same instance serves the Pipeline and the API, so the model is loaded once per process
 and stays on the GPU for Queries. Queries and the job run on different threads, so loading
@@ -62,7 +62,7 @@ class Qwen3TextEmbedder:
         return np.concatenate(out).astype(np.float32)
 
     def encode_documents(self, texts: list[str]) -> FloatArray:
-        """Return ``(len(texts), D)`` L2-normalised embeddings of Caption documents."""
+        """Return ``(len(texts), D)`` L2-normalised embeddings of Descriptions."""
         return self._encode(texts)
 
     def encode_query(self, text: str) -> FloatArray:
