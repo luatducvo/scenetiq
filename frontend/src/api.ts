@@ -224,16 +224,21 @@ export interface InstanceInfo {
   centroid: [number, number, number]
   bbox_min: [number, number, number]
   bbox_max: [number, number, number]
+  /** The Name of the Instance's Caption, or null when it has none (ADR 0008). */
+  name: string | null
 }
 
+/** One of the top-K Instances for a Query (ADR 0008). */
 export interface MatchInfo {
   instance_id: number
+  /** Fused rank score in [0, 1], relative to this Query only. */
   score: number
+  image_score: number
+  caption_score: number | null
 }
 
 export interface QueryResult {
   matches: MatchInfo[]
-  low_confidence: boolean
 }
 
 /** Per-point Instance ids (-1 = none), in the same order as the point cloud. */

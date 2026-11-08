@@ -15,8 +15,8 @@ Chạy local theo lệnh trong `AGENTS.md` thì dùng `FakePipeline`, không có
 
 ```text
 Trình duyệt → Cloudflare Tunnel → FastAPI trên Colab
-Ảnh → Reconstructing → Fusing → Aligning → Superpoints → Masking → Merging → Embedding → lưu đĩa
-Câu Query → SigLIP2 text → so với embedding đã lưu → Match
+Ảnh → Reconstructing → Fusing → Aligning → Superpoints → Masking → Merging → Embedding → Captioning → lưu đĩa
+Câu Query → SigLIP2 text + Qwen3-Embedding → hai bảng xếp hạng → RRF → top-K Match
 ```
 
 ## Upload và khởi động job
@@ -28,9 +28,9 @@ Phần này nằm trong [api.py](../src/scenetiq/api.py) và [jobs.py](../src/sc
 3. **`POST /scenes`:** kiểm tra đã đủ ảnh rồi lấy `paths[::10]`. Ví dụ 100 ảnh thì chỉ dùng 10 View: số 0, 10, …, 90.
 4. **Chạy job:** mỗi lần chỉ một job, chạy trên thread nền. Frontend theo dõi qua `GET /jobs/{id}`.
 
-## 7 stage
+## 8 stage
 
-Thứ tự nằm trong [real.py:75-136](../src/scenetiq/pipeline/real.py#L75-L136).
+Thứ tự nằm trong `RealPipeline.run` của [real.py](../src/scenetiq/pipeline/real.py).
 
 | # | Stage | Công cụ | Đầu ra |
 |---|---|---|---|
@@ -40,7 +40,8 @@ Thứ tự nằm trong [real.py:75-136](../src/scenetiq/pipeline/real.py#L75-L13
 | 4 | Superpoints | ScanNet Segmentator | Id superpoint của từng điểm |
 | 5 | Masking | SAM2 | Các Mask không nhãn của từng View |
 | 6 | Merging | MV3DIS | Id Instance của từng điểm |
-| 7 | Embedding | SigLIP2 | Một vector của từng Instance |
+| 7 | Embedding | SigLIP2 | Một vector ảnh của từng Instance |
+| 8 | Captioning | Qwen3-VL-8B + Qwen3-Embedding | Caption và vector Caption của từng Instance (nếu đọc được) |
 
 ### 1. Reconstructing
 
@@ -116,16 +117,33 @@ Với mỗi Instance:
 
 Instance không có View nào đạt ngưỡng sẽ bị bỏ, điểm của nó về −1. Vì vậy id Instance cuối cùng có thể bị ngắt quãng. SigLIP2 ở lại GPU để phục vụ Query.
 
+Việc chọn View (bước 1–2) do `plan_views` làm một lần, rồi dùng chung cho stage Captioning.
+
+### 8. Captioning
+
+Code: [captioning.py](../src/scenetiq/pipeline/captioning.py), [qwen_vl.py](../src/scenetiq/pipeline/qwen_vl.py), [qwen_embedding.py](../src/scenetiq/pipeline/qwen_embedding.py). Quyết định: ADR 0008.
+
+Với mỗi Instance còn lại sau Embedding:
+
+1. Lấy tối đa 3 View tốt nhất trong kế hoạch của Embedding.
+2. Cắt từ ảnh gốc với 60% bối cảnh quanh Instance, vẽ khung đỏ quanh Instance, rồi thu nhỏ về tối đa 448 × 448 px.
+3. Gửi các crop trong **một prompt** cho Qwen3-VL-8B, yêu cầu trả JSON `{name, synonyms, attributes, use}` bằng tiếng Anh.
+4. Đọc JSON một cách dễ dãi (chấp nhận code fence, chữ thừa), giữ tối đa 3 synonym. Câu trả lời không có `name` thì Instance không có Caption, job vẫn chạy tiếp.
+5. Ghép Caption thành một văn bản, ví dụ `"sofa; also: couch, settee; grey, fabric; used for sitting"`, rồi mã hóa bằng Qwen3-Embedding.
+
+Qwen3-VL rời GPU khi stage kết thúc, kể cả khi lỗi. Qwen3-Embedding ở lại GPU cùng SigLIP2 để phục vụ Query. Mỗi job ghi một dòng `captioning captioned=… uncaptioned=…` lên notebook.
+
 ## Lưu kết quả
 
-Sau stage 7, centroid và bounding box được tính, rồi [artifacts.py](../src/scenetiq/artifacts.py) ghi 4 file:
+Sau stage 8, centroid và bounding box được tính, rồi [artifacts.py](../src/scenetiq/artifacts.py) ghi 5 file:
 
 | File | Nội dung |
 |---|---|
 | `points.ply` | Tọa độ xyz theo mét và màu rgb |
 | `instance_ids.bin` | Id Instance của từng điểm, cùng thứ tự với PLY |
-| `instances.json` | Id, centroid và bounding box |
-| `embeddings.npy` | Vector của từng Instance |
+| `instances.json` | Id, centroid, bounding box và Caption (hoặc null) |
+| `embeddings.npy` | Vector ảnh của từng Instance |
+| `caption_embeddings.npy` | Vector Caption, cùng thứ tự; hàng 0 cho Instance không có Caption. Không có file nếu không Instance nào có Caption |
 
 Dữ liệu nằm ở `/content/scenetiq-data`, nên **mất khi runtime Colab kết thúc**.
 
@@ -133,15 +151,13 @@ Dữ liệu nằm ở `/content/scenetiq-data`, nên **mất khi runtime Colab k
 
 Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red chair"`:
 
-1. Câu được chuyển thành chữ thường, bọc thành `"This is a photo of red chair."` rồi mã hóa bằng SigLIP2.
-2. Tính cosine với embedding của mọi Instance.
-3. Đổi sang điểm: `sigmoid(scale × cos + bias)`.
-4. Trả kết quả:
-   - Mọi Instance có điểm ≥ 0.5 là Match, xếp từ cao xuống thấp.
-   - Nếu không có Instance nào đạt, trả Instance gần nhất với cờ `low_confidence`.
-   - Nếu Scene không có Instance, trả danh sách rỗng.
+1. Câu được chuyển thành chữ thường, bọc thành `"This is a photo of red chair."` rồi mã hóa bằng SigLIP2. Câu gốc cũng được mã hóa bằng Qwen3-Embedding, có thêm query instruction.
+2. Xếp hạng mọi Instance theo cosine với vector ảnh, và xếp hạng các Instance có Caption theo cosine với vector Caption.
+3. Gộp hai bảng bằng Reciprocal Rank Fusion: mỗi bảng cộng `1 / (rrf_k + hạng)`, với `rrf_k = 60`. Instance không có Caption chỉ có phần của bảng ảnh.
+4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score` và `caption_score` (cosine thô) để debug.
+5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene lưu trước khi có Captioning chỉ xếp theo ảnh.
 
-Frontend tải `points`, `instance-ids` và `instances` qua [api.ts](../frontend/src/api.ts), và hiện nhãn "low confidence" trong [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx).
+Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box.
 
 ## Khi nào job thất bại
 
@@ -156,7 +172,8 @@ Nếu server khởi động lại giữa chừng, job dở dang cũng bị đán
 
 ## Những điểm yếu cần biết
 
-- **Ngưỡng Match 0.5 chưa được kiểm chứng:** repo chưa có công cụ đo trên ground truth.
+- **Match luôn có, kể cả khi không vật nào khớp:** top-K không có ngưỡng, và điểm RRF chỉ so được trong một Query. `query_top_k`, `rrf_k` và các thiết lập Captioning chưa được kiểm chứng; repo chưa có công cụ đo trên ground truth.
+- **Instance không có Caption bị xếp thấp hơn:** nó chỉ có một phần trong RRF.
 - **EXIF không được áp dụng:** ảnh dọc lưu dạng ảnh ngang kèm cờ EXIF sẽ đi qua mọi stage trong tư thế nằm ngang.
 - **Ảnh xoay nhiều có thể làm sai Gravity alignment:** GeoCalib chỉ đúng đến khoảng ±45°. Nếu mọi View xoay giống nhau, bước đồng thuận không phát hiện được.
 - **Không có kiểm tra trước về VRAM:** chỉ số ảnh upload bị giới hạn, còn số View vượt sức GPU thì job chỉ lỗi OOM khi chạy.

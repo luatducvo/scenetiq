@@ -17,5 +17,6 @@ sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123
 geocalib @ git+https://github.com/cvg/GeoCalib.git@1dedb29f94fc11b896c5f572005978aeebccd67f
 # Vendored MV3DIS and DA3 runtime needs
 tqdm>=4.66
-# SigLIP2 (google/siglip2-giant-opt-patch16-384, Apache-2.0) via Hugging Face transformers
+# SigLIP2 (google/siglip2-giant-opt-patch16-384), Qwen3-VL-8B-Instruct and Qwen3-Embedding-0.6B
+# (all Apache-2.0) via Hugging Face transformers; Qwen3-VL needs transformers >= 4.57 (ADR 0008)
 transformers==5.22.1

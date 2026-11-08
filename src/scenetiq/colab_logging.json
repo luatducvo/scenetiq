@@ -44,6 +44,7 @@
     "uvicorn.access": { "handlers": ["access"], "level": "INFO", "propagate": false },
     "scenetiq.progress": { "handlers": ["progress"], "level": "INFO", "propagate": false },
     "scenetiq.gpu": { "handlers": ["progress"], "level": "INFO", "propagate": false },
-    "scenetiq.alignment": { "handlers": ["progress"], "level": "INFO", "propagate": false }
+    "scenetiq.alignment": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.captioning": { "handlers": ["progress"], "level": "INFO", "propagate": false }
   }
 }

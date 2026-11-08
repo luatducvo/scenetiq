@@ -4,6 +4,8 @@ Status: ready-for-agent
 
 Vocabulary follows `GLOSSARY.md`. Respect ADRs 0001–0004 in `docs/adr/`.
 
+> **Superseded in part by `.scratch/instance-captioning/spec.md` and ADR 0008:** Instances now carry a Caption, a Captioning stage follows Embedding, and Queries return the top-K Instances by Reciprocal Rank Fusion with no threshold and no Low-confidence Match. The parts below that describe the threshold are kept for history and marked.
+
 ## Problem Statement
 
 A user has a set of ordinary 2D photos of a room or other static space. They want to explore it in 3D and find objects in it by describing them in free text ("red chair", "the potted plant"). Today they would need depth sensors or known camera poses, and they would be limited to a fixed list of object classes. Free text does not work. The user has no GPU of their own, but they can use Google Colab with an 80GB GPU.
@@ -32,8 +34,8 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 16. As a user, I want the points of every Matched Instance highlighted, so that I can see exactly which object was found.
 17. As a user, I want a 3D bounding box drawn around each Match, so that I can locate it at a glance.
 18. As a user, I want Matches ranked by relevance score, with the score shown, so that I can judge how confident the system is.
-19. As a user, I want to see when a Query has no confident Match, so that I am not misled.
-20. As a user, I want the closest Instance shown as a clearly flagged Low-confidence Match when nothing clears the threshold, so that I still get a best lead.
+19. ~~As a user, I want to see when a Query has no confident Match, so that I am not misled.~~ (Superseded by ADR 0008: every Query returns the top-K Matches.)
+20. ~~As a user, I want the closest Instance shown as a clearly flagged Low-confidence Match when nothing clears the threshold, so that I still get a best lead.~~ (Superseded by ADR 0008.)
 21. As a user, I want to run many Queries on the same Scene without reprocessing, so that each Query answers quickly.
 22. As a user, I want to see a list of my processed Scenes, so that I can go back to earlier work.
 23. As a user, I want to reopen a processed Scene from the list, so that I can query it again.
@@ -46,7 +48,7 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 30. As the owner, I want requests with a missing or wrong token rejected, so that the backend is never open by accident.
 31. As the owner, I want to start the whole backend from one Colab notebook (install, start the server, open the tunnel), so that bringing the system up is a single action.
 32. As a developer, I want each Instance to keep its centroid and 3D bounding box in metres, so that spatial reasoning can be added later without reprocessing.
-33. As a developer, I want the relevance threshold to be a configuration value, so that it can be re-tuned without code changes.
+33. As a developer, I want the number of Matches and the fusion constant to be configuration values, so that they can be re-tuned without code changes. (Was: the relevance threshold; ADR 0008.)
 34. As the owner, I want the notebook to show the API log and a progress bar for the running upload or job, so that I can follow the backend without opening anything else.
 35. As a developer, I want the pipeline to sit behind one interface that the API depends on, so that the API can be tested on a CPU with a fake pipeline.
 36. As a developer, I want the reconstruction model swappable behind its stage interface, so that switching to Apache-2.0 DA3 weights stays possible (ADR 0001).
@@ -75,6 +77,7 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
   5. **Masking.** SAM2 automatic mask generation, with no prompts, runs on every View (ADR 0003).
   6. **Merging.** The vendored MV3DIS, refactored to take in-memory inputs (points, superpoints, depth, poses, intrinsics, Masks), uses 3D-guided matching to produce class-agnostic Instances. Its depth-consistency visibility check runs against depth rendered from or consistent with the fused geometry.
   7. **Embedding.** SigLIP2 (giant variant, `google/siglip2-giant-opt-patch16-384`, the largest available; chosen over "large" since 80GB VRAM allows it) encodes multi-view crops of each Instance from the Views where it is visible. These are aggregated into one embedding per Instance.
+  8. **Captioning** (added by `.scratch/instance-captioning/spec.md`). Qwen3-VL-8B reads a Caption for every Instance kept by Embedding, and Qwen3-Embedding embeds it.
 - Coordinate and unit conversions sit in small pure adapter functions:
   - DA3 world-to-camera 3×4 → camera-to-world 4×4
   - float metres for depth
@@ -82,12 +85,10 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 - The vendored MV3DIS is refactored so it no longer reads the ScanNet on-disk layout (millimetre PNG depth, `pose/*.txt`, `*_vh_clean_2.ply`). Its algorithmic behaviour stays the same.
 
 **Query module**
-- `query(reconstruction, text, threshold) -> QueryResult`. It encodes the text with the SigLIP2 text tower, then scores every Instance by cosine similarity.
-- QueryResult holds either:
-  - a list of Matches (instance id plus score) at or above the threshold, sorted by descending score, or
-  - when there are none, exactly one Low-confidence Match (the top-scoring Instance), flagged as such.
+- *Superseded by ADR 0008.* A Query is encoded by SigLIP2's text tower and by the Caption encoder, ranked against image and Caption embeddings, and the rankings are fused with Reciprocal Rank Fusion. The top `query_top_k` Instances are the Matches, each with a normalised fused score. There is no threshold and no Low-confidence Match.
+- *Was:* `query(reconstruction, text, threshold) -> QueryResult`, with Matches at or above the threshold, or else one Low-confidence Match.
 - Queries keep no state and no history is stored.
-- The threshold comes from configuration. Its default (0.5) has not been validated against ground truth.
+- `query_top_k` (1) and `rrf_k` (60) come from configuration. Neither has been validated against ground truth.
 
 **Storage**
 - Everything is stored under a configurable root, which is the runtime's local disk on Colab. Each Scene has its own directory holding its Reconstruction artifacts:
@@ -110,7 +111,8 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
   - get Scene point cloud → binary PLY (xyz + rgb).
   - get Scene instance ids → compact binary array of per-point `instance_id`, in the same order as the PLY.
   - get Scene Instances → `[{instance_id, centroid, bbox_min, bbox_max}]`.
-  - query Scene → `{matches: [{instance_id, score}], low_confidence: bool}`.
+  - query Scene → `{matches: [{instance_id, score, image_score, caption_score}]}` (ADR 0008).
+  - Instances also carry `name`, their Caption's Name or null.
   - delete Scene.
 - The Pipeline is injected into the app, which never imports model code directly. Jobs run one at a time in a background worker inside the server process.
 - CORS allows the localhost frontend origin.
@@ -126,7 +128,7 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
   - renders the PLY point cloud and lets the user orbit, pan and zoom
   - has a Query box
   - highlights the points of the Matched Instances (using the instance id array) and draws their bounding boxes
-  - shows a ranked list of Matches with scores, and a visible flag on a Low-confidence Match
+  - shows a ranked list of Matches with scores and Caption Names, and draws each Name on its bounding box (ADR 0008)
 - The mesh is never sent to the frontend.
 
 **Deployment**
@@ -149,7 +151,7 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
     - job status transitions and stage reporting
     - failed job with an error message, when the fake raises
     - Scene list, delete, and point cloud / instance id / Instance retrieval, with the PLY and instance id array kept consistent
-    - Query thresholding, ranking and the Low-confidence Match fallback
+    - Query ranking by Reciprocal Rank Fusion, the top-K cut and Caption-aware ranking (ADR 0008)
     - restart recovery: a job left in a running state is marked failed when the app starts on the same storage root
   - This is the main test suite and must pass on CI without a GPU.
 - **Seam B: Smoke test of the real Pipeline (GPU, Colab only).**
@@ -168,7 +170,7 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 - Sending or viewing the mesh in the frontend.
 - Query history.
 - Commercial use (ADR 0001: the DA3 Nested weights are CC BY-NC).
-- Class labels on Instances.
+- Class labels from a fixed list on Instances. (Free-text Captions were added later; see `.scratch/instance-captioning/spec.md`.)
 
 ## Further Notes
 

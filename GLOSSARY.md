@@ -35,8 +35,12 @@ A candidate object region in a single View, produced without any class label. Ma
 _Avoid_: Segment, instance (for 2D regions)
 
 **Instance**:
-One distinct physical object in a Reconstruction: the set of points that belong to it, with its position and 3D bounding box. Instances carry no class label.
+One distinct physical object in a Reconstruction: the set of points that belong to it, with its position and 3D bounding box. Instances carry no class from a fixed list; they may have a Caption.
 _Avoid_: Object, segment, mask, cluster
+
+**Caption**:
+What a vision-language model reads from an Instance's Views: a Name, up to three Synonyms, Attributes (colour, material…) and Use. Not drawn from a fixed class list. Only the Name is shown to the user.
+_Avoid_: Label, class, tag, annotation
 
 ## Querying
 
@@ -45,12 +49,8 @@ A free-text description from the user (e.g. "red chair") asked against one Recon
 _Avoid_: Search, prompt, question
 
 **Match**:
-An Instance returned for a Query, with a relevance score. A Query may have no Matches.
-_Avoid_: Hit, result, detection
-
-**Low-confidence Match**:
-The single closest Instance returned when a Query has no Matches, explicitly flagged as below the relevance bar.
-_Avoid_: Fallback, best guess
+One of the top-K Instances for a Query, ranked by fusing image similarity with Caption similarity; carries a normalised fused score. A Query on a Reconstruction with Instances always has at least one Match.
+_Avoid_: Hit, result, detection, low-confidence match
 
 **Spatial reasoning**:
 Answering Queries about relations between Instances (e.g. "the cup left of the laptop"). Out of scope for v1.

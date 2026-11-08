@@ -1,9 +1,9 @@
 import numpy as np
-import pytest
 
+from scenetiq.config import EmbeddingOptions
 from scenetiq.domain import Camera
-from scenetiq.pipeline.embedding import crop_box, select_views, visible_pixels
-from scenetiq.pipeline.siglip import sigmoid_score
+from scenetiq.pipeline.embedding import crop_box, plan_views, select_views, visible_pixels
+from scenetiq.pipeline.view_data import ViewData
 
 K = np.array([[100, 0, 50], [0, 100, 40], [0, 0, 1]], dtype=np.float32)
 
@@ -66,7 +66,40 @@ def test_crop_box_has_a_minimum_size():
     assert bottom - top >= 8
 
 
-def test_sigmoid_score_maps_cosine_to_probability():
-    scores = sigmoid_score(np.array([0.0, 0.1]), logit_scale=10.0, logit_bias=-1.0)
-    assert scores[0] == pytest.approx(1 / (1 + np.exp(1.0)))
-    assert scores[1] == pytest.approx(0.5)
+def _two_views() -> ViewData:
+    # Both Views look down +Z from the origin. View 0 sees a surface at 2 m everywhere;
+    # View 1 only has depth at pixel (50, 40).
+    depth = np.zeros((2, 80, 100), dtype=np.float32)
+    depth[0] = 2.0
+    depth[1, 40, 50] = 2.0
+    return ViewData(
+        images=np.zeros((2, 80, 100, 3), dtype=np.uint8),
+        depth=depth,
+        cameras=[_camera_at_origin(), _camera_at_origin()],
+    )
+
+
+def test_plan_views_lists_each_instances_best_views_with_their_pixels():
+    points = np.array(
+        [[0.0, 0.0, 2.0], [0.2, -0.1, 2.0], [0.0, 0.0, -2.0], [9.0, 9.0, 9.0]], dtype=np.float32
+    )
+    instance_ids = np.array([0, 0, 1, -1], dtype=np.int32)
+    options = EmbeddingOptions(views_per_instance=5, min_visible_pixels=1)
+
+    plans = plan_views(points, instance_ids, _two_views(), options)
+
+    assert sorted(plans) == [0, 1]
+    # View 0 sees both points of Instance 0, View 1 only the one at pixel (50, 40).
+    assert [p.view_index for p in plans[0]] == [0, 1]
+    assert plans[0][0].u.tolist() == [50, 60]
+    assert plans[0][0].v.tolist() == [40, 35]
+    assert plans[0][1].u.tolist() == [50]
+    # Instance 1 is behind both cameras.
+    assert plans[1] == []
+
+
+def test_plan_views_drops_views_seeing_too_few_points():
+    points = np.array([[0.0, 0.0, 2.0], [0.2, -0.1, 2.0]], dtype=np.float32)
+    options = EmbeddingOptions(views_per_instance=5, min_visible_pixels=2)
+    plans = plan_views(points, np.array([0, 0], dtype=np.int32), _two_views(), options)
+    assert [p.view_index for p in plans[0]] == [0]

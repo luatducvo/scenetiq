@@ -190,14 +190,15 @@ def test_job_reports_every_stage_and_then_success(
     client.app.state.runner.join(5)  # type: ignore[attr-defined]
 
     assert [(p.status, p.stage, p.step, p.total) for p in _reported_progress(caplog)] == [
-        ("running", "reconstructing", 1, 7),
-        ("running", "fusing", 2, 7),
-        ("running", "aligning", 3, 7),
-        ("running", "superpoints", 4, 7),
-        ("running", "masking", 5, 7),
-        ("running", "merging", 6, 7),
-        ("running", "embedding", 7, 7),
-        ("succeeded", "embedding", 7, 7),
+        ("running", "reconstructing", 1, 8),
+        ("running", "fusing", 2, 8),
+        ("running", "aligning", 3, 8),
+        ("running", "superpoints", 4, 8),
+        ("running", "masking", 5, 8),
+        ("running", "merging", 6, 8),
+        ("running", "embedding", 7, 8),
+        ("running", "captioning", 8, 8),
+        ("succeeded", "captioning", 8, 8),
     ]
     assert {(p.job_id, p.scene_id) for p in _reported_progress(caplog)} == {
         (body["job_id"], body["scene_id"])
@@ -267,7 +268,7 @@ def test_job_succeeds_after_reporting_every_stage(
 
     done = wait_for_job(client, body["job_id"])
     assert done["status"] == "succeeded"
-    assert done["stage"] == "embedding"
+    assert done["stage"] == "captioning"
     assert done["error"] is None
     assert done["scene_id"] == body["scene_id"]
     assert seen[0] in ("queued", "running")

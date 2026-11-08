@@ -8,7 +8,7 @@
 
 Python 3.13 with uv (Colab's Python); React + Vite + TS in `frontend/`. Human-facing setup and usage are in `README.md`. The current spec is `.scratch/scene-reconstruction-query/spec.md`.
 
-- Use the `GLOSSARY.md` terms (Scene, Capture, View, Reconstruction, Mask, Instance, Query, Match) in names, docstrings and tests, and avoid the terms it lists under *Avoid*.- Respect `docs/adr/`. When a decision changes, update or supersede its ADR in the same change.
+- Use the `GLOSSARY.md` terms (Scene, Capture, View, Reconstruction, Mask, Instance, Caption, Query, Match) in names, docstrings and tests, and avoid the terms it lists under *Avoid*.- Respect `docs/adr/`. When a decision changes, update or supersede its ADR in the same change.
 
 ### Commands
 
@@ -29,10 +29,10 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 
 ### Test seams
 
-- **Seam A**, `tests/api/`: the HTTP API through TestClient, with `FakePipeline` and `FakeTextEncoder` on a temp storage root. Most behaviour is tested here.
+- **Seam A**, `tests/api/`: the HTTP API through TestClient, with `FakePipeline`, `FakeTextEncoder` and `FakeCaptionEncoder` on a temp storage root. Most behaviour is tested here.
 - **Unit**, `tests/unit/`: pure, model-free functions, wherever they live (stage modules included).
 - **Seam B**, `tests/eval/`: the real Pipeline on GPU, marked `@pytest.mark.gpu`, deselected by default.
-- Never unit-test or mock anything that loads a model (DA3, SAM2, SigLIP2, a full MV3DIS run, `RealPipeline.run`). Only Seam B covers those. Constructing them is fine, because models load on first use.
+- Never unit-test or mock anything that loads a model (DA3, SAM2, SigLIP2, Qwen3-VL, Qwen3-Embedding, a full MV3DIS run, `RealPipeline.run`). Only Seam B covers those. Constructing them is fine, because models load on first use.
 - Test expectations must come from hand-worked values, never from recomputing the code's own formula.
 
 ### Non-obvious constraints
@@ -50,16 +50,18 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 - **MV3DIS limits:**
   - `point_level=True` is broken upstream and would allocate N×N matrices, so always pass primitive ids.
   - The mask label map is `uint8`, so the Masking stage caps Masks at 255 per View.
-- **Scores:** `TextEncoder.to_score` turns cosine similarity into the score the Match threshold applies to. SigLIP2 uses its sigmoid match probability; the fake encoder uses cosine similarity.
-  - `DEFAULT_MATCH_THRESHOLD` (0.5) has not been validated against ground truth, and the repo has no tool that measures it. Tune it per deployment with `match_threshold` in the config.
+- **Matches are top-K by Reciprocal Rank Fusion, with no threshold** (ADR 0008). A Match's score is the fused value divided by its maximum, `rankings / (rrf_k + 1)`, so it is relative to one Query and says nothing absolute. Do not reintroduce a relevance threshold or a Low-confidence Match.
+  - An Instance without a Caption gets only its image rank. A Reconstruction with no Captions (including Scenes stored before Captioning) is normalised over one ranking.
+  - `query_top_k`, `rrf_k` and the Captioning defaults have not been validated against ground truth, and the repo has no tool that measures them.
 - **Configuration** lives only in `scenetiq.config`: every default, including the stage Options. Add a new setting there, and pass it to its stage in `server.build_components`. The notebook's `CONFIG` cell overrides it through `SCENETIQ_CONFIG`; only the token travels separately.
-- **GPU memory:** DA3 and SAM2 leave the GPU when their stage ends, also on failure. SigLIP2 stays for Queries, so its load takes a lock (Queries and the job run on different threads).
+- **GPU memory:** DA3, SAM2 and Qwen3-VL leave the GPU when their stage ends, also on failure (`RealPipeline` calls `Captioner.release()` in a `finally`). SigLIP2 and Qwen3-Embedding stay for Queries, so their loads take a lock (Queries and the job run on different threads). One instance of each is shared by the Pipeline and the API: build them once in `server.build_components`.
   - A stage's output must hold no GPU tensors, or releasing its model frees nothing.
   - Each job logs peak VRAM per stage through `scenetiq.gpu`.
 - **View limits apply to uploaded photos.** Nothing checks the View count against GPU memory: DA3 takes every View left after the View stride in one forward pass, so an oversized Capture fails with OOM.
 - **Up is −Y in every Reconstruction** (ADR 0007), so "above" means a smaller y. A Scene whose Views gave no consensus stays in DA3's frame, and Scenes stored before the Aligning stage were never rotated.
 - **GeoCalib's `gravity.vec3d` points up, not down,** despite its name: it is `(0, -1, 0)` for a level camera. It follows a photo's roll only to about ±45°; beyond that it still answers, but wrongly (measured on one photo: 90° gave −15.5°, 180° gave −0.1°). Consensus does not catch this if every View is rolled the same way.
-- **Nothing applies EXIF orientation.** DA3 and the Embedding stage read a photo's raw pixels with `Image.open`, so a portrait photo stored as landscape plus an EXIF flag reaches every stage sideways.
+- **Nothing applies EXIF orientation.** DA3, the Embedding stage and the Captioning stage read a photo's raw pixels with `Image.open`, so a portrait photo stored as landscape plus an EXIF flag reaches every stage sideways.
+- **Stored Scenes keep the embeddings of the models that built them.** Changing `siglip.model_id` or `caption_embedding.model_id` makes older Scenes rank wrongly, without an error.
 - **`tests/unit/test_plane_search.py` also needs open3d,** so the CPU suite skips it: after changing the plane search, run `uv run --with open3d==0.20.0 pytest tests/unit/test_plane_search.py`.
 - **Point order is a contract.** The PLY, `instance_ids.bin` and the MV3DIS input all use the TSDF mesh vertex order. Never reorder or filter points after fusion.
 - **Request size:** Cloudflare returns 413 for large bodies (105 MB was refused), so never send a whole Capture in one request (ADR 0006).

@@ -16,13 +16,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, get_args, get_origin, get_type_hints
 
-DEFAULT_MATCH_THRESHOLD = 0.5
-"""Default relevance threshold for a Match.
-
-With the real Pipeline this is a SigLIP2 match probability. The value has not been validated
-against ground truth; override it per deployment with ``match_threshold`` in the config.
-"""
-
 DEFAULT_STORAGE_ROOT = Path("./data")
 """Where Scenes are stored when the config names no ``storage_root``."""
 
@@ -183,13 +176,54 @@ class SigLIP2Options:
 
 
 @dataclass(frozen=True)
+class CaptioningOptions:
+    """Settings of the Captioning stage (ADR 0008).
+
+    Attributes:
+        model_id: Hugging Face id of the vision-language model.
+        views_per_instance: How many of an Instance's best Views (from the Embedding
+            stage's plan) go into its prompt.
+        context_expand: Context added around the Instance's tight box, as a fraction of
+            its size; the tight box is drawn on the crop.
+        max_pixels: Pixel budget per image in the model's processor.
+        max_new_tokens: Longest reply generated per Instance.
+    """
+
+    model_id: str = "Qwen/Qwen3-VL-8B-Instruct"
+    views_per_instance: int = 3
+    context_expand: float = 0.6
+    max_pixels: int = 448 * 448
+    max_new_tokens: int = 128
+
+
+@dataclass(frozen=True)
+class CaptionEmbeddingOptions:
+    """Settings of the text model that embeds Captions and Query text (ADR 0008).
+
+    Attributes:
+        model_id: Hugging Face id of the text embedding model.
+        query_instruction: Task description prefixed to Query text (not to Captions).
+        batch_size: Caption documents encoded per forward pass.
+        max_length: Longest input, in tokens.
+    """
+
+    model_id: str = "Qwen/Qwen3-Embedding-0.6B"
+    query_instruction: str = (
+        "Given a description of an object in a scene, retrieve the caption of that object"
+    )
+    batch_size: int = 32
+    max_length: int = 256
+
+
+@dataclass(frozen=True)
 class Settings:
     """Backend settings.
 
     Attributes:
         storage_root: Directory holding the SQLite database and all Scene data.
         token: Shared secret every request must present as a bearer token.
-        match_threshold: Minimum relevance score for an Instance to be a Match.
+        query_top_k: How many Matches a Query returns (ADR 0008).
+        rrf_k: The Reciprocal Rank Fusion constant used to rank Matches.
         pipeline: Which Pipeline to run: ``"fake"`` or ``"real"``.
         min_views: Fewest photos a Capture may upload.
         max_views: Most photos a Capture may upload.
@@ -203,6 +237,8 @@ class Settings:
         merging: Merging stage.
         embedding: Embedding stage.
         siglip: The encoder of Instance crops and Query text.
+        captioning: Captioning stage.
+        caption_embedding: The encoder of Captions and Query text.
 
     Raises:
         ValueError: If ``min_views`` is below 1 or above ``max_views``, or ``view_stride``
@@ -211,7 +247,8 @@ class Settings:
 
     storage_root: Path
     token: str
-    match_threshold: float = DEFAULT_MATCH_THRESHOLD
+    query_top_k: int = 1
+    rrf_k: int = 60
     pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
     max_views: int = 2000
@@ -227,6 +264,8 @@ class Settings:
     merging: MergingOptions = field(default_factory=MergingOptions)
     embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
     siglip: SigLIP2Options = field(default_factory=SigLIP2Options)
+    captioning: CaptioningOptions = field(default_factory=CaptioningOptions)
+    caption_embedding: CaptionEmbeddingOptions = field(default_factory=CaptionEmbeddingOptions)
 
     def __post_init__(self) -> None:
         """Refuse View limits that no Capture could satisfy."""
@@ -238,6 +277,10 @@ class Settings:
             )
         if self.view_stride < 1:
             raise ValueError(f"view_stride must be at least 1, got {self.view_stride}")
+        if self.query_top_k < 1:
+            raise ValueError(f"query_top_k must be at least 1, got {self.query_top_k}")
+        if self.rrf_k < 0:
+            raise ValueError(f"rrf_k must not be negative, got {self.rrf_k}")
 
     @classmethod
     def from_overrides(cls, token: str, overrides: Mapping[str, Any]) -> Settings:

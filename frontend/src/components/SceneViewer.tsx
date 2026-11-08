@@ -1,3 +1,4 @@
+import { Html } from '@react-three/drei'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
@@ -99,7 +100,19 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
         new THREE.Vector3(...inst.bbox_min),
         new THREE.Vector3(...inst.bbox_max),
       )
-      return [new THREE.Box3Helper(box, new THREE.Color(...matchColor(rank)))]
+      // Up is -Y (ADR 0007), so the top of the box is at its minimum y.
+      const top = new THREE.Vector3(
+        (inst.bbox_min[0] + inst.bbox_max[0]) / 2,
+        inst.bbox_min[1],
+        (inst.bbox_min[2] + inst.bbox_max[2]) / 2,
+      )
+      return [
+        {
+          helper: new THREE.Box3Helper(box, new THREE.Color(...matchColor(rank))),
+          name: inst.name,
+          top,
+        },
+      ]
     })
   }, [scene, result])
 
@@ -130,7 +143,14 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
         <div className="canvas-wrap">
           <PointCloudCanvas geometry={scene.geometry}>
             {boxes.map((b, i) => (
-              <primitive key={i} object={b} />
+              <group key={i}>
+                <primitive object={b.helper} />
+                {b.name && (
+                  <Html position={b.top} center>
+                    <span className="box-label">{b.name}</span>
+                  </Html>
+                )}
+              </group>
             ))}
           </PointCloudCanvas>
         </div>
@@ -181,17 +201,12 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                 {result.matches.length === 0 && (
                   <p className="muted">This Scene has no Instances.</p>
                 )}
-                {result.low_confidence && result.matches.length > 0 && (
-                  <p className="warning">
-                    No confident Match. Showing the closest Instance as a Low-confidence Match.
-                  </p>
-                )}
                 <ol>
                   {result.matches.map((m, rank) => (
                     <li key={m.instance_id}>
                       <span className="swatch" style={{ background: `rgb(${matchColor(rank).map((c) => c * 255).join(',')})` }} />
-                      Instance {m.instance_id} — score {m.score.toFixed(3)}
-                      {result.low_confidence && <span className="badge">low confidence</span>}
+                      {scene?.instances.get(m.instance_id)?.name ?? `Instance ${m.instance_id}`} — score{' '}
+                      {m.score.toFixed(3)}
                     </li>
                   ))}
                 </ol>

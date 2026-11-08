@@ -1,4 +1,4 @@
-"""Deterministic stand-ins for the GPU Pipeline and text encoder.
+"""Deterministic stand-ins for the GPU Pipeline and the text encoders.
 
 Used by the CPU test suite and selectable on a running backend with
 ``"pipeline": "fake"`` in the config, so the whole system can be exercised without models.
@@ -11,6 +11,7 @@ import threading
 import numpy as np
 
 from scenetiq.domain import (
+    Caption,
     Capture,
     FloatArray,
     Reconstruction,
@@ -20,10 +21,13 @@ from scenetiq.domain import (
 from scenetiq.geometry import build_instances, l2_normalize
 
 EMBEDDING_DIM = 8
+"""Size of the fake image embeddings and Query embeddings."""
+CAPTION_EMBEDDING_DIM = 4
+"""Size of the fake Caption embeddings and Caption Query embeddings."""
 
 
-def _basis(i: int) -> FloatArray:
-    v = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+def _basis(i: int, dim: int = EMBEDDING_DIM) -> FloatArray:
+    v = np.zeros(dim, dtype=np.float32)
     v[i] = 1.0
     return v
 
@@ -39,17 +43,46 @@ FAKE_TEXT_EMBEDDINGS: dict[str, FloatArray] = {
     "chair": l2_normalize([0.8, 0.0, 0.0, 0.6, 0, 0, 0, 0]),
     # Similar to both table (0.7) and lamp (0.6).
     "furniture light": l2_normalize([0.0, 0.7, 0.6, 0.3873, 0, 0, 0, 0]),
+    # Looks most like the lamp (0.5), then the table (0.3), then the chair (0.1).
+    "wooden thing": l2_normalize([0.1, 0.3, 0.5, 0, 0, 0, 0, 0.806226]),
 }
 """Known Query texts. Any other text weakly resembles the chair (score 0.3)."""
 
 UNKNOWN_TEXT_EMBEDDING = l2_normalize([0.3, 0, 0, 0, 0, 0, 0, 0.9539])
+"""Image-space embedding of any other Query text: weakly resembles the chair (0.3)."""
+
+FAKE_CAPTIONS: dict[int, tuple[Caption, FloatArray]] = {
+    0: (
+        Caption("chair", ("seat",), ("red", "fabric"), "sitting"),
+        _basis(0, CAPTION_EMBEDDING_DIM),
+    ),
+    1: (
+        Caption("table", ("desk",), ("wooden",), "putting things on"),
+        _basis(1, CAPTION_EMBEDDING_DIM),
+    ),
+}
+"""Captions of the fake Instances; the lamp (2) has none."""
+
+FAKE_CAPTION_QUERY_EMBEDDINGS: dict[str, FloatArray] = {
+    "red chair": _basis(0, CAPTION_EMBEDDING_DIM),
+    "chair": _basis(0, CAPTION_EMBEDDING_DIM),
+    "table": _basis(1, CAPTION_EMBEDDING_DIM),
+    "wooden thing": _basis(1, CAPTION_EMBEDDING_DIM),
+}
+"""Known Query texts in the Caption space. Any other text resembles no Caption."""
+
+UNKNOWN_CAPTION_QUERY_EMBEDDING = _basis(3, CAPTION_EMBEDDING_DIM)
+"""Caption-space embedding of any other Query text: orthogonal to every fake Caption."""
 
 
-def fake_reconstruction() -> Reconstruction:
+def fake_reconstruction(with_captions: bool = True) -> Reconstruction:
     """Return a small fixed Reconstruction with three Instances and some background.
 
     Points: 0-3 belong to Instance 0, 4-7 to Instance 1, 8-9 to Instance 2,
     and 10-11 to no Instance.
+
+    Args:
+        with_captions: Give the chair and the table their :data:`FAKE_CAPTIONS`.
     """
     points = np.array(
         [
@@ -66,7 +99,12 @@ def fake_reconstruction() -> Reconstruction:
         points=points,
         colors=colors,
         instance_ids=instance_ids,
-        instances=build_instances(points, instance_ids, FAKE_INSTANCE_EMBEDDINGS),
+        instances=build_instances(
+            points,
+            instance_ids,
+            FAKE_INSTANCE_EMBEDDINGS,
+            FAKE_CAPTIONS if with_captions else None,
+        ),
     )
 
 
@@ -110,6 +148,16 @@ class FakeTextEncoder:
         """Return the fixed embedding for ``text`` (case-insensitive)."""
         return FAKE_TEXT_EMBEDDINGS.get(text.strip().lower(), UNKNOWN_TEXT_EMBEDDING)
 
-    def to_score(self, cosine: FloatArray) -> FloatArray:
-        """Use cosine similarity itself as the relevance score."""
-        return np.asarray(cosine, dtype=np.float32)
+
+class FakeCaptionEncoder:
+    """Maps the texts in :data:`FAKE_CAPTION_QUERY_EMBEDDINGS` to fixed vectors."""
+
+    def encode_documents(self, texts: list[str]) -> FloatArray:
+        """Return one fixed vector per document: its Query embedding, if known."""
+        return np.stack([self.encode_query(t) for t in texts]).astype(np.float32)
+
+    def encode_query(self, text: str) -> FloatArray:
+        """Return the fixed embedding for ``text`` (case-insensitive)."""
+        return FAKE_CAPTION_QUERY_EMBEDDINGS.get(
+            text.strip().lower(), UNKNOWN_CAPTION_QUERY_EMBEDDING
+        )

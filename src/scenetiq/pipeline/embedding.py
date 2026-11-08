@@ -8,7 +8,7 @@ with SigLIP2, and average them into one L2-normalised embedding.
 import math
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -86,9 +86,59 @@ def crop_box(
     return left, top, right, bottom
 
 
-def embed_instances(
+class PlannedView(NamedTuple):
+    """One View chosen for an Instance, with the Instance's visible pixels in it.
+
+    Attributes:
+        view_index: Index of the View in the Capture.
+        u: Column of every visible point, at the depth-map resolution.
+        v: Row of every visible point, at the depth-map resolution.
+    """
+
+    view_index: int
+    u: npt.NDArray[np.int64]
+    v: npt.NDArray[np.int64]
+
+
+ViewPlans = dict[int, list[PlannedView]]
+"""Instance id -> the Views that see it best, best first (empty if none sees it enough)."""
+
+
+def plan_views(
     points: FloatArray,
     instance_ids: npt.NDArray[np.int32],
+    view_data: ViewData,
+    options: EmbeddingOptions | None = None,
+) -> ViewPlans:
+    """Choose, for every Instance, the Views that see most of its points.
+
+    Args:
+        points: ``(N, 3)`` Reconstruction points.
+        instance_ids: ``(N,)`` Instance id per point, -1 for none.
+        view_data: Cameras and depth at the depth-map resolution.
+        options: ``views_per_instance``, ``min_visible_pixels`` and ``visibility_rtol``.
+
+    Returns:
+        A plan for every Instance id, empty when no View sees at least
+        ``min_visible_pixels`` of its points.
+    """
+    opts = options or EmbeddingOptions()
+    plans: ViewPlans = {}
+    for iid in (int(i) for i in np.unique(instance_ids) if i >= 0):
+        member = points[instance_ids == iid]
+        per_view = [
+            visible_pixels(member, cam, view_data.depth[i], opts.visibility_rtol)
+            for i, cam in enumerate(view_data.cameras)
+        ]
+        chosen = select_views(
+            [len(u) for u, _ in per_view], opts.views_per_instance, opts.min_visible_pixels
+        )
+        plans[iid] = [PlannedView(vi, *per_view[vi]) for vi in chosen]
+    return plans
+
+
+def embed_instances(
+    plans: ViewPlans,
     view_data: ViewData,
     image_paths: Sequence[Path],
     encoder: ImageEncoder,
@@ -96,14 +146,12 @@ def embed_instances(
 ) -> dict[int, FloatArray]:
     """Compute an embedding for every Instance that some View sees well enough.
 
-    Instances that no View sees with at least ``min_visible_pixels`` points get
-    no embedding; the caller drops them, so every remaining Instance can be
-    queried.
+    Instances with an empty plan get no embedding; the caller drops them, so
+    every remaining Instance can be queried.
 
     Args:
-        points: ``(N, 3)`` Reconstruction points.
-        instance_ids: ``(N,)`` Instance id per point, -1 for none.
-        view_data: Cameras and depth at the depth-map resolution.
+        plans: The Views chosen for every Instance (:func:`plan_views`).
+        view_data: Cameras at the depth-map resolution.
         image_paths: Original photo of every View, in View order.
         encoder: Image tower of the embedding model.
         options: Stage settings.
@@ -114,18 +162,6 @@ def embed_instances(
     from PIL import Image
 
     opts = options or EmbeddingOptions()
-    ids = [int(i) for i in np.unique(instance_ids) if i >= 0]
-    plans: dict[int, list[tuple[int, npt.NDArray[np.int64], npt.NDArray[np.int64]]]] = {}
-    for iid in ids:
-        member = points[instance_ids == iid]
-        per_view = [
-            visible_pixels(member, cam, view_data.depth[i], opts.visibility_rtol)
-            for i, cam in enumerate(view_data.cameras)
-        ]
-        chosen = select_views(
-            [len(u) for u, _ in per_view], opts.views_per_instance, opts.min_visible_pixels
-        )
-        plans[iid] = [(vi, *per_view[vi]) for vi in chosen]
 
     crops: list = []
     owners: list[int] = []

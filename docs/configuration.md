@@ -40,7 +40,8 @@ The backend reads its settings once, at startup. They apply to new Captures and 
 |---|---|---|
 | `storage_root` | `./data` | Directory for Scenes and the SQLite database. |
 | `pipeline` | `"fake"` | `"real"` runs the GPU models. `"fake"` runs none and returns a fixed result, for testing. |
-| `match_threshold` | `0.5` | Minimum score for an Instance to be a Match. With the real Pipeline this is a SigLIP2 match probability. The default has not been validated against ground truth. |
+| `query_top_k` | `1` | How many Matches a Query returns: the top K of the fused ranking (ADR 0008). There is no relevance threshold, so a Query always returns Matches when the Scene has Instances. |
+| `rrf_k` | `60` | Reciprocal Rank Fusion constant. Each ranking adds `1 / (rrf_k + rank)` to an Instance's fused value; a larger value flattens the difference between ranks. |
 | `min_views` | `1` | Fewest photos a Capture may upload. |
 | `max_views` | `2000` | Most photos a Capture may upload. It has no upper limit. |
 | `view_stride` | `1` | Reconstruct the first photo and every Nth one after it, in upload order. |
@@ -157,6 +158,27 @@ MV3DIS allocates matrices of superpoint count × superpoint count on the GPU, so
 | `prompt` | `This is a photo of {}.` | Template for Query text. It must contain `{}`, or every Query encodes the same text. |
 | `batch_size` | `64` | Crops encoded per forward pass. Lower it if this stage runs out of memory. |
 
+### `captioning`: a Caption per Instance
+
+The Captioning stage runs after Embedding, on the Instances it kept, and uses its choice of Views. The model leaves the GPU when the stage ends.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `model_id` | `Qwen/Qwen3-VL-8B-Instruct` | Vision-language model. About 17 GB at bf16 while the stage runs. |
+| `views_per_instance` | `3` | How many of the Instance's best Views go into its prompt. At most `embedding.views_per_instance`. |
+| `context_expand` | `0.6` | Context added around the Instance's tight box, as a fraction of its size. The tight box is drawn in red on each crop, and the prompt refers to it as the red box. |
+| `max_pixels` | `200704` | Pixel budget per crop (448 × 448). Larger crops are shrunk, keeping their shape. |
+| `max_new_tokens` | `128` | Longest reply per Instance. A reply cut short has no valid JSON, so that Instance gets no Caption. |
+
+### `caption_embedding`: Captions and Query text
+
+| Key | Default | Meaning |
+|---|---|---|
+| `model_id` | `Qwen/Qwen3-Embedding-0.6B` | Text embedding model. It stays on the GPU for Queries (about 1.2 GB). Scenes store Caption embeddings from the model that built them, so a new model cannot rank older Scenes' Captions correctly. |
+| `query_instruction` | `Given a description of an object in a scene, retrieve the caption of that object` | Task description put before Query text, not before Captions. |
+| `batch_size` | `32` | Captions encoded per forward pass. |
+| `max_length` | `256` | Longest input in tokens; longer text is cut. |
+
 ## Invalid configuration
 
 The backend refuses to start on any of these. On Colab, the install cell reports them before anything is installed.
@@ -169,8 +191,10 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Token in the config | `{"token": "abc"}` | `token must not be in the config; it is a secret` |
 | Impossible limits | `{"min_views": 11, "max_views": 10}` | `min_views (11) must not exceed max_views (10)` |
 | Values below 1 | `{"view_stride": 0}` | `view_stride must be at least 1, got 0` |
+| Negative RRF constant | `{"rrf_k": -1}` | `rrf_k must not be negative, got -1` |
+| Removed setting | `{"match_threshold": 0.5}` | `unknown config key: match_threshold` |
 
-Other values are not range-checked, so `{"match_threshold": 5}` starts normally and then reports only Low-confidence Matches.
+Other values are not range-checked, so `{"captioning": {"max_new_tokens": 1}}` starts normally and then leaves every Instance without a Caption.
 
 ## Not configurable
 

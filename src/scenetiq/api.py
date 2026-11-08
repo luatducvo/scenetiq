@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from scenetiq.artifacts import INSTANCE_IDS_FILE, POINTS_FILE, load_instances
 from scenetiq.config import Settings
-from scenetiq.domain import Capture, Pipeline, TextEncoder, View
+from scenetiq.domain import CaptionEncoder, Capture, Pipeline, TextEncoder, View
 from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.query import MissingEmbeddingsError, run_query
 from scenetiq.runtime_log import UploadProgress, report_progress
@@ -30,13 +30,19 @@ _ALLOWED_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG"}
 _ID_PATTERN = "^[0-9a-f]{32}$"  # capture ids become directory names, so never accept a path
 
 
-def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder) -> FastAPI:
+def create_app(
+    settings: Settings,
+    pipeline: Pipeline,
+    text_encoder: TextEncoder,
+    caption_encoder: CaptionEncoder,
+) -> FastAPI:
     """Build the SceneTIQ API.
 
     Args:
-        settings: Storage root, shared token, Match threshold and CORS origins.
+        settings: Storage root, shared token, Query ranking and CORS origins.
         pipeline: Turns an uploaded Capture into a Reconstruction.
-        text_encoder: Encodes Query text for matching against Instances.
+        text_encoder: Encodes Query text for matching against Instance image embeddings.
+        caption_encoder: Encodes Query text for matching against Instance Captions.
 
     Returns:
         A FastAPI app; every route requires ``Authorization: Bearer <token>``.
@@ -190,7 +196,7 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
 
     @app.get("/scenes/{scene_id}/instances")
     def get_instances(request: Request, scene_id: str) -> list[InstanceOut]:
-        """List the Scene's Instances with centroid and bounding box in metres."""
+        """List the Scene's Instances with centroid, bounding box (metres) and Caption Name."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         return [
             InstanceOut(
@@ -198,6 +204,7 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
                 centroid=inst.centroid.tolist(),
                 bbox_min=inst.bbox_min.tolist(),
                 bbox_max=inst.bbox_max.tolist(),
+                name=None if inst.caption is None else inst.caption.name,
             )
             for inst in load_instances(directory)
         ]
@@ -210,17 +217,25 @@ def create_app(settings: Settings, pipeline: Pipeline, text_encoder: TextEncoder
         if not text:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
         try:
-            result = run_query(
+            matches = run_query(
                 load_instances(directory),
                 text_encoder.encode(text),
-                settings.match_threshold,
-                text_encoder.to_score,
+                settings.query_top_k,
+                settings.rrf_k,
+                caption_encoder.encode_query(text),
             )
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return QueryOut(
-            matches=[MatchOut(instance_id=m.instance_id, score=m.score) for m in result.matches],
-            low_confidence=result.low_confidence,
+            matches=[
+                MatchOut(
+                    instance_id=m.instance_id,
+                    score=m.score,
+                    image_score=m.image_score,
+                    caption_score=m.caption_score,
+                )
+                for m in matches
+            ]
         )
 
     return app
@@ -240,12 +255,13 @@ class SceneIn(BaseModel):
 
 
 class InstanceOut(BaseModel):
-    """An Instance's position and extent, in metres."""
+    """An Instance's position and extent, in metres, and its Caption's Name (or null)."""
 
     instance_id: int
     centroid: list[float]
     bbox_min: list[float]
     bbox_max: list[float]
+    name: str | None
 
 
 class QueryIn(BaseModel):
@@ -255,17 +271,18 @@ class QueryIn(BaseModel):
 
 
 class MatchOut(BaseModel):
-    """One Match: an Instance id and its relevance score."""
+    """One Match: an Instance id, its normalised fused score and the per-channel similarities."""
 
     instance_id: int
     score: float
+    image_score: float
+    caption_score: float | None
 
 
 class QueryOut(BaseModel):
-    """The Matches for a Query, flagged when only a Low-confidence Match was found."""
+    """The top-K Matches for a Query, best first."""
 
     matches: list[MatchOut]
-    low_confidence: bool
 
 
 def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:

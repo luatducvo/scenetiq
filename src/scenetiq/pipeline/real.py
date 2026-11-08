@@ -6,20 +6,24 @@ import numpy as np
 
 from scenetiq.config import (
     AlignmentOptions,
+    CaptioningOptions,
     EmbeddingOptions,
     FusionOptions,
     MergingOptions,
     SuperpointOptions,
 )
-from scenetiq.domain import Capture, Reconstruction, Stage, StageCallback
+from scenetiq.domain import CaptionEncoder, Capture, Reconstruction, Stage, StageCallback
 from scenetiq.geometry import build_instances
 from scenetiq.pipeline.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
-from scenetiq.pipeline.embedding import ImageEncoder, embed_instances
+from scenetiq.pipeline.captioning import Captioner, caption_document, caption_instances
+from scenetiq.pipeline.embedding import ImageEncoder, embed_instances, plan_views
 from scenetiq.pipeline.fusion import fuse
 from scenetiq.pipeline.gpu_memory import free_gpu_memory, report_merge_input, track_stage_memory
 from scenetiq.pipeline.masking import SAM2Masker
 from scenetiq.pipeline.merging import merge_instances
 from scenetiq.pipeline.primitives import voxel_primitives
+from scenetiq.pipeline.qwen_embedding import Qwen3TextEmbedder
+from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
 from scenetiq.pipeline.reconstruct import DA3Reconstructor, Reconstructor
 from scenetiq.pipeline.siglip import SigLIP2Encoder
 from scenetiq.pipeline.superpoints import mesh_superpoints
@@ -35,6 +39,7 @@ class RealPipelineOptions:
         superpoints: Superpoints stage.
         merging: MV3DIS Merging stage.
         embedding: SigLIP2 Embedding stage.
+        captioning: Captioning stage (ADR 0008).
     """
 
     fusion: FusionOptions = field(default_factory=FusionOptions)
@@ -42,6 +47,7 @@ class RealPipelineOptions:
     superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
     merging: MergingOptions = field(default_factory=MergingOptions)
     embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
+    captioning: CaptioningOptions = field(default_factory=CaptioningOptions)
 
 
 class RealPipeline:
@@ -55,6 +61,10 @@ class RealPipeline:
         options: Settings of the remaining stages.
         up_estimator: The Aligning stage's source of up vectors (GeoCalib by default,
             ADR 0007).
+        captioner: The Captioning stage's vision-language model (Qwen3-VL by default,
+            ADR 0008).
+        caption_encoder: Embeds Captions (Qwen3-Embedding by default). Pass the same
+            encoder the API uses for Query text.
     """
 
     def __init__(
@@ -64,6 +74,8 @@ class RealPipeline:
         image_encoder: ImageEncoder | None = None,
         options: RealPipelineOptions | None = None,
         up_estimator: UpEstimator | None = None,
+        captioner: Captioner | None = None,
+        caption_encoder: CaptionEncoder | None = None,
     ) -> None:
         """Assemble the stages; models load lazily on the first run."""
         self.reconstructor = reconstructor or DA3Reconstructor()
@@ -71,6 +83,8 @@ class RealPipeline:
         self.image_encoder = image_encoder or SigLIP2Encoder()
         self.options = options or RealPipelineOptions()
         self.up_estimator = up_estimator or GeoCalibUpEstimator()
+        self.captioner = captioner or QwenVLCaptioner(self.options.captioning)
+        self.caption_encoder = caption_encoder or Qwen3TextEmbedder()
 
     def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
         """Run every stage on ``capture``, reporting each one through ``on_stage``."""
@@ -115,9 +129,9 @@ class RealPipeline:
 
         on_stage(Stage.EMBEDDING)
         with track_stage_memory(Stage.EMBEDDING):
+            plans = plan_views(points, instance_ids, view_data, opts.embedding)
             embeddings = embed_instances(
-                points,
-                instance_ids,
+                plans,
                 view_data,
                 [v.path for v in capture.views],
                 self.image_encoder,
@@ -127,10 +141,28 @@ class RealPipeline:
         unseen = np.isin(instance_ids, list(embeddings), invert=True)
         instance_ids = np.where(unseen, -1, instance_ids).astype(np.int32)
 
+        on_stage(Stage.CAPTIONING)
+        with track_stage_memory(Stage.CAPTIONING):
+            try:
+                captions = caption_instances(
+                    {iid: plan for iid, plan in plans.items() if iid in embeddings},
+                    [v.path for v in capture.views],
+                    view_data.cameras,
+                    self.captioner,
+                    opts.captioning,
+                )
+            finally:
+                self.captioner.release()
+            captioned = list(captions)
+            documents = self.caption_encoder.encode_documents(
+                [caption_document(captions[iid]) for iid in captioned]
+            )
+        caption_data = {iid: (captions[iid], documents[row]) for row, iid in enumerate(captioned)}
+
         return Reconstruction(
             points=points,
             colors=geometry.colors,
             instance_ids=instance_ids,
             cameras=view_data.cameras,
-            instances=build_instances(points, instance_ids, embeddings),
+            instances=build_instances(points, instance_ids, embeddings, caption_data),
         )

@@ -10,7 +10,7 @@ from PIL import Image
 
 from scenetiq.api import create_app
 from scenetiq.config import Settings
-from scenetiq.fakes import FakePipeline, FakeTextEncoder
+from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeTextEncoder
 
 TOKEN = "test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -54,7 +54,7 @@ def staged_capture(client: TestClient, n: int = 10) -> str:
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(storage_root=tmp_path / "store", token=TOKEN, match_threshold=0.5)
+    return Settings(storage_root=tmp_path / "store", token=TOKEN)
 
 
 @pytest.fixture
@@ -71,6 +71,7 @@ def make_client(settings: Settings, pipeline: FakePipeline) -> Iterator[Callable
             "settings": settings,
             "pipeline": pipeline,
             "text_encoder": FakeTextEncoder(),
+            "caption_encoder": FakeCaptionEncoder(),
         }
         kwargs.update(overrides)
         client = TestClient(create_app(**kwargs))  # type: ignore[arg-type]

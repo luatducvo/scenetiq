@@ -131,3 +131,18 @@ def test_config_that_is_not_a_json_object_is_refused(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("SCENETIQ_CONFIG", raw)
     with pytest.raises(ValueError, match="SCENETIQ_CONFIG"):
         Settings.from_env()
+
+
+def test_query_ranking_defaults_and_the_removed_threshold():
+    settings = Settings.from_overrides("tok", {})
+    assert (settings.query_top_k, settings.rrf_k) == (1, 60)
+    with pytest.raises(ValueError, match="match_threshold"):
+        Settings.from_overrides("tok", {"match_threshold": 0.5})
+
+
+@pytest.mark.parametrize(
+    ("overrides", "named"), [({"query_top_k": 0}, "query_top_k"), ({"rrf_k": -1}, "rrf_k")]
+)
+def test_query_ranking_that_cannot_work_is_refused(overrides: dict, named: str):
+    with pytest.raises(ValueError, match=named):
+        Settings.from_overrides("tok", overrides)

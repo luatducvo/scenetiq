@@ -1,4 +1,4 @@
-"""Core domain types: Capture, View, Reconstruction, Instance and pipeline Stages.
+"""Core domain types: Capture, View, Reconstruction, Instance, Caption and pipeline Stages.
 
 Terms follow ``GLOSSARY.md``.
 """
@@ -27,6 +27,7 @@ class Stage(StrEnum):
     MASKING = "masking"
     MERGING = "merging"
     EMBEDDING = "embedding"
+    CAPTIONING = "captioning"
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,23 @@ class Camera:
     height: int
 
 
+@dataclass(frozen=True)
+class Caption:
+    """What a vision-language model reads from an Instance's Views.
+
+    Attributes:
+        name: Short free-text name of the Instance; never empty.
+        synonyms: Up to three other names for it.
+        attributes: Visible properties such as colour and material.
+        use: What the Instance is used for.
+    """
+
+    name: str
+    synonyms: tuple[str, ...] = ()
+    attributes: tuple[str, ...] = ()
+    use: str = ""
+
+
 @dataclass
 class Instance:
     """One distinct physical object in a Reconstruction.
@@ -72,8 +90,10 @@ class Instance:
         centroid: Mean position of the Instance's points, metres.
         bbox_min: Minimum corner of the axis-aligned bounding box, metres.
         bbox_max: Maximum corner of the axis-aligned bounding box, metres.
-        embedding: L2-normalised semantic embedding, or ``None`` before the
+        embedding: L2-normalised image embedding, or ``None`` before the
             Embedding stage has run.
+        caption: The Instance's Caption, or ``None`` when it has none.
+        caption_embedding: L2-normalised embedding of the Caption, or ``None``.
     """
 
     instance_id: int
@@ -81,6 +101,8 @@ class Instance:
     bbox_min: FloatArray
     bbox_max: FloatArray
     embedding: FloatArray | None = None
+    caption: Caption | None = None
+    caption_embedding: FloatArray | None = None
 
 
 @dataclass
@@ -114,12 +136,20 @@ class Pipeline(Protocol):
 
 
 class TextEncoder(Protocol):
-    """Encodes Query text into the same space as Instance embeddings."""
+    """Encodes Query text into the same space as Instance image embeddings."""
 
     def encode(self, text: str) -> FloatArray:
         """Return the L2-normalised embedding of ``text``."""
         ...
 
-    def to_score(self, cosine: FloatArray) -> FloatArray:
-        """Map cosine similarities to the relevance scores the Match threshold applies to."""
+
+class CaptionEncoder(Protocol):
+    """Embeds Caption documents and Query text into one text space (ADR 0008)."""
+
+    def encode_documents(self, texts: list[str]) -> FloatArray:
+        """Return ``(len(texts), D)`` L2-normalised embeddings of Caption documents."""
+        ...
+
+    def encode_query(self, text: str) -> FloatArray:
+        """Return the L2-normalised embedding of Query ``text``."""
         ...

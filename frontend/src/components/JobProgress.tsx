@@ -9,6 +9,7 @@ const STAGES = [
   'masking',
   'merging',
   'embedding',
+  'captioning',
 ]
 
 interface Props {

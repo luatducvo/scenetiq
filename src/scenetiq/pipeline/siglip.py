@@ -5,21 +5,13 @@ The same instance serves as the Pipeline's image encoder and the API's
 for Queries. Queries and the job run on different threads, so loading takes a lock.
 """
 
-import math
 import threading
 from typing import Any
 
 import numpy as np
-import numpy.typing as npt
 
 from scenetiq.config import SigLIP2Options
 from scenetiq.domain import FloatArray
-
-
-def sigmoid_score(cosine: npt.ArrayLike, logit_scale: float, logit_bias: float) -> FloatArray:
-    """Turn cosine similarity into SigLIP's match probability ``sigmoid(scale * cos + bias)``."""
-    z = logit_scale * np.asarray(cosine, dtype=np.float64) + logit_bias
-    return (1.0 / (1.0 + np.exp(-z))).astype(np.float32)
 
 
 class SigLIP2Encoder:
@@ -31,8 +23,6 @@ class SigLIP2Encoder:
         self.device = device
         self._model: Any = None
         self._processor: Any = None
-        self._scale = 1.0
-        self._bias = 0.0
         self._load_lock = threading.Lock()
 
     def _load(self) -> tuple[Any, Any]:
@@ -46,8 +36,6 @@ class SigLIP2Encoder:
                 )
                 model.eval()
                 self._processor = AutoProcessor.from_pretrained(self.options.model_id)
-                self._scale = math.exp(float(model.logit_scale.float().item()))
-                self._bias = float(model.logit_bias.float().item())
                 self._model = model
             return self._model, self._processor
 
@@ -81,8 +69,3 @@ class SigLIP2Encoder:
             feats = model.get_text_features(**inputs).pooler_output.float()
         feats = torch.nn.functional.normalize(feats, dim=-1)
         return feats[0].cpu().numpy().astype(np.float32)
-
-    def to_score(self, cosine: FloatArray) -> FloatArray:
-        """Map cosine similarities to SigLIP match probabilities in [0, 1]."""
-        self._load()
-        return sigmoid_score(cosine, self._scale, self._bias)
