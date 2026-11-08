@@ -97,6 +97,7 @@ def test_token_stays_out_of_the_overrides():
         ({"min_views": 11, "max_views": 10}, "min_views"),
         ({"superpoints": {"primitives": "superpoint"}}, "superpoints.primitives"),
         ({"pipeline": "reel"}, "pipeline"),
+        ({"siglip": {"prompt_max_words": -1}}, "siglip.prompt_max_words"),
     ],
 )
 def test_settings_that_cannot_work_are_refused_by_name(overrides: dict, named: str):
@@ -152,3 +153,9 @@ def test_captioning_leaves_room_for_four_descriptions():
     # Name, three Synonyms and four Descriptions of up to 200 characters need about 250
     # tokens; 128 cut replies short.
     assert Settings.from_overrides("tok", {}).captioning.max_new_tokens == 320
+
+
+def test_short_queries_are_wrapped_in_the_siglip_prompt_by_default():
+    siglip = Settings.from_overrides("tok", {}).siglip
+    assert siglip.prompt == "This is a photo of {}."
+    assert siglip.prompt_max_words == 4

@@ -45,6 +45,7 @@
     "scenetiq.progress": { "handlers": ["progress"], "level": "INFO", "propagate": false },
     "scenetiq.gpu": { "handlers": ["progress"], "level": "INFO", "propagate": false },
     "scenetiq.alignment": { "handlers": ["progress"], "level": "INFO", "propagate": false },
-    "scenetiq.captioning": { "handlers": ["progress"], "level": "INFO", "propagate": false }
+    "scenetiq.captioning": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.query": { "handlers": ["progress"], "level": "INFO", "propagate": false }
   }
 }

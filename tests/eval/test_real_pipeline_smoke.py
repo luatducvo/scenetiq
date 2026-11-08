@@ -116,6 +116,15 @@ def test_siglip2_encodes_query_text_to_a_unit_vector(encoder):
     assert float(np.linalg.norm(embedding)) == pytest.approx(1.0, abs=1e-3)
 
 
+def test_siglip2_encodes_a_query_longer_than_its_text_window(encoder):
+    # About 500 characters, far beyond 64 tokens: raised ValueError before truncation.
+    sentence = "the soft grey sofa with wide armrests next to the tall window, "
+    text = (sentence * 8)[:500]
+    assert len(text) == 500
+    embedding = encoder.encode(text)
+    assert float(np.linalg.norm(embedding)) == pytest.approx(1.0, abs=1e-3)
+
+
 def test_a_query_returns_the_configured_number_of_matches(real_result, encoder, caption_encoder):
     # Runs without the Query environment variables, so the top-K cut is always checked.
     from scenetiq.query import run_query

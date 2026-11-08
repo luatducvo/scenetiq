@@ -166,12 +166,15 @@ class SigLIP2Options:
 
     Attributes:
         model_id: Hugging Face id of the SigLIP2 checkpoint (Apache-2.0).
-        prompt: Template wrapping Query text; ``{}`` is replaced by the text.
+        prompt: Template wrapping a short Query; ``{}`` is replaced by the text.
+        prompt_max_words: Longest Query, in words, that is wrapped in ``prompt``; longer
+            Queries reach SigLIP2 as written. 0 never wraps.
         batch_size: Crops encoded per forward pass.
     """
 
     model_id: str = "google/siglip2-giant-opt-patch16-384"
     prompt: str = "This is a photo of {}."
+    prompt_max_words: int = 4
     batch_size: int = 64
 
 
@@ -282,6 +285,10 @@ class Settings:
             raise ValueError(f"query_top_k must be at least 1, got {self.query_top_k}")
         if self.rrf_k < 0:
             raise ValueError(f"rrf_k must not be negative, got {self.rrf_k}")
+        if self.siglip.prompt_max_words < 0:
+            raise ValueError(
+                f"siglip.prompt_max_words must not be negative, got {self.siglip.prompt_max_words}"
+            )
 
     @classmethod
     def from_overrides(cls, token: str, overrides: Mapping[str, Any]) -> Settings:

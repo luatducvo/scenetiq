@@ -3,8 +3,12 @@
 The same instance serves as the Pipeline's image encoder and the API's
 ``TextEncoder``, so the model is loaded once per process and stays on the GPU
 for Queries. Queries and the job run on different threads, so loading takes a lock.
+
+The checkpoint loads ``SiglipProcessor``, which does not truncate text, and the text tower
+has 64 positions: Query text must be truncated explicitly, or a long Query raises.
 """
 
+import logging
 import threading
 from typing import Any
 
@@ -12,6 +16,32 @@ import numpy as np
 
 from scenetiq.config import SigLIP2Options
 from scenetiq.domain import FloatArray
+
+QUERY_LOGGER = "scenetiq.query"
+"""Logger of Query-time notes; ``colab_logging.json`` lets it through."""
+
+MAX_TEXT_TOKENS = 64
+"""Positions of the SigLIP2 text tower; it was trained on text padded to this length."""
+
+_logger = logging.getLogger(QUERY_LOGGER)
+
+
+def siglip_query_text(text: str, prompt: str, prompt_max_words: int) -> str:
+    """The text SigLIP2 encodes for a Query.
+
+    A short Query, like a label, is wrapped in ``prompt``; a longer one is kept as
+    written. The SigLIP2 paper lowercases all training text, so the result is lowercased,
+    template included.
+
+    Args:
+        text: The Query text.
+        prompt: Template with ``{}`` for the text.
+        prompt_max_words: Longest Query, in words, that is wrapped; 0 never wraps.
+    """
+    text = text.strip()
+    if 0 < len(text.split()) <= prompt_max_words:
+        text = prompt.format(text)
+    return text.lower()
 
 
 class SigLIP2Encoder:
@@ -61,9 +91,17 @@ class SigLIP2Encoder:
         import torch
 
         model, processor = self._load()
-        prompt = self.options.prompt.format(text.strip().lower())
+        query = siglip_query_text(text, self.options.prompt, self.options.prompt_max_words)
+        length = len(processor.tokenizer(query)["input_ids"])
+        if length > MAX_TEXT_TOKENS:
+            # The Caption channel still sees the whole Query; never log its text.
+            _logger.info("siglip query truncated to %d tokens (had %d)", MAX_TEXT_TOKENS, length)
         inputs = processor(
-            text=[prompt], padding="max_length", max_length=64, return_tensors="pt"
+            text=[query],
+            padding="max_length",
+            truncation=True,
+            max_length=MAX_TEXT_TOKENS,
+            return_tensors="pt",
         ).to(self.device)
         with torch.inference_mode():
             feats = model.get_text_features(**inputs).pooler_output.float()

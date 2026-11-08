@@ -155,7 +155,8 @@ MV3DIS allocates matrices of superpoint count × superpoint count on the GPU, so
 | Key | Default | Meaning |
 |---|---|---|
 | `model_id` | `google/siglip2-giant-opt-patch16-384` | Weights. Scenes store embeddings from the model that built them, so a new model cannot query older Scenes correctly. |
-| `prompt` | `This is a photo of {}.` | Template for Query text. It must contain `{}`, or every Query encodes the same text. |
+| `prompt` | `This is a photo of {}.` | Template for short Query text. It must contain `{}`, or every short Query encodes the same text. |
+| `prompt_max_words` | `4` | Longest Query, in words, wrapped in `prompt`. Longer Queries reach SigLIP2 as written. `0` never wraps. Either way the text is lowercased and cut to SigLIP2's 64 tokens; the Caption channel still sees the whole Query. |
 | `batch_size` | `64` | Crops encoded per forward pass. Lower it if this stage runs out of memory. |
 
 ### `captioning`: a Caption per Instance
@@ -192,6 +193,7 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Impossible limits | `{"min_views": 11, "max_views": 10}` | `min_views (11) must not exceed max_views (10)` |
 | Values below 1 | `{"view_stride": 0}` | `view_stride must be at least 1, got 0` |
 | Negative RRF constant | `{"rrf_k": -1}` | `rrf_k must not be negative, got -1` |
+| Negative prompt word limit | `{"siglip": {"prompt_max_words": -1}}` | `siglip.prompt_max_words must not be negative, got -1` |
 | Removed setting | `{"match_threshold": 0.5}` | `unknown config key: match_threshold` |
 
 Other values are not range-checked, so `{"captioning": {"max_new_tokens": 1}}` starts normally and then leaves every Instance without a Caption.
