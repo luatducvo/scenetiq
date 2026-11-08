@@ -32,8 +32,8 @@ A Query is then ranked twice: against the Instances' image embeddings, as before
 14. As a user, I want Captioning to happen without any action or setting on my part, so that every new Scene benefits from it.
 15. As a user, I want the job to still succeed when the model returns something unusable for one object, so that I do not lose a long run over one Caption.
 16. As a user, I want the job to fail with an error when the captioning model cannot load or runs out of memory, so that I know to fix the setup rather than receive Scenes silently without Captions.
-17. As a user with existing Scenes, I want them to keep working unchanged, ranked by image similarity, so that this feature breaks nothing I already have.
-18. As a user with an existing Scene, I want to get Captions by creating a new Scene from the same photos, so that I have a path to the improvement.
+17. ~~As a user with existing Scenes, I want them to keep working unchanged.~~ (Dropped: every Scene is created after this change; storage starts empty with each runtime.)
+18. ~~As a user with an existing Scene, I want to get Captions by recreating it.~~ (Dropped for the same reason.)
 19. As a user, I want Queries to stay fast after this change, so that searching still feels interactive.
 20. As a user, I want the no-Match and Low-confidence flags gone from the viewer, so that the interface matches how Matches now work.
 21. As the owner, I want the number of Matches per Query (K) to be a configuration value, defaulting to 1, so that I can show more candidates without code changes.
@@ -59,7 +59,7 @@ A Query is then ranked twice: against the Instances' image embeddings, as before
 41. As a developer, I want the fake Pipeline to report the new stage and produce Instances with and without Captions, so that the API and frontend are exercised against the real behaviour.
 42. As a developer, I want a fake Caption encoder that maps known strings to known vectors, so that Query ranking can be tested with hand-worked values.
 43. As a developer, I want the point-order contract untouched by this stage, so that the PLY, the instance id array and the Instance list still line up.
-44. As a developer, I want stored Scenes without Caption data to load as Instances without Captions, so that no migration is needed.
+44. ~~As a developer, I want stored Scenes without Caption data to load.~~ (Dropped: no Scene predates this change.)
 45. As a developer, I want the decision and its rejected alternatives recorded in an ADR, so that nobody re-adds a threshold or a weighted score by accident.
 46. As a developer, I want the v1 spec, the configuration and pipeline docs and AGENTS.md to match the new behaviour, so that the documentation stays true.
 
@@ -102,7 +102,6 @@ A Query is then ranked twice: against the Instances' image embeddings, as before
 **Storage**
 - The Instance metadata file gains a `caption` object per Instance (null when there is none).
 - A new Caption embeddings file holds one row per Instance, aligned with the Instance metadata, with a zero row where the Caption is null. It is written only when at least one Instance has a Caption.
-- Scenes stored before this change have neither and load with no Captions. No backfill.
 
 **HTTP API**
 - Instance listing: each Instance gains `name` (string or null). Synonyms, Attributes and Use are not exposed.
@@ -136,7 +135,6 @@ A good test checks external behaviour through a seam, with expectations worked o
   - The response has no `low_confidence` field.
   - The Instance listing returns `name`, or null.
   - Job progress includes `captioning` after `embedding`.
-  - A Scene directory written in the old format (no Caption data) still lists Instances and answers Queries.
 - **Unit, pure functions on CPU.** Prior art: the Embedding helper and alignment unit tests.
   - Parsing the model reply: plain JSON, JSON in code fences, JSON with trailing text, a missing or empty Name (no Caption), more than three Synonyms (truncated), malformed text (no Caption).
   - Building the Caption document from a Caption.
@@ -154,7 +152,6 @@ A good test checks external behaviour through a seam, with expectations worked o
 ## Out of Scope
 
 - Showing Synonyms, Attributes or Use anywhere in the API or the frontend.
-- Backfilling Captions for existing Scenes.
 - A relevance threshold, a Low-confidence Match, or any absolute notion of "no good Match".
 - Choosing K per Query in the UI or the API.
 - External VLM or embedding APIs.

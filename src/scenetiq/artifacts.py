@@ -4,7 +4,7 @@ Files:
     ``points.ply``: binary little-endian PLY with float x/y/z and uchar r/g/b.
     ``instance_ids.bin``: little-endian int32 per point, same order as the PLY.
     ``instances.json``: id, centroid, bbox_min, bbox_max and Caption (or null) of every
-        Instance. Scenes stored before Captioning have no ``caption`` key.
+        Instance.
     ``embeddings.npy``: ``(K, D)`` float32 image embeddings, row ``i`` belongs to
         ``instances.json[i]``.
     ``caption_embeddings.npy``: ``(K, D)`` float32 Caption embeddings aligned the same way,
@@ -97,7 +97,7 @@ def load_instances(directory: Path) -> list[Instance]:
     caption_embeddings = np.load(cap_path) if cap_path.exists() else None
     instances = []
     for i, row in enumerate(rows):
-        caption = _caption_from_json(row.get("caption"))
+        caption = _caption_from_json(row["caption"])
         instances.append(
             Instance(
                 instance_id=int(row["instance_id"]),

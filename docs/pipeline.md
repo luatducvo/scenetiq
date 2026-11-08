@@ -155,7 +155,7 @@ Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red 
 2. Xếp hạng mọi Instance theo cosine với vector ảnh, và xếp hạng các Instance có Caption theo cosine với vector Caption.
 3. Gộp hai bảng bằng Reciprocal Rank Fusion: mỗi bảng cộng `1 / (rrf_k + hạng)`, với `rrf_k = 60`. Instance không có Caption chỉ có phần của bảng ảnh.
 4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score` và `caption_score` (cosine thô) để debug.
-5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene lưu trước khi có Captioning chỉ xếp theo ảnh.
+5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene không Instance nào có Caption thì chỉ xếp theo ảnh.
 
 Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box.
 

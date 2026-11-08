@@ -1,4 +1,3 @@
-import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -63,23 +62,6 @@ def test_a_caption_lifts_an_instance_its_image_ranks_lower(
         None,
     ]
     assert [m["image_score"] for m in result["matches"]] == pytest.approx([0.3, 0.1, 0.5], abs=1e-3)
-
-
-def test_a_scene_stored_before_captions_is_ranked_by_image_alone(client: TestClient):
-    scene = _ready_scene(client)
-    directory = client.app.state.store.reconstruction_dir(scene)  # type: ignore[attr-defined]
-    rows = json.loads((directory / "instances.json").read_text())
-    for row in rows:
-        del row["caption"]
-    (directory / "instances.json").write_text(json.dumps(rows))
-    (directory / "caption_embeddings.npy").unlink()
-
-    result = _query(client, scene, "wooden thing")
-    # Image ranking alone: lamp first, normalised over one channel.
-    assert result["matches"] == [
-        {"instance_id": 2, "score": 1.0, "image_score": pytest.approx(0.5, abs=1e-3),
-         "caption_score": None}
-    ]  # fmt: skip
 
 
 def test_matches_are_the_top_k_ranked_by_fused_rank(

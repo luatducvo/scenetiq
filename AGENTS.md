@@ -51,14 +51,14 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
   - `point_level=True` is broken upstream and would allocate N×N matrices, so always pass primitive ids.
   - The mask label map is `uint8`, so the Masking stage caps Masks at 255 per View.
 - **Matches are top-K by Reciprocal Rank Fusion, with no threshold** (ADR 0008). A Match's score is the fused value divided by its maximum, `rankings / (rrf_k + 1)`, so it is relative to one Query and says nothing absolute. Do not reintroduce a relevance threshold or a Low-confidence Match.
-  - An Instance without a Caption gets only its image rank. A Reconstruction with no Captions (including Scenes stored before Captioning) is normalised over one ranking.
+  - An Instance without a Caption gets only its image rank. A Reconstruction where no Instance got a Caption is normalised over one ranking.
   - `query_top_k`, `rrf_k` and the Captioning defaults have not been validated against ground truth, and the repo has no tool that measures them.
 - **Configuration** lives only in `scenetiq.config`: every default, including the stage Options. Add a new setting there, and pass it to its stage in `server.build_components`. The notebook's `CONFIG` cell overrides it through `SCENETIQ_CONFIG`; only the token travels separately.
 - **GPU memory:** DA3, SAM2 and Qwen3-VL leave the GPU when their stage ends, also on failure (`RealPipeline` calls `Captioner.release()` in a `finally`). SigLIP2 and Qwen3-Embedding stay for Queries, so their loads take a lock (Queries and the job run on different threads). One instance of each is shared by the Pipeline and the API: build them once in `server.build_components`.
   - A stage's output must hold no GPU tensors, or releasing its model frees nothing.
   - Each job logs peak VRAM per stage through `scenetiq.gpu`.
 - **View limits apply to uploaded photos.** Nothing checks the View count against GPU memory: DA3 takes every View left after the View stride in one forward pass, so an oversized Capture fails with OOM.
-- **Up is −Y in every Reconstruction** (ADR 0007), so "above" means a smaller y. A Scene whose Views gave no consensus stays in DA3's frame, and Scenes stored before the Aligning stage were never rotated.
+- **Up is −Y in every Reconstruction** (ADR 0007), so "above" means a smaller y. A Scene whose Views gave no consensus stays in DA3's frame.
 - **GeoCalib's `gravity.vec3d` points up, not down,** despite its name: it is `(0, -1, 0)` for a level camera. It follows a photo's roll only to about ±45°; beyond that it still answers, but wrongly (measured on one photo: 90° gave −15.5°, 180° gave −0.1°). Consensus does not catch this if every View is rolled the same way.
 - **Nothing applies EXIF orientation.** DA3, the Embedding stage and the Captioning stage read a photo's raw pixels with `Image.open`, so a portrait photo stored as landscape plus an EXIF flag reaches every stage sideways.
 - **Stored Scenes keep the embeddings of the models that built them.** Changing `siglip.model_id` or `caption_embedding.model_id` makes older Scenes rank wrongly, without an error.

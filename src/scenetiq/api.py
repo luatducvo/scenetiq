@@ -217,7 +217,7 @@ def create_app(
         if not text:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
         instances = load_instances(directory)
-        # Scenes without Captions (stored before Captioning) never load the Caption encoder.
+        # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
         captioned = any(inst.caption_embedding is not None for inst in instances)
         try:
             matches = run_query(
