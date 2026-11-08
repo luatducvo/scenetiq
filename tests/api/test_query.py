@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from scenetiq.artifacts import decode_ply
 from scenetiq.config import Settings
 from scenetiq.domain import Reconstruction
-from scenetiq.fakes import FakePipeline, fake_reconstruction
+from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, fake_reconstruction
 
 from .conftest import AUTH, TOKEN, upload, wait_for_job
 
@@ -208,3 +208,35 @@ def test_instances_of_a_scene_without_captions_have_no_name(
     scene = _ready_scene(client)
     instances = client.get(f"/scenes/{scene}/instances", headers=AUTH).json()
     assert [i["name"] for i in instances] == [None, None, None]
+
+
+class _CountingCaptionEncoder(FakeCaptionEncoder):
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def encode_query(self, text: str):
+        self.queries.append(text)
+        return super().encode_query(text)
+
+
+def test_a_scene_without_captions_never_uses_the_caption_encoder(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    counting = _CountingCaptionEncoder()
+    rec = fake_reconstruction(with_captions=False)
+    client = make_client(
+        settings=_settings(tmp_path),
+        pipeline=FakePipeline(reconstruction=rec),
+        caption_encoder=counting,
+    )
+    scene = _ready_scene(client)
+    assert [m["instance_id"] for m in _query(client, scene, "lamp")["matches"]] == [2]
+    assert counting.queries == []
+
+
+def test_a_scene_with_captions_encodes_the_query_for_them(make_client: Callable[..., TestClient]):
+    counting = _CountingCaptionEncoder()
+    client = make_client(caption_encoder=counting)
+    scene = _ready_scene(client)
+    _query(client, scene, "table")
+    assert counting.queries == ["table"]

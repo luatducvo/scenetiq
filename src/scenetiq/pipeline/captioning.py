@@ -17,7 +17,7 @@ import numpy.typing as npt
 
 from scenetiq.config import CaptioningOptions
 from scenetiq.domain import Camera, Caption
-from scenetiq.pipeline.embedding import ViewPlans, crop_box
+from scenetiq.pipeline.embedding import ViewPlans, crop_box, photo_pixels
 
 CAPTIONING_LOGGER = "scenetiq.captioning"
 """Logger of the per-job Captioning summary; ``colab_logging.json`` lets it through."""
@@ -159,22 +159,12 @@ def caption_instances(
     Returns:
         Instance id -> Caption, for the Instances whose reply had a usable Name.
     """
-    from PIL import Image
-
     opts = options or CaptioningOptions()
     chosen = {iid: plan[: opts.views_per_instance] for iid, plan in plans.items() if plan}
     crops: dict[int, list[tuple[int, Any]]] = {iid: [] for iid in chosen}
-    for vi in sorted({p.view_index for plan in chosen.values() for p in plan}):
-        cam = cameras[vi]
-        with Image.open(image_paths[vi]) as img:
-            photo = img.convert("RGB")
-        sx, sy = photo.width / cam.width, photo.height / cam.height
-        for iid, plan in chosen.items():
-            for rank, p in enumerate(plan):
-                if p.view_index == vi:
-                    pu, pv = (p.u * sx).astype(np.int64), (p.v * sy).astype(np.int64)
-                    crop = boxed_crop(photo, pu, pv, opts.context_expand, BOX_COLOR)
-                    crops[iid].append((rank, crop))
+    for seen in photo_pixels(chosen, image_paths, cameras):
+        crop = boxed_crop(seen.photo, seen.u, seen.v, opts.context_expand, BOX_COLOR)
+        crops[seen.instance_id].append((seen.rank, crop))
 
     captions: dict[int, Caption] = {}
     for iid, ordered in crops.items():

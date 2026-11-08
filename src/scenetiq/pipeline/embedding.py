@@ -6,9 +6,9 @@ with SigLIP2, and average them into one L2-normalised embedding.
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import NamedTuple, Protocol
+from typing import Any, NamedTuple, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -137,6 +137,52 @@ def plan_views(
     return plans
 
 
+class PhotoPixels(NamedTuple):
+    """One planned View of an Instance, with its pixels in the original photo.
+
+    Attributes:
+        instance_id: The Instance.
+        rank: Position of the View in the Instance's plan, 0 for the best.
+        photo: The View's original photo as a PIL RGB image.
+        u: Column of every visible point, at the photo's resolution.
+        v: Row of every visible point, at the photo's resolution.
+    """
+
+    instance_id: int
+    rank: int
+    photo: Any
+    u: npt.NDArray[np.int64]
+    v: npt.NDArray[np.int64]
+
+
+def photo_pixels(
+    plans: ViewPlans, image_paths: Sequence[Path], cameras: Sequence[Camera]
+) -> Iterator[PhotoPixels]:
+    """Yield every planned View of every Instance with its pixels scaled to the photo.
+
+    Each photo is opened once, in View order, so the stages that crop Instances from
+    full-resolution photos never hold more than one in memory.
+
+    Args:
+        plans: The Views chosen for every Instance, with pixels at the depth-map resolution.
+        image_paths: Original photo of every View, in View order.
+        cameras: Camera of every View; its size is the depth-map resolution.
+    """
+    from PIL import Image
+
+    for vi in sorted({p.view_index for plan in plans.values() for p in plan}):
+        cam = cameras[vi]
+        with Image.open(image_paths[vi]) as img:
+            photo = img.convert("RGB")
+        sx, sy = photo.width / cam.width, photo.height / cam.height
+        for iid, plan in plans.items():
+            for rank, p in enumerate(plan):
+                if p.view_index == vi:
+                    pu = (p.u * sx).astype(np.int64)
+                    pv = (p.v * sy).astype(np.int64)
+                    yield PhotoPixels(iid, rank, photo, pu, pv)
+
+
 def embed_instances(
     plans: ViewPlans,
     view_data: ViewData,
@@ -159,27 +205,16 @@ def embed_instances(
     Returns:
         Instance id -> L2-normalised embedding.
     """
-    from PIL import Image
-
     opts = options or EmbeddingOptions()
 
     crops: list = []
     owners: list[int] = []
-    for vi in sorted({vi for plan in plans.values() for vi, _, _ in plan}):
-        cam = view_data.cameras[vi]
-        with Image.open(image_paths[vi]) as img:
-            photo = img.convert("RGB")
-        sx, sy = photo.width / cam.width, photo.height / cam.height
-        for iid, plan in plans.items():
-            for pvi, u, v in plan:
-                if pvi != vi:
-                    continue
-                pu = (u * sx).astype(np.int64)
-                pv = (v * sy).astype(np.int64)
-                for expand in opts.expansions:
-                    box = crop_box(pu, pv, expand, photo.width, photo.height, min_size=16)
-                    crops.append(photo.crop(box))
-                    owners.append(iid)
+    for seen in photo_pixels(plans, image_paths, view_data.cameras):
+        photo = seen.photo
+        for expand in opts.expansions:
+            box = crop_box(seen.u, seen.v, expand, photo.width, photo.height, min_size=16)
+            crops.append(photo.crop(box))
+            owners.append(seen.instance_id)
 
     if not crops:
         return {}

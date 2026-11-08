@@ -12,7 +12,14 @@ from scenetiq.config import (
     MergingOptions,
     SuperpointOptions,
 )
-from scenetiq.domain import CaptionEncoder, Capture, Reconstruction, Stage, StageCallback
+from scenetiq.domain import (
+    CaptionEncoder,
+    Capture,
+    EmbeddedCaption,
+    Reconstruction,
+    Stage,
+    StageCallback,
+)
 from scenetiq.geometry import build_instances
 from scenetiq.pipeline.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
 from scenetiq.pipeline.captioning import Captioner, caption_document, caption_instances
@@ -157,7 +164,9 @@ class RealPipeline:
             documents = self.caption_encoder.encode_documents(
                 [caption_document(captions[iid]) for iid in captioned]
             )
-        caption_data = {iid: (captions[iid], documents[row]) for row, iid in enumerate(captioned)}
+        caption_data = {
+            iid: EmbeddedCaption(captions[iid], documents[row]) for row, iid in enumerate(captioned)
+        }
 
         return Reconstruction(
             points=points,

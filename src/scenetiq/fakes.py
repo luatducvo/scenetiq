@@ -13,6 +13,7 @@ import numpy as np
 from scenetiq.domain import (
     Caption,
     Capture,
+    EmbeddedCaption,
     FloatArray,
     Reconstruction,
     Stage,
@@ -51,12 +52,12 @@ FAKE_TEXT_EMBEDDINGS: dict[str, FloatArray] = {
 UNKNOWN_TEXT_EMBEDDING = l2_normalize([0.3, 0, 0, 0, 0, 0, 0, 0.9539])
 """Image-space embedding of any other Query text: weakly resembles the chair (0.3)."""
 
-FAKE_CAPTIONS: dict[int, tuple[Caption, FloatArray]] = {
-    0: (
+FAKE_CAPTIONS: dict[int, EmbeddedCaption] = {
+    0: EmbeddedCaption(
         Caption("chair", ("seat",), ("red", "fabric"), "sitting"),
         _basis(0, CAPTION_EMBEDDING_DIM),
     ),
-    1: (
+    1: EmbeddedCaption(
         Caption("table", ("desk",), ("wooden",), "putting things on"),
         _basis(1, CAPTION_EMBEDDING_DIM),
     ),

@@ -216,13 +216,16 @@ def create_app(
         text = body.text.strip()
         if not text:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
+        instances = load_instances(directory)
+        # Scenes without Captions (stored before Captioning) never load the Caption encoder.
+        captioned = any(inst.caption_embedding is not None for inst in instances)
         try:
             matches = run_query(
-                load_instances(directory),
+                instances,
                 text_encoder.encode(text),
                 settings.query_top_k,
                 settings.rrf_k,
-                caption_encoder.encode_query(text),
+                caption_encoder.encode_query(text) if captioned else None,
             )
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

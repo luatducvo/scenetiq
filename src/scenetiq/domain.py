@@ -81,6 +81,19 @@ class Caption:
     use: str = ""
 
 
+@dataclass(frozen=True, eq=False)
+class EmbeddedCaption:
+    """A Caption together with its L2-normalised embedding, as the Captioning stage outputs it.
+
+    Attributes:
+        caption: The Caption.
+        embedding: Embedding of the Caption's document in the Caption encoder's space.
+    """
+
+    caption: Caption
+    embedding: FloatArray
+
+
 @dataclass
 class Instance:
     """One distinct physical object in a Reconstruction.
@@ -103,6 +116,11 @@ class Instance:
     embedding: FloatArray | None = None
     caption: Caption | None = None
     caption_embedding: FloatArray | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse a Caption embedding that has no Caption."""
+        if self.caption_embedding is not None and self.caption is None:
+            raise ValueError(f"Instance {self.instance_id} has a Caption embedding but no Caption")
 
 
 @dataclass

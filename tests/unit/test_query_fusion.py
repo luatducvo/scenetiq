@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Instance
+from scenetiq.domain import Caption, Instance
 from scenetiq.query import rank_by_similarity, rrf_scores, run_query
 
 
@@ -13,6 +13,7 @@ def _instance(iid: int, image: list[float], caption: list[float] | None = None) 
         bbox_min=zero,
         bbox_max=zero,
         embedding=np.asarray(image, dtype=np.float32),
+        caption=None if caption is None else Caption(f"thing {iid}"),
         caption_embedding=None if caption is None else np.asarray(caption, dtype=np.float32),
     )
 

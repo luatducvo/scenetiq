@@ -151,7 +151,7 @@ Dữ liệu nằm ở `/content/scenetiq-data`, nên **mất khi runtime Colab k
 
 Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red chair"`:
 
-1. Câu được chuyển thành chữ thường, bọc thành `"This is a photo of red chair."` rồi mã hóa bằng SigLIP2. Câu gốc cũng được mã hóa bằng Qwen3-Embedding, có thêm query instruction.
+1. Câu được chuyển thành chữ thường, bọc thành `"This is a photo of red chair."` rồi mã hóa bằng SigLIP2. Nếu Scene có Caption, câu gốc cũng được mã hóa bằng Qwen3-Embedding, có thêm query instruction; Scene không có Caption thì không cần nạp model này.
 2. Xếp hạng mọi Instance theo cosine với vector ảnh, và xếp hạng các Instance có Caption theo cosine với vector Caption.
 3. Gộp hai bảng bằng Reciprocal Rank Fusion: mỗi bảng cộng `1 / (rrf_k + hạng)`, với `rrf_k = 60`. Instance không có Caption chỉ có phần của bảng ảnh.
 4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score` và `caption_score` (cosine thô) để debug.
