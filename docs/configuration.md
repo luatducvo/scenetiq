@@ -182,14 +182,16 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 
 ### `spatial`: Queries with a Relation
 
-A Query such as "the chair near the window" is split into objects and Relations (ADR 0009). Each object's phrase is ranked like a plain Query, its first candidates are kept, and the combination that best satisfies the Relations decides the Matches. A Query without a Relation ignores these settings. On the real backend no Query has a Relation yet, because the parser on the vision-language model does not exist.
+A Query such as "the chair near the window" is split into objects and Relations (ADR 0009). Each object's phrase is ranked like a plain Query and its first Instances are shortlisted. A candidate margin then drops the shortlisted Instances that fit the phrase much worse than the best one: an Instance stays a candidate when, on the Caption channel (its best-matching Description) or on the image channel, its similarity is no more than that channel's margin below the best among the object's shortlist. An Instance without a Caption is judged on the image channel alone. The best of each channel always stays, so every object keeps at least one candidate, and a spatial Query can return fewer than `query_top_k` Matches but always at least one. The margin is not a threshold on Matches. The combination of candidates that best satisfies the Relations decides the Matches. A Query without a Relation ignores these settings. On the real backend no Query has a Relation yet, because the parser on the vision-language model does not exist.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `candidates_per_object` | `5` | M: how many Instances of each object's phrase ranking are its candidates. The wanted object takes `query_top_k` when that is larger. A larger value lets a lower-ranked Instance win through the Relations. |
+| `candidates_per_object` | `5` | M: how many Instances of each object's phrase ranking are shortlisted. The wanted object takes `query_top_k` when that is larger. A larger value lets a lower-ranked Instance win through the Relations. |
+| `caption_margin` | `0.1` | How far below the best Caption similarity of the shortlist an Instance may be and still pass on the Caption channel. Wider lets an Instance that fits the phrase worse stand in for the object; `0` keeps only the best (and its ties). |
+| `image_margin` | `0.05` | The same for the image similarity. Image similarities sit in a narrow range, so this channel is the likelier to let a poor Instance through: narrow it first when a Match is not what the phrase names. |
 | `falloff` | `0.1` | Fraction of the Scene extent (the diagonal of the box around every Instance) at which a distance-based Relation, such as near, drops to `1/e`; for between, the fraction of the distance between its two Anchors. Smaller makes the Relations stricter. |
 
-Neither default has been validated on real Scenes.
+No default has been validated on real Scenes.
 
 ## Invalid configuration
 
@@ -207,6 +209,7 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Negative prompt word limit | `{"siglip": {"prompt_max_words": -1}}` | `siglip.prompt_max_words must not be negative, got -1` |
 | No candidates per object | `{"spatial": {"candidates_per_object": 0}}` | `spatial.candidates_per_object must be at least 1, got 0` |
 | Falloff not positive | `{"spatial": {"falloff": 0}}` | `spatial.falloff must be positive, got 0.0` |
+| Negative candidate margin | `{"spatial": {"image_margin": -0.01}}` | `spatial.image_margin must not be negative, got -0.01` (likewise `spatial.caption_margin`) |
 | Removed setting | `{"match_threshold": 0.5}` | `unknown config key: match_threshold` |
 
 Other values are not range-checked, so `{"captioning": {"max_new_tokens": 1}}` starts normally and then leaves every Instance without a Caption.

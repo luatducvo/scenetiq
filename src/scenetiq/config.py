@@ -221,18 +221,25 @@ class CaptionEmbeddingOptions:
 
 @dataclass(frozen=True)
 class SpatialOptions:
-    """Settings of Queries with a Relation (ADR 0009). Neither default is validated.
+    """Settings of Queries with a Relation (ADR 0009). No default is validated.
 
     Attributes:
         candidates_per_object: M, how many Instances of each object's phrase ranking are
-            its candidates. The wanted object takes ``query_top_k`` when that is larger.
+            shortlisted. The wanted object takes ``query_top_k`` when that is larger.
         falloff: The fraction of the Scene extent at which a distance-based Relation's
             score drops to ``1/e``; for between, the fraction of the distance between its
             two Anchors.
+        caption_margin: How far a shortlisted Instance's best Description similarity may
+            be below the best among the object's shortlist and still pass.
+        image_margin: How far its image similarity may be below the best among the
+            object's shortlist and still pass. A shortlisted Instance stays a candidate
+            when it passes on either channel. Neither margin is a threshold on Matches.
     """
 
     candidates_per_object: int = 5
     falloff: float = 0.1
+    caption_margin: float = 0.1
+    image_margin: float = 0.05
 
 
 @dataclass(frozen=True)
@@ -263,8 +270,8 @@ class Settings:
 
     Raises:
         ValueError: If ``min_views`` is below 1 or above ``max_views``, ``view_stride``
-            or ``spatial.candidates_per_object`` is below 1, or ``spatial.falloff`` is not
-            positive.
+            or ``spatial.candidates_per_object`` is below 1, ``spatial.falloff`` is not
+            positive, or ``spatial.caption_margin`` or ``spatial.image_margin`` is negative.
     """
 
     storage_root: Path
@@ -315,6 +322,10 @@ class Settings:
             )
         if not self.spatial.falloff > 0:
             raise ValueError(f"spatial.falloff must be positive, got {self.spatial.falloff}")
+        for name in ("caption_margin", "image_margin"):
+            margin = getattr(self.spatial, name)
+            if not margin >= 0:
+                raise ValueError(f"spatial.{name} must not be negative, got {margin}")
 
     @classmethod
     def from_overrides(cls, token: str, overrides: Mapping[str, Any]) -> Settings:

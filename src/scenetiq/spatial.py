@@ -1,10 +1,11 @@
 """Spatial reasoning: Relations scored on stored geometry and solved over candidates (ADR 0009).
 
-Each object of a parsed Query is ranked like a Query of its own, by its English phrase, and
-the first Instances of that ranking are its candidates. The solver scores every assignment of
-one candidate to each object, with no Instance used twice, as the product of its constraints'
-scores. Every Relation is a pure function of axis-aligned bounding boxes and centroids in the
-Reconstruction's frame, where up is -Y (ADR 0007).
+Each object of a parsed Query is ranked like a Query of its own, by its English phrase. The
+first Instances of that ranking are shortlisted, and those within the candidate margin of the
+best are its candidates. The solver scores every assignment of one candidate to each object,
+with no Instance used twice, as the product of its constraints' scores. Every Relation is a
+pure function of axis-aligned bounding boxes and centroids in the Reconstruction's frame, where
+up is -Y (ADR 0007).
 """
 
 from __future__ import annotations
@@ -436,6 +437,45 @@ def _id(assignment: Assignment, object_id: str) -> int:
     return assignment.instances[object_id].instance_id
 
 
+def apply_candidate_margin(
+    shortlist: Sequence[Match], caption_margin: float, image_margin: float
+) -> list[Match]:
+    """Drop the shortlisted Instances that fit an object's phrase much worse than the best.
+
+    On each channel, an Instance passes when its similarity is no more than the channel's
+    margin below the highest similarity on that channel among ``shortlist``. The channels
+    are the cosine of the best-matching Description, among the Instances that have a
+    Caption, and the image similarity. An Instance stays when it passes on at least one
+    channel, so one without a Caption is judged on the image channel alone. The margin is
+    relative: the best Instance of each channel always stays, and there is no absolute
+    similarity threshold. It limits which Instances may stand in for an object of a spatial
+    Query; it is not a threshold on Matches (ADR 0009).
+
+    Args:
+        shortlist: The shortlisted Instances of one object, in the fused order of its
+            phrase ranking.
+        caption_margin: How far below the best Caption similarity an Instance may be.
+        image_margin: How far below the best image similarity an Instance may be.
+
+    Returns:
+        The Instances that stay candidates, in their fused order; empty only when
+        ``shortlist`` is.
+    """
+    if not shortlist:
+        return []
+    image_floor = max(m.image_score for m in shortlist) - image_margin
+    captions = [m.caption_score for m in shortlist if m.caption_score is not None]
+    caption_floor = max(captions) - caption_margin if captions else None
+
+    def passes(m: Match) -> bool:
+        if m.image_score >= image_floor:
+            return True
+        caption = m.caption_score
+        return caption_floor is not None and caption is not None and caption >= caption_floor
+
+    return [m for m in shortlist if passes(m)]
+
+
 PhraseRanking = Callable[[str, int], list[Match]]
 """Ranks every Instance against a phrase and returns the first ``k`` Matches, best first."""
 
@@ -449,18 +489,21 @@ def run_spatial_query(
 ) -> list[Match] | None:
     """Answer a parsed Query that has constraints.
 
-    Each object's candidates are the first ``options.candidates_per_object`` Instances of
-    its phrase's fused ranking; the target shortlists ``top_k`` when that is larger.
+    Each object shortlists the first ``options.candidates_per_object`` Instances of its
+    phrase's fused ranking; the target shortlists ``top_k`` when that is larger. The
+    candidate margin (:func:`apply_candidate_margin`) then drops the shortlisted Instances
+    that fit the phrase much worse than the best, and the rest are the object's candidates.
 
     Args:
         instances: Every Instance of the Reconstruction.
         parsed: The parsed Query; its constraints are solved.
         rank_phrase: The plain Query ranking, applied to one object's phrase.
         top_k: How many Matches to return at most.
-        options: The candidate count and the falloff fraction.
+        options: The candidate count, the candidate margins and the falloff fraction.
 
     Returns:
-        Up to ``top_k`` Matches, ordered by assignment score. A Match's ``score`` is that
+        Up to ``top_k`` Matches, ordered by assignment score: at most one per candidate of
+        the target, so possibly fewer than ``top_k``. A Match's ``score`` is that
         score; its similarities and Aspect are those of the target's phrase, and its Anchors
         are the other objects of its assignment. ``None`` when no assignment is valid.
 
@@ -478,9 +521,14 @@ def run_spatial_query(
     for o in parsed.objects:
         depth[o.phrase] = max(depth.get(o.phrase, 0), wanted[o.object_id])
     ranked = {phrase: rank_phrase(phrase, k) for phrase, k in depth.items()}
-    shortlist = {o.object_id: ranked[o.phrase][: wanted[o.object_id]] for o in parsed.objects}
+    candidates = {
+        o.object_id: apply_candidate_margin(
+            ranked[o.phrase][: wanted[o.object_id]], options.caption_margin, options.image_margin
+        )
+        for o in parsed.objects
+    }
     assignments = solve(
-        {i: [by_id[m.instance_id] for m in ms] for i, ms in shortlist.items()},
+        {i: [by_id[m.instance_id] for m in ms] for i, ms in candidates.items()},
         parsed.constraints,
         parsed.target,
         scene_extent(instances),
@@ -488,7 +536,7 @@ def run_spatial_query(
     )
     if not assignments:
         return None
-    phrase_match = {m.instance_id: m for m in shortlist[parsed.target]}
+    phrase_match = {m.instance_id: m for m in candidates[parsed.target]}
     matches = []
     for a in assignments[:top_k]:
         m = phrase_match[_id(a, parsed.target)]

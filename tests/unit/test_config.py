@@ -169,9 +169,19 @@ def test_spatial_queries_take_five_candidates_per_object_and_a_tenth_of_the_exte
     assert overridden.spatial.falloff == 0.1
 
 
+def test_candidates_may_be_a_tenth_below_on_captions_and_a_twentieth_below_on_images():
+    spatial = Settings.from_overrides("tok", {}).spatial
+    assert (spatial.caption_margin, spatial.image_margin) == (0.1, 0.05)
+    overridden = Settings.from_overrides("tok", {"spatial": {"image_margin": 0}}).spatial
+    assert (overridden.caption_margin, overridden.image_margin) == (0.1, 0.0)
+
+
 @pytest.mark.parametrize(
     ("overrides", "named"),
     [
+        ({"spatial": {"caption_margin": -0.01}}, "spatial.caption_margin"),
+        ({"spatial": {"image_margin": -0.01}}, "spatial.image_margin"),
+        ({"spatial": {"image_margin": "wide"}}, "spatial.image_margin"),
         ({"spatial": {"candidates_per_object": 0}}, "spatial.candidates_per_object"),
         ({"spatial": {"falloff": 0}}, "spatial.falloff"),
         ({"spatial": {"falloff": -0.1}}, "spatial.falloff"),
