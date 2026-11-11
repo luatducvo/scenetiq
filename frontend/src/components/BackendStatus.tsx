@@ -1,61 +1,47 @@
 import { useEffect, useState } from 'react'
 import { pingBackend, type BackendConfig, type BackendHealth } from '../api'
 
-interface PingResult {
-  health: BackendHealth
-  checkedAt: string
+interface Props {
+  config: BackendConfig
 }
 
-function describe(health: BackendHealth): { tone: string; text: string } {
-  switch (health.state) {
-    case 'online':
-      return {
-        tone: 'online',
-        text: `Online · ${health.latencyMs} ms${health.jobRunning ? ' · job running' : ''}`,
-      }
-    case 'unauthorized':
-      return { tone: 'offline', text: 'Invalid token' }
-    case 'offline':
-      return { tone: 'offline', text: `Offline · ${health.reason}` }
-  }
-}
-
-/** Show the result of the latest ping: one when the page loads, then only on request. */
-export function BackendStatus({ config }: { config: BackendConfig }) {
-  const [result, setResult] = useState<PingResult | null>(null)
-  const [pinging, setPinging] = useState(true)
-  const [manualPings, setManualPings] = useState(0)
+export function BackendStatus({ config }: Props) {
+  const [health, setHealth] = useState<BackendHealth | null>(null)
+  const [pinging, setPinging] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    pingBackend(config).then((health) => {
-      if (cancelled) return
-      setResult({ health, checkedAt: new Date().toLocaleTimeString() })
-      setPinging(false)
-    })
+    let timer: number | undefined
+
+    async function probe() {
+      setPinging(true)
+      try {
+        const result = await pingBackend(config)
+        if (!cancelled) setHealth(result)
+      } catch {
+        if (!cancelled) setHealth({ state: 'offline', reason: 'Unreachable' })
+      } finally {
+        if (!cancelled) setPinging(false)
+      }
+      timer = window.setTimeout(probe, 10000)
+    }
+
+    probe()
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
-  }, [config, manualPings])
+  }, [config])
 
-  function pingNow() {
-    setPinging(true)
-    setManualPings((n) => n + 1)
-  }
+  const isOnline = health?.state === 'online'
+  const isChecking = !health || pinging
+  const statusClass = isChecking ? 'checking' : isOnline ? 'online' : 'offline'
+  const label = isChecking && !health ? 'Connecting' : isOnline ? 'Connected' : 'Offline'
 
-  const { tone, text } = result
-    ? describe(result.health)
-    : { tone: 'unknown', text: 'Checking backend…' }
   return (
-    <div className="backend-status">
-      <span className={`status-dot ${tone}`} aria-hidden="true" />
-      <span role="status">
-        {text}
-        {result && ` · checked ${result.checkedAt}`}
-      </span>
-      <button type="button" onClick={pingNow} disabled={pinging}>
-        {pinging ? 'Pinging…' : 'Ping'}
-      </button>
+    <div className={`backend-status status-${statusClass}`} title={`Backend: ${config.url}`}>
+      <span className={`status-dot ${statusClass}`} />
+      <span className="status-label">{label}</span>
     </div>
   )
 }

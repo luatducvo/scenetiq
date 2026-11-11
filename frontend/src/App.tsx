@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react'
 import { BackendStatus } from './components/BackendStatus'
 import { JobProgress } from './components/JobProgress'
+import { Logo } from './components/Logo'
 import { SceneList } from './components/SceneList'
 import { SceneViewer } from './components/SceneViewer'
 import { UploadForm } from './components/UploadForm'
 import { backendConfig as config } from './config'
+import iconPlusSvg from './assets/icons/icon-plus.svg'
 
 type Screen =
   | { kind: 'scenes' }
@@ -17,17 +19,24 @@ export default function App() {
 
   const openScene = useCallback((sceneId: string) => setScreen({ kind: 'scene', sceneId }), [])
   const openJob = useCallback((jobId: string) => setScreen({ kind: 'job', jobId }), [])
+  const openScenes = useCallback(() => setScreen({ kind: 'scenes' }), [])
+  const openUpload = useCallback(() => setScreen({ kind: 'upload' }), [])
 
   if (!config.url || !config.token) {
     return (
-      <div className="app">
-        <div className="panel">
-          <h2>Backend not configured</h2>
-          <p>
-            Set <code>VITE_BACKEND_URL</code> and <code>VITE_BACKEND_TOKEN</code> in{' '}
-            <code>frontend/.env</code>, then restart <code>npm run dev</code>.
-          </p>
-        </div>
+      <div className="app-shell">
+        <header className="app-bar">
+          <Logo />
+        </header>
+        <main className="app-main">
+          <div className="config-warning-panel">
+            <h2>Backend not configured</h2>
+            <p>
+              Set <code>VITE_BACKEND_URL</code> and <code>VITE_BACKEND_TOKEN</code> in{' '}
+              <code>frontend/.env</code>, then restart <code>npm run dev</code>.
+            </p>
+          </div>
+        </main>
       </div>
     )
   }
@@ -37,28 +46,48 @@ export default function App() {
       <SceneViewer
         config={config}
         sceneId={screen.sceneId}
-        onBack={() => setScreen({ kind: 'scenes' })}
+        onBack={openScenes}
       />
     )
   }
 
   return (
-    <div className="app">
-      <header>
-        <h1>SceneTIQ</h1>
-        <nav>
+    <div className="app-shell">
+      <header className="app-bar">
+        <Logo onClick={openScenes} />
+        <div className="app-bar-actions">
           <BackendStatus config={config} />
-          <button onClick={() => setScreen({ kind: 'scenes' })}>Scenes</button>
-          <button onClick={() => setScreen({ kind: 'upload' })}>New Scene</button>
-        </nav>
+          {screen.kind === 'scenes' && (
+            <button className="btn btn-primary app-bar-new-btn" onClick={openUpload}>
+              <img src={iconPlusSvg} alt="" width={18} height={18} />
+              <span>New scene</span>
+            </button>
+          )}
+        </div>
       </header>
-      <main>
+      <main className="app-main">
         {screen.kind === 'scenes' && (
-          <SceneList config={config} onOpen={openScene} onOpenJob={openJob} />
+          <SceneList
+            config={config}
+            onOpen={openScene}
+            onOpenJob={openJob}
+            onNewScene={openUpload}
+          />
         )}
-        {screen.kind === 'upload' && <UploadForm config={config} onStarted={openJob} />}
+        {screen.kind === 'upload' && (
+          <UploadForm
+            config={config}
+            onStarted={(jobId) => openJob(jobId)}
+            onCancel={openScenes}
+          />
+        )}
         {screen.kind === 'job' && (
-          <JobProgress config={config} jobId={screen.jobId} onSucceeded={openScene} />
+          <JobProgress
+            config={config}
+            jobId={screen.jobId}
+            onSucceeded={openScene}
+            onBack={openScenes}
+          />
         )}
       </main>
     </div>
