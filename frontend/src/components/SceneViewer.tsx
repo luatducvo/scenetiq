@@ -1,4 +1,3 @@
-import { Html } from '@react-three/drei'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
@@ -14,15 +13,15 @@ import {
   type QueryResult,
   type SceneSummary,
 } from '../api'
-import { highlightColors, namesColors } from '../highlight'
-import { PointCloudCanvas } from './PointCloudCanvas'
+import { heatmapGradient, highlightColors, namesColors } from '../highlight'
+import { nameAtPoint } from '../hover'
+import { PointCloudCanvas, type PointHit } from './PointCloudCanvas'
 import markSvg from '../assets/icons/mark.svg'
 import iconArrowLeftSvg from '../assets/icons/icon-arrow-left.svg'
 import iconSearchSvg from '../assets/icons/icon-search.svg'
 import iconSlidersSvg from '../assets/icons/icon-sliders.svg'
 import iconMaximizeSvg from '../assets/icons/icon-maximize.svg'
 import iconXSvg from '../assets/icons/icon-x.svg'
-import iconFocusSvg from '../assets/icons/icon-focus.svg'
 
 interface Props {
   config: BackendConfig
@@ -58,10 +57,12 @@ function writePointScale(value: number): void {
   }
 }
 
-const RANK_COLORS = ['#ff5a36', '#ff9f1c', '#ffd166']
-function getRankColor(rank: number): string {
-  return RANK_COLORS[rank] || '#ffd166'
+/** Which Instances hover may name: the given ids, or every Instance when null. */
+interface HoverMode {
+  shown: Set<number> | null
 }
+
+const HEATMAP_GRADIENT = heatmapGradient()
 
 const SUGGESTIONS = ['red chair', 'something to sit on', 'the lamp near the sofa']
 const RERUN_DELAY_MS = 400
@@ -82,7 +83,8 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   const [maxTopK, setMaxTopK] = useState<number | null>(null)
   const [shownText, setShownText] = useState<string | null>(null)
   const [showDisplayOptions, setShowDisplayOptions] = useState(false)
-  const [focusedInstanceId, setFocusedInstanceId] = useState<number | null>(null)
+  /** The point under the pointer, and the hover mode it was picked in (see `hoverable`). */
+  const [hovered, setHovered] = useState<{ hit: PointHit; mode: HoverMode } | null>(null)
 
   useEffect(() => {
     listScenes(config)
@@ -158,35 +160,20 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     scene.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
   }, [scene, result, showNames, named])
 
-  const labels = useMemo(() => {
-    if (!scene || !showNames || result) return []
-    return [...scene.instances.values()]
-      .filter((i) => i.name)
-      .map((i) => ({ id: i.instance_id, name: i.name, at: new THREE.Vector3(...i.centroid) }))
-  }, [scene, showNames, result])
+  /**
+   * Which Instances may be named on hover: every one in the Names view, only the Matched
+   * ones while a Query result is shown, and none otherwise. A new object on every change,
+   * so a point picked in an earlier mode is never named in a later one.
+   */
+  const hoverable = useMemo<HoverMode | undefined>(() => {
+    if (result) return { shown: new Set(result.matches.map((m) => m.instance_id)) }
+    return showNames ? { shown: null } : undefined
+  }, [result, showNames])
 
-  const matchPins = useMemo(() => {
-    if (!scene || !result || result.matches.length === 0) return []
-    return result.matches
-      .map((m, rank) => {
-        const inst = scene.instances.get(m.instance_id)
-        if (!inst || !inst.centroid) return null
-        return {
-          id: m.instance_id,
-          rank: rank + 1,
-          name: inst.name || `Object #${m.instance_id}`,
-          color: getRankColor(rank),
-          at: new THREE.Vector3(...inst.centroid),
-        }
-      })
-      .filter(Boolean) as Array<{
-      id: number
-      rank: number
-      name: string
-      color: string
-      at: THREE.Vector3
-    }>
-  }, [scene, result])
+  const hoverName =
+    scene && hovered && hoverable && hovered.mode === hoverable
+      ? nameAtPoint(hovered.hit.index, scene.instanceIds, scene.instances, hoverable.shown)
+      : null
 
   function toggleFullscreen() {
     const change = fullscreen
@@ -237,7 +224,6 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     setResult(null)
     setShownText(null)
     setText('')
-    setFocusedInstanceId(null)
   }
 
   function changeTopK(k: number) {
@@ -253,26 +239,19 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     <div className="scene-viewer-root" ref={viewerRef}>
       {scene && (
         <div className="viewer-canvas-wrap">
-          <PointCloudCanvas geometry={scene.geometry} pointScale={pointScale}>
-            {labels.map((l) => (
-              <Html key={l.id} position={l.at} center>
-                <div className="scene-label-tag">{l.name}</div>
-              </Html>
-            ))}
-            {matchPins.map((pin) => (
-              <Html key={pin.id} position={pin.at} center>
-                <div
-                  className={`spatial-pin ${focusedInstanceId === pin.id ? 'spatial-pin-focused' : ''}`}
-                  onClick={() => setFocusedInstanceId(pin.id)}
-                >
-                  <span className="spatial-pin-rank" style={{ background: pin.color }}>
-                    {pin.rank}
-                  </span>
-                  <span className="spatial-pin-name">{pin.name}</span>
-                </div>
-              </Html>
-            ))}
-          </PointCloudCanvas>
+          <PointCloudCanvas
+            geometry={scene.geometry}
+            pointScale={pointScale}
+            onPointHover={
+              hoverable && ((hit) => setHovered(hit ? { hit, mode: hoverable } : null))
+            }
+          />
+        </div>
+      )}
+
+      {hoverName && hovered && (
+        <div className="hover-name-tag" style={{ left: hovered.hit.x, top: hovered.hit.y }}>
+          {hoverName}
         </div>
       )}
 
@@ -411,8 +390,8 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
 
             <div className="display-option-toggle-row">
               <div className="toggle-text-wrap">
-                <span className="toggle-title">Show object names</span>
-                <span className="toggle-desc">Label every object in the scene</span>
+                <span className="toggle-title">Instance labels</span>
+                <span className="toggle-desc">Colour each object; hover to see its name</span>
               </div>
               <label className="switch">
                 <input
@@ -427,74 +406,12 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
           </div>
         )}
 
-        {/* Search Results Panel matching Figma node 10:327 */}
-        {result && (
-          <div className="results-panel">
-            <div className="results-header">
-              <h3 className="results-title">
-                {result.matches.length} {result.matches.length === 1 ? 'match' : 'matches'}
-              </h3>
-              <p className="results-subtitle">for “{shownText}”, best first</p>
-            </div>
-
-            <div className="results-list">
-              {result.matches.length === 0 && (
-                <p className="muted results-empty">No objects found matching “{shownText}”.</p>
-              )}
-              {result.matches.map((m, rank) => {
-                const inst = scene?.instances.get(m.instance_id)
-                const name = inst?.name || `Object #${m.instance_id}`
-                const detail = rank === 0 ? 'Best match' : `Score ${(m.score * 100).toFixed(0)}%`
-                const rankColor = getRankColor(rank)
-                const isFocused = focusedInstanceId === m.instance_id
-
-                return (
-                  <div
-                    key={m.instance_id}
-                    className={`match-row ${isFocused ? 'match-row-focused' : ''} ${
-                      rank === 0 ? 'match-row-top' : ''
-                    }`}
-                    onClick={() => setFocusedInstanceId(m.instance_id)}
-                  >
-                    <div className="match-swatch" style={{ background: rankColor }}>
-                      <span className="match-swatch-rank">{rank + 1}</span>
-                    </div>
-                    <div className="match-info">
-                      <span className="match-name">{name}</span>
-                      <span className="match-detail">{detail}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="match-focus-btn"
-                      title="Focus in 3D"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setFocusedInstanceId(m.instance_id)
-                      }}
-                    >
-                      <img src={iconFocusSvg} alt="" width={18} height={18} />
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="results-footer">
-              <button
-                type="button"
-                className="btn-show-more"
-                onClick={() => {
-                  if (topK && maxTopK) {
-                    changeTopK(Math.min(maxTopK, topK + 3))
-                  }
-                }}
-              >
-                Show more results
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={clearSearch}>
-                Clear
-              </button>
-            </div>
+        {/* Bottom-right: heatmap key for a Query result */}
+        {result && result.matches.length > 0 && (
+          <div className="heatmap-legend" aria-label="Match colours, best to lower">
+            <span className="heatmap-legend-text">Best</span>
+            <span className="heatmap-legend-bar" style={{ background: HEATMAP_GRADIENT }} />
+            <span className="heatmap-legend-text">Lower</span>
           </div>
         )}
 

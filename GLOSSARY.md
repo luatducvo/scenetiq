@@ -40,6 +40,7 @@ _Avoid_: Object, segment, mask, cluster
 
 **Caption**:
 What a vision-language model reads from an Instance's Views: a Name, up to three Synonyms, and one Description for each Aspect. Not drawn from a fixed class list. Only the Name is shown to the user.
+The viewer's Names view is titled "Instance labels" on screen; that UI wording is the only exception, and code and docs still say Name and Names view.
 _Avoid_: Label, class, tag, annotation
 
 **Aspect**:

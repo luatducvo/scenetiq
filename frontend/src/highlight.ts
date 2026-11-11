@@ -15,6 +15,17 @@ export function heatmapColor(position: number): [number, number, number] {
 }
 
 /**
+ * The heatmap as a CSS gradient, best (red) on the left to lowest (blue) on the right, for
+ * the colour key. Same scale as {@link heatmapColor}, but in sRGB, as CSS expects.
+ */
+export function heatmapGradient(): string {
+  const stops = [0, 0.25, 0.5, 0.75, 1].map((s) =>
+    new THREE.Color().setHSL(s * COOLEST_HUE, 1, 0.5, THREE.SRGBColorSpace).getStyle(THREE.SRGBColorSpace),
+  )
+  return `linear-gradient(to right, ${stops.join(', ')})`
+}
+
+/**
  * Each Match's heatmap position, stretched over the scores shown: the best Match is 1 and
  * the lowest 0. Scores of one Query are often close together, so a fixed 0-1 scale would
  * give them all one colour. When every score is equal, including a single Match, all are 1.

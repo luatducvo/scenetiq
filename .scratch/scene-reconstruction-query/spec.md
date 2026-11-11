@@ -127,8 +127,8 @@ The user opens a local web app and uploads a Capture of photos of a Scene, of wh
 - The Scene viewer:
   - renders the PLY point cloud and lets the user orbit, pan and zoom
   - has a Query box
-  - highlights the points of the Matched Instances (using the instance id array) and draws their bounding boxes
-  - shows a ranked list of Matches with scores and Caption Names, and draws each Name on its bounding box (ADR 0008)
+  - colours the points of the Matched Instances with a heatmap by rank (using the instance id array), with a colour key
+  - shows a Match's Caption Name beside the pointer on hover (tap on touch screens); there is no Match list (ADR 0008)
 - The mesh is never sent to the frontend.
 
 **Deployment**
