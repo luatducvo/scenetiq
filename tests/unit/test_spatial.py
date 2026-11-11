@@ -10,10 +10,16 @@ from scenetiq.spatial import (
     below,
     between,
     far_from,
+    farthest_from,
+    largest,
+    lowest,
     near,
+    nearest_to,
     on,
     scene_extent,
+    smallest,
     solve,
+    tallest,
     under,
 )
 
@@ -347,11 +353,246 @@ def test_a_relation_receives_the_whole_candidate_set_of_its_subject(
     assert [ctx.anchors for ctx in seen] == [(), ()]
 
 
-@pytest.mark.parametrize("relation", [r for r in Relation if r not in RELATION_SCORES])
-def test_a_relation_without_a_scoring_function_fails_loudly(relation: Relation):
-    anchors = tuple("bc"[: relation.anchor_count])
-    candidates = {"a": [_UNIT]} | {
-        k: [_box(i + 1, [5, 5, 5], [6, 6, 6])] for i, k in enumerate(anchors)
-    }
-    with pytest.raises(UnsupportedRelationError, match=relation.value):
-        solve(candidates, [Constraint(relation, "a", anchors)], "a", 10.0, 0.1)
+def test_every_relation_has_a_scoring_function():
+    assert set(RELATION_SCORES) == set(Relation)
+
+
+def test_a_relation_without_a_scoring_function_fails_loudly(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delitem(RELATION_SCORES, Relation.TALLEST)
+    with pytest.raises(UnsupportedRelationError, match="tallest"):
+        solve({"a": [_UNIT]}, [Constraint(Relation.TALLEST, "a")], "a", 10.0, 0.1)
+
+
+# Ordering Relations score a candidate against the subject's other candidates: ordered by the
+# measure, the first distinct value scores 1, the last 0, and the distinct values between are
+# evenly spaced, so tied candidates share one score.
+
+
+def _cube(iid: int, x: float, side: float) -> Instance:
+    """A cube of ``side`` metres standing on y = 0 (its bottom), at ``x`` along X."""
+    return _box(iid, [x, -side, 0], [x + side, 0, side])
+
+
+_SMALL = _cube(0, 0, 1)  # volume 1
+_MEDIUM = _cube(1, 2, 2)  # volume 8
+_LARGE = _cube(2, 5, 3)  # volume 27
+_SLAB = _box(3, [9, -1, 0], [11, 0, 1])  # 2 x 1 x 1: volume 2
+
+
+def test_a_single_candidate_is_the_largest_and_the_smallest():
+    assert largest(_MEDIUM, [_MEDIUM]) == 1.0
+    assert smallest(_MEDIUM, [_MEDIUM]) == 1.0
+
+
+def test_of_two_candidates_the_bigger_box_is_the_largest():
+    assert largest(_MEDIUM, [_SMALL, _MEDIUM]) == 1.0
+    assert largest(_SMALL, [_SMALL, _MEDIUM]) == 0.0
+
+
+def test_several_candidates_are_evenly_spaced_by_volume():
+    # Volumes 1, 8, 27, 2. Largest first: 27 -> 1, 8 -> 2/3, 2 -> 1/3, 1 -> 0.
+    candidates = [_SMALL, _MEDIUM, _LARGE, _SLAB]
+    assert [largest(c, candidates) for c in candidates] == pytest.approx([0, 2 / 3, 1, 1 / 3])
+    # Smallest first: 1 -> 1, 2 -> 2/3, 8 -> 1/3, 27 -> 0.
+    assert [smallest(c, candidates) for c in candidates] == pytest.approx([1, 1 / 3, 0, 2 / 3])
+
+
+def test_tied_volumes_share_a_score_and_the_spacing_counts_distinct_volumes():
+    # Volumes 1, 8, 8, 27: three distinct values, so steps of 1/2. 27 -> 1, both 8s -> 1/2,
+    # 1 -> 0.
+    twin = _cube(4, 20, 2)
+    candidates = [_SMALL, _MEDIUM, twin, _LARGE]
+    assert [largest(c, candidates) for c in candidates] == pytest.approx([0, 0.5, 0.5, 1])
+
+
+def test_candidates_tied_first_both_score_one():
+    # Volumes 8, 8, 1: 8 -> 1 for both, 1 -> 0.
+    twin = _cube(4, 20, 2)
+    candidates = [_MEDIUM, twin, _SMALL]
+    assert [largest(c, candidates) for c in candidates] == [1.0, 1.0, 0.0]
+
+
+def test_candidates_that_all_tie_all_score_one():
+    twin = _cube(4, 20, 2)
+    assert largest(_MEDIUM, [_MEDIUM, twin]) == 1.0
+    assert smallest(twin, [_MEDIUM, twin]) == 1.0
+
+
+# tallest: vertical extent, along Y. A post 0.5 x 3 x 0.5 (volume 0.75) is taller than the
+# 2 x 2 x 2 cube (volume 8) although it is smaller.
+_POST = _box(5, [30, -3, 0], [30.5, 0, 0.5])
+
+
+def test_tallest_orders_by_vertical_extent_not_volume():
+    # Extents along Y: post 3, medium cube 2, slab 1. Steps of 1/2.
+    candidates = [_MEDIUM, _POST, _SLAB]
+    assert [tallest(c, candidates) for c in candidates] == pytest.approx([0.5, 1, 0])
+    assert largest(_POST, candidates) == 0.0
+
+
+def test_a_single_candidate_is_the_tallest_and_two_are_one_and_zero():
+    assert tallest(_POST, [_POST]) == 1.0
+    assert [tallest(c, [_POST, _MEDIUM]) for c in (_POST, _MEDIUM)] == [1.0, 0.0]
+
+
+def test_tied_heights_share_the_tallest_score():
+    # Extents 2 (medium), 2 (a 2 m tall slab), 1: 2 -> 1 for both, 1 -> 0.
+    tall_slab = _box(6, [40, -2, 0], [41, 0, 1])
+    candidates = [_MEDIUM, tall_slab, _SLAB]
+    assert [tallest(c, candidates) for c in candidates] == [1.0, 1.0, 0.0]
+
+
+# lowest: the height of the box's bottom. Up is -Y (ADR 0007), so a bottom (maximum y) at
+# y = 3 is lower than one at y = 1.
+def _shelf(iid: int, bottom_y: float) -> Instance:
+    return _box(iid, [0, bottom_y - 0.2, 0], [1, bottom_y, 1])
+
+
+def test_the_box_whose_bottom_has_the_largest_y_is_the_lowest():
+    # Bottoms at y 1, 3, 2: lowest first 3 -> 1, 2 -> 1/2, 1 -> 0. With up as +Y the order
+    # would be the reverse.
+    candidates = [_shelf(0, 1), _shelf(1, 3), _shelf(2, 2)]
+    assert [lowest(c, candidates) for c in candidates] == pytest.approx([0, 1, 0.5])
+
+
+def test_lowest_reads_the_bottom_of_the_box_not_its_top_or_centroid():
+    # A tall cabinet y -2 to 1 (bottom 1, centroid -0.5) and a small box y 0.4 to 0.6 (bottom
+    # 0.6, centroid 0.5): the cabinet's bottom is lower, though its centroid and top are higher.
+    cabinet = _box(0, [0, -2, 0], [1, 1, 1])
+    small = _box(1, [2, 0.4, 0], [3, 0.6, 1])
+    assert lowest(cabinet, [cabinet, small]) == 1.0
+    assert lowest(small, [cabinet, small]) == 0.0
+
+
+def test_a_single_candidate_is_the_lowest_and_tied_bottoms_share_a_score():
+    assert lowest(_shelf(0, 1), [_shelf(0, 1)]) == 1.0
+    # Bottoms 2, 2, 1: 2 -> 1 for both, 1 -> 0.
+    candidates = [_shelf(0, 2), _shelf(1, 2), _shelf(2, 1)]
+    assert [lowest(c, candidates) for c in candidates] == [1.0, 1.0, 0.0]
+
+
+# nearest to, farthest from: by the gap between the candidate's box and the Anchor's box.
+_WINDOW = _box(9, [0, 0, 0], [1, 1, 1])
+_TOUCHING = _box(0, [1, 0, 0], [2, 1, 1])  # gap 0 to the window
+_TWO_OFF = _box(1, [3, 0, 0], [4, 1, 1])  # gap 2
+_FIVE_OFF = _box(2, [6, 0, 0], [7, 1, 1])  # gap 5
+_CHAIRS = [_FIVE_OFF, _TOUCHING, _TWO_OFF]
+
+
+def test_a_single_candidate_is_the_nearest_and_the_farthest():
+    assert nearest_to(_TWO_OFF, _WINDOW, [_TWO_OFF]) == 1.0
+    assert farthest_from(_TWO_OFF, _WINDOW, [_TWO_OFF]) == 1.0
+
+
+def test_of_two_candidates_the_closer_box_is_the_nearest():
+    assert nearest_to(_TOUCHING, _WINDOW, [_TOUCHING, _TWO_OFF]) == 1.0
+    assert nearest_to(_TWO_OFF, _WINDOW, [_TOUCHING, _TWO_OFF]) == 0.0
+    assert farthest_from(_TWO_OFF, _WINDOW, [_TOUCHING, _TWO_OFF]) == 1.0
+
+
+def test_several_candidates_are_evenly_spaced_by_their_gap_to_the_anchor():
+    # Gaps 5, 0, 2. Nearest first: 0 -> 1, 2 -> 1/2, 5 -> 0. Farthest is the reverse.
+    assert [nearest_to(c, _WINDOW, _CHAIRS) for c in _CHAIRS] == [0.0, 1.0, 0.5]
+    assert [farthest_from(c, _WINDOW, _CHAIRS) for c in _CHAIRS] == [1.0, 0.0, 0.5]
+
+
+def test_nearest_uses_the_gap_between_boxes_not_between_centroids():
+    # A long table x 1-10 touches the window (gap 0), though its centroid (5.5, 0.5, 0.5) is
+    # 5 m from the window's (0.5, 0.5, 0.5); a cube at z 2-3 is 1 m away along z, its centroid
+    # (0.5, 0.5, 2.5) only 2 m from the window's. The table is the nearer.
+    table = _box(0, [1, 0, 0], [10, 1, 1])
+    cube = _box(1, [0, 0, 2], [1, 1, 3])
+    assert nearest_to(table, _WINDOW, [table, cube]) == 1.0
+    assert nearest_to(cube, _WINDOW, [table, cube]) == 0.0
+
+
+def test_tied_gaps_share_the_nearest_score():
+    # Gaps 0, 0, 2: 0 -> 1 for both (touching on either side), 2 -> 0.
+    other_side = _box(3, [-1, 0, 0], [0, 1, 1])
+    candidates = [_TOUCHING, other_side, _TWO_OFF]
+    assert [nearest_to(c, _WINDOW, candidates) for c in candidates] == [1.0, 1.0, 0.0]
+
+
+def test_the_order_is_taken_for_the_anchor_being_scored():
+    # A door at x 7-8 touches the five-off chair: gaps to the door 0 (five-off), 5 (touching
+    # the window, x 2 to 7), 3 (two-off, x 4 to 7). Nearest the door: five-off 1, two-off 1/2,
+    # touching 0, where nearest the window it was 0, 1/2, 1.
+    door = _box(8, [7, 0, 0], [8, 1, 1])
+    assert [nearest_to(c, door, _CHAIRS) for c in _CHAIRS] == [1.0, 0.0, 0.5]
+
+
+def test_an_anchor_among_the_subjects_candidates_competes_with_them():
+    # "the chair nearest another chair": the Anchor chair is also a candidate of the subject,
+    # with gap 0 to itself, so it ranks first. Gaps to the touching chair: itself 0, two-off 1
+    # (x 2 to 3), five-off 4 (x 2 to 6). Two-off scores 1/2, five-off 0.
+    assert nearest_to(_TWO_OFF, _TOUCHING, _CHAIRS) == 0.5
+    assert nearest_to(_FIVE_OFF, _TOUCHING, _CHAIRS) == 0.0
+
+
+def test_a_size_relation_alone_ranks_the_target_through_the_solver():
+    # Volumes 1, 8, 27: largest first 27 -> 1, 8 -> 1/2, 1 -> 0. No Anchor is assigned.
+    ranked = solve(
+        {"a": [_SMALL, _MEDIUM, _LARGE]}, [Constraint(Relation.LARGEST, "a")], "a", 10.0, 0.1
+    )
+    assert [r.instances["a"].instance_id for r in ranked] == [2, 1, 0]
+    assert [r.score for r in ranked] == pytest.approx([1.0, 0.5, 0.0])
+    assert [set(r.instances) for r in ranked] == [{"a"}, {"a"}, {"a"}]
+
+
+def test_nearest_receives_the_anchor_of_each_assignment_through_the_solver():
+    # Chairs [five-off, touching, two-off]; Anchor candidates [door, window]. Each chair keeps
+    # its best Anchor: five-off nearest the door (1), touching nearest the window (1), two-off
+    # 1/2 for both, keeping the earlier Anchor, the door. Ties keep the chairs' order.
+    door = _box(8, [7, 0, 0], [8, 1, 1])
+    ranked = solve(
+        {"a": _CHAIRS, "b": [door, _WINDOW]},
+        [Constraint(Relation.NEAREST_TO, "a", ("b",))],
+        "a",
+        10.0,
+        0.1,
+    )
+    assert [(r.instances["a"].instance_id, r.instances["b"].instance_id) for r in ranked] == [
+        (2, 8),
+        (0, 9),
+        (1, 8),
+    ]
+    assert [r.score for r in ranked] == pytest.approx([1.0, 1.0, 0.5])
+
+
+@pytest.mark.parametrize(
+    ("relation", "touching", "big"),
+    [
+        # The touching chair: gap 0 to the window, volume 1, extent 1, bottom y 1.
+        # The big box x 3-5, y -1 to 2, z 0-2: gap 2, volume 2 * 3 * 2 = 12, extent 3, bottom
+        # y 2 (lower, up is -Y).
+        (Relation.NEAREST_TO, 1.0, 0.0),
+        (Relation.FARTHEST_FROM, 0.0, 1.0),
+        (Relation.LARGEST, 0.0, 1.0),
+        (Relation.SMALLEST, 1.0, 0.0),
+        (Relation.TALLEST, 0.0, 1.0),
+        (Relation.LOWEST, 0.0, 1.0),
+    ],
+)
+def test_each_ordering_relation_is_registered(relation: Relation, touching: float, big: float):
+    big_box = _box(1, [3, -1, 0], [5, 2, 2])
+    anchors = ("b",) if relation.anchor_count else ()
+    candidates = {"a": [_TOUCHING, big_box]} | ({"b": [_WINDOW]} if anchors else {})
+    ranked = solve(candidates, [Constraint(relation, "a", anchors)], "a", 10.0, 0.1)
+    assert {r.instances["a"].instance_id: r.score for r in ranked} == {0: touching, 1: big}
+
+
+def test_an_ordering_relation_combines_with_another_by_the_product_of_scores():
+    # Near the window and largest. Extent 10, falloff 0.1: near = exp(-gap).
+    # Small: touches the window (near 1), volume 1 (largest 0): 1 * 0 = 0.
+    # Big: x 3-5, gap 2 (near exp(-2) = 0.135335), volume 8 (largest 1): 0.135335.
+    small = _box(0, [1, 0, 0], [2, 1, 1])
+    big = _box(1, [3, 0, 0], [5, 2, 2])
+    ranked = solve(
+        {"a": [small, big], "b": [_WINDOW]},
+        [_near("a", "b"), Constraint(Relation.LARGEST, "a")],
+        "a",
+        10.0,
+        0.1,
+    )
+    assert [r.instances["a"].instance_id for r in ranked] == [1, 0]
+    assert [r.score for r in ranked] == pytest.approx([0.135335, 0.0], abs=1e-6)

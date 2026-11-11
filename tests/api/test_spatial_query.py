@@ -57,12 +57,26 @@ BETWEEN_PARSE = ParsedQuery(
     target="a",
     constraints=(Constraint(Relation.BETWEEN, "a", ("b", "c")),),
 )
+LARGEST_QUERY = "the largest chair"
+LARGEST_PARSE = ParsedQuery(
+    objects=(QueryObject("a", "chair"),),
+    target="a",
+    constraints=(Constraint(Relation.LARGEST, "a"),),
+)
+NEAREST_QUERY = "the chair nearest the lamp"
+NEAREST_PARSE = ParsedQuery(
+    objects=(QueryObject("a", "chair"), QueryObject("b", "lamp")),
+    target="a",
+    constraints=(Constraint(Relation.NEAREST_TO, "a", ("b",)),),
+)
 PARSER = FakeQueryParser(
     {
         NEAR_QUERY: NEAR_PARSE,
         TWO_CHAIRS_QUERY: TWO_CHAIRS_PARSE,
         ON_AND_NEAR_QUERY: ON_AND_NEAR_PARSE,
         BETWEEN_QUERY: BETWEEN_PARSE,
+        LARGEST_QUERY: LARGEST_PARSE,
+        NEAREST_QUERY: NEAREST_PARSE,
     }
 )
 
@@ -345,3 +359,74 @@ def test_a_between_query_returns_a_match_with_both_anchors(
             {"instance_id": 1, "phrase": "chair"},
         ],
     }
+
+
+def test_a_largest_query_returns_the_biggest_box_over_the_first_ranked_candidate(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    scene = _box_scene(
+        {
+            0: ([0, 0, 0], [1, 1, 1], CHAIR_FIRST),  # volume 1, first for "chair"
+            1: ([3, 0, 0], [5, 2, 2], CHAIR_SECOND),  # volume 2 * 2 * 2 = 8
+            2: ([7, 0, 0], [8, 1, 1], LAMP_FIRST),
+        }
+    )
+    client, scene_id = _client(make_client, tmp_path, scene, candidates=1, top_k=2)
+    # Candidates: chair [0, 1] (0.8, 0.48; query_top_k 2). Of two, the bigger box scores 1
+    # and the smaller 0. A Query with only a size Relation has no Anchor.
+    assert _query(client, scene_id, LARGEST_QUERY) == {
+        "matches": [
+            {
+                "instance_id": 1,
+                "score": 1.0,
+                "image_score": pytest.approx(0.48, abs=1e-6),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+            {
+                "instance_id": 0,
+                "score": 0.0,
+                "image_score": pytest.approx(0.8, abs=1e-6),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+        ],
+        "relations_applied": True,
+    }
+
+
+def test_a_nearest_query_returns_the_closest_candidate_with_its_anchor(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=1, top_k=2)
+    # Candidates: chair [0, 1] (query_top_k 2), lamp [2]. Gaps to the lamp: chair 1 is 1 m
+    # away, chair 0 (6, 4) away. Nearest first: chair 1 scores 1, chair 0 scores 0.
+    result = _query(client, scene, NEAREST_QUERY)
+    assert result["relations_applied"] is True
+    assert [m["instance_id"] for m in result["matches"]] == [1, 0]
+    assert [m["score"] for m in result["matches"]] == [1.0, 0.0]
+    assert [m["anchors"] for m in result["matches"]] == [
+        [{"instance_id": 2, "phrase": "lamp"}],
+        [{"instance_id": 2, "phrase": "lamp"}],
+    ]
+
+
+def test_a_chair_standing_in_for_the_anchor_still_competes_for_nearest(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    boxes = {
+        0: ([2.0, 0.0], CHAIR_SECOND),  # 1 m from the lamp
+        1: ([7.0, 5.0], CHAIR_FIRST),  # first for "chair", (4, 4) from chair 0
+        2: ([0.0, 0.0], LAMP_FIRST),
+    }
+    client, scene = _client(make_client, tmp_path, boxes, candidates=2, top_k=1)
+    # Candidates: chair [1, 0]; lamp [2, 0] (both chairs resemble "lamp" by 0, lower id first).
+    # Chair 1 with lamp 2: chair 0 is nearer (1 m against (6, 4)), so chair 1 scores 0.
+    # Chair 1 with chair 0 as the lamp: chair 0 itself (gap 0) is nearest, chair 1 scores 0.
+    # Chair 0 with lamp 2: nearest, 1. Chair 0 wins, with the real lamp as its Anchor.
+    [match] = _query(client, scene, NEAREST_QUERY)["matches"]
+    assert match["instance_id"] == 0
+    assert match["score"] == 1.0
+    assert match["anchors"] == [{"instance_id": 2, "phrase": "lamp"}]

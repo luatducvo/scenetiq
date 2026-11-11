@@ -214,6 +214,114 @@ def between(subject: Instance, first: Instance, second: Instance, falloff: float
     return falloff_score(distance, length, falloff)
 
 
+def ordering_score(
+    subject: Instance,
+    candidates: Sequence[Instance],
+    measure: Callable[[Instance], float],
+    *,
+    highest_first: bool,
+) -> float:
+    """Where ``subject`` stands among ``candidates`` once they are ordered by ``measure``.
+
+    The distinct values of the measure are ordered; the first scores 1, the last 0, and the
+    ones between are evenly spaced. Tied candidates (exactly equal values) therefore share a
+    score, and a tie takes one step, not one per candidate: values 27, 8, 8, 1, highest
+    first, score 1, 1/2, 1/2, 0. Every candidate scores 1 when all values are equal, so a
+    single candidate scores 1.
+
+    Args:
+        subject: The candidate to score. It counts among the candidates even if missing.
+        candidates: The candidates it is ordered against, the Anchors of the assignment
+            included when they are among them.
+        measure: The value candidates are ordered by.
+        highest_first: Whether the highest value comes first.
+
+    Returns:
+        A score in [0, 1].
+    """
+    value = measure(subject)
+    values = sorted({measure(c) for c in candidates} | {value}, reverse=highest_first)
+    if len(values) == 1:
+        return 1.0
+    return 1.0 - values.index(value) / (len(values) - 1)
+
+
+def box_volume(instance: Instance) -> float:
+    """The volume of an Instance's bounding box, in cubic metres."""
+    return float(np.prod(instance.bbox_max - instance.bbox_min))
+
+
+def vertical_extent(instance: Instance) -> float:
+    """The height of an Instance's bounding box from bottom to top, in metres."""
+    return float(instance.bbox_max[_UP] - instance.bbox_min[_UP])
+
+
+def bottom_height(instance: Instance) -> float:
+    """How high the bottom of an Instance's bounding box is: its maximum y, negated.
+
+    Up is -Y (ADR 0007), so the bottom is the maximum y, and a larger y is lower.
+    """
+    return -float(instance.bbox_max[_UP])
+
+
+def nearest_to(subject: Instance, anchor: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the candidate nearest to ``anchor``.
+
+    The candidates are ordered by the gap between their box and the Anchor's, smallest
+    first (see :func:`ordering_score`). The order is taken for this Anchor, so a candidate
+    scores differently against another one. An Anchor that is itself among the candidates
+    (two objects with the same phrase) competes too, with a gap of 0.
+
+    Args:
+        subject: The candidate standing for the constraint's subject.
+        anchor: The candidate standing for its Anchor.
+        candidates: Every candidate of the subject object.
+
+    Returns:
+        1 for the nearest candidate, 0 for the farthest.
+    """
+    return ordering_score(subject, candidates, lambda c: box_gap(c, anchor), highest_first=False)
+
+
+def farthest_from(subject: Instance, anchor: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the candidate farthest from ``anchor``: :func:`nearest_to` reversed."""
+    return ordering_score(subject, candidates, lambda c: box_gap(c, anchor), highest_first=True)
+
+
+def largest(subject: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the largest of ``candidates``, by bounding-box volume.
+
+    Returns:
+        1 for the largest box, 0 for the smallest (see :func:`ordering_score`).
+    """
+    return ordering_score(subject, candidates, box_volume, highest_first=True)
+
+
+def smallest(subject: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the smallest of ``candidates``: :func:`largest` reversed."""
+    return ordering_score(subject, candidates, box_volume, highest_first=False)
+
+
+def tallest(subject: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the tallest of ``candidates``, by the vertical extent of its box.
+
+    Returns:
+        1 for the tallest box, 0 for the shortest (see :func:`ordering_score`).
+    """
+    return ordering_score(subject, candidates, vertical_extent, highest_first=True)
+
+
+def lowest(subject: Instance, candidates: Sequence[Instance]) -> float:
+    """Score ``subject`` as the lowest of ``candidates``, by the height of its box's bottom.
+
+    Up is -Y (ADR 0007): the lowest candidate is the one whose bottom has the largest y.
+
+    Returns:
+        1 for the lowest bottom, 0 for the highest (see :func:`ordering_score`).
+    """
+    return ordering_score(subject, candidates, bottom_height, highest_first=False)
+
+
 @dataclass(frozen=True)
 class RelationContext:
     """What a Relation's scoring function sees of one assignment.
@@ -245,8 +353,14 @@ RELATION_SCORES: dict[Relation, RelationScore] = {
     Relation.ON: lambda c: on(c.subject, c.anchors[0], c.extent, c.falloff),
     Relation.UNDER: lambda c: under(c.subject, c.anchors[0], c.extent, c.falloff),
     Relation.BETWEEN: lambda c: between(c.subject, c.anchors[0], c.anchors[1], c.falloff),
+    Relation.NEAREST_TO: lambda c: nearest_to(c.subject, c.anchors[0], c.subject_candidates),
+    Relation.FARTHEST_FROM: lambda c: farthest_from(c.subject, c.anchors[0], c.subject_candidates),
+    Relation.LARGEST: lambda c: largest(c.subject, c.subject_candidates),
+    Relation.SMALLEST: lambda c: smallest(c.subject, c.subject_candidates),
+    Relation.TALLEST: lambda c: tallest(c.subject, c.subject_candidates),
+    Relation.LOWEST: lambda c: lowest(c.subject, c.subject_candidates),
 }
-"""The scoring function of each Relation that has one. A Relation missing here fails loudly."""
+"""The scoring function of every Relation. A Relation missing here fails loudly."""
 
 
 @dataclass(frozen=True)
