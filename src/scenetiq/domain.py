@@ -7,7 +7,6 @@ Terms follow ``GLOSSARY.md``.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
@@ -288,14 +287,27 @@ class ParsedQuery:
         return cls(objects=(QueryObject("a", text),), target="a")
 
 
-StageCallback = Callable[[Stage], None]
+class JobReporter(Protocol):
+    """What a running Pipeline tells its job: stages, notes and when it may stop."""
+
+    def stage(self, stage: Stage) -> None:
+        """Report that ``stage`` starts."""
+        ...
+
+    def checkpoint(self) -> None:
+        """Mark a point where the job may stop if the user asked it to."""
+        ...
+
+    def note(self, message: str) -> None:
+        """Record one line of the job summary the user sees, under the running stage."""
+        ...
 
 
 class Pipeline(Protocol):
     """Turns a Capture into a Reconstruction."""
 
-    def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
-        """Reconstruct ``capture``, calling ``on_stage`` as each stage starts."""
+    def run(self, capture: Capture, reporter: JobReporter) -> Reconstruction:
+        """Reconstruct ``capture``, reporting each stage as it starts through ``reporter``."""
         ...
 
 

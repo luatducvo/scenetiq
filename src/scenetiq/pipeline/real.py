@@ -15,9 +15,9 @@ from scenetiq.config import (
 from scenetiq.domain import (
     CaptionEncoder,
     Capture,
+    JobReporter,
     Reconstruction,
     Stage,
-    StageCallback,
 )
 from scenetiq.geometry import build_instances
 from scenetiq.pipeline.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
@@ -93,27 +93,27 @@ class RealPipeline:
         self.captioner = captioner or QwenVLCaptioner(self.options.captioning)
         self.caption_encoder = caption_encoder or Qwen3TextEmbedder()
 
-    def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
-        """Run every stage on ``capture``, reporting each one through ``on_stage``."""
+    def run(self, capture: Capture, reporter: JobReporter) -> Reconstruction:
+        """Run every stage on ``capture``, reporting each one through ``reporter``."""
         opts = self.options
         # A job that ran out of memory could only be collected after its exception was handled.
         free_gpu_memory()
 
-        on_stage(Stage.RECONSTRUCTING)
+        reporter.stage(Stage.RECONSTRUCTING)
         with track_stage_memory(Stage.RECONSTRUCTING):
             view_data = self.reconstructor.reconstruct(capture.views)
 
-        on_stage(Stage.FUSING)
+        reporter.stage(Stage.FUSING)
         geometry = fuse(view_data, opts.fusion)
 
-        on_stage(Stage.ALIGNING)
+        reporter.stage(Stage.ALIGNING)
         with track_stage_memory(Stage.ALIGNING):
             geometry, view_data = gravity_align(
                 geometry, view_data, self.up_estimator, opts.alignment
             )
         points = geometry.vertices
 
-        on_stage(Stage.SUPERPOINTS)
+        reporter.stage(Stage.SUPERPOINTS)
         superpoints = opts.superpoints
         if superpoints.primitives == "superpoints":
             primitive_ids = mesh_superpoints(
@@ -122,11 +122,11 @@ class RealPipeline:
         else:
             primitive_ids = voxel_primitives(points, superpoints.primitive_voxel_size)
 
-        on_stage(Stage.MASKING)
+        reporter.stage(Stage.MASKING)
         with track_stage_memory(Stage.MASKING):
             view_masks = self.masker.masks_for(view_data)
 
-        on_stage(Stage.MERGING)
+        reporter.stage(Stage.MERGING)
         report_merge_input(len(points), len(np.unique(primitive_ids)))
         with track_stage_memory(Stage.MERGING):
             instance_ids = merge_instances(
@@ -134,7 +134,7 @@ class RealPipeline:
             )
         free_gpu_memory()
 
-        on_stage(Stage.EMBEDDING)
+        reporter.stage(Stage.EMBEDDING)
         with track_stage_memory(Stage.EMBEDDING):
             plans = plan_views(points, instance_ids, view_data, opts.embedding)
             embeddings = embed_instances(
@@ -148,7 +148,7 @@ class RealPipeline:
         unseen = np.isin(instance_ids, list(embeddings), invert=True)
         instance_ids = np.where(unseen, -1, instance_ids).astype(np.int32)
 
-        on_stage(Stage.CAPTIONING)
+        reporter.stage(Stage.CAPTIONING)
         with track_stage_memory(Stage.CAPTIONING):
             # The vision-language model stays on the GPU after the stage, also on failure.
             captions = caption_instances(

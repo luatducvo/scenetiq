@@ -17,11 +17,11 @@ from scenetiq.domain import (
     Capture,
     EmbeddedCaption,
     FloatArray,
+    JobReporter,
     ParsedQuery,
     QueryParseError,
     Reconstruction,
     Stage,
-    StageCallback,
 )
 from scenetiq.geometry import build_instances, l2_normalize
 
@@ -164,11 +164,11 @@ class FakePipeline:
         self.gate = gate
         self.captures: list[Capture] = []
 
-    def run(self, capture: Capture, on_stage: StageCallback) -> Reconstruction:
+    def run(self, capture: Capture, reporter: JobReporter) -> Reconstruction:
         """Record ``capture``, walk through every Stage and return the fixed result."""
         self.captures.append(capture)
         for i, stage in enumerate(Stage):
-            on_stage(stage)
+            reporter.stage(stage)
             if i == 0 and self.gate is not None:
                 self.gate.wait(timeout=10)
             if i == 0 and self.error is not None:

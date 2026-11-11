@@ -9,6 +9,23 @@ from scenetiq.pipeline.real import RealPipeline
 pytestmark = pytest.mark.gpu
 
 
+class StageRecorder:
+    """A job reporter that records the stages and notes of one run."""
+
+    def __init__(self, stages: list[Stage]) -> None:
+        self.stages = stages
+        self.notes: list[str] = []
+
+    def stage(self, stage: Stage) -> None:
+        self.stages.append(stage)
+
+    def checkpoint(self) -> None:
+        pass
+
+    def note(self, message: str) -> None:
+        self.notes.append(message)
+
+
 @pytest.fixture(scope="module")
 def encoder():
     """One SigLIP2 model shared by the Pipeline and the Query tests, as on the server."""
@@ -39,7 +56,7 @@ def real_result(smoke_capture: Capture, encoder, caption_encoder, captioner):
     pipeline = RealPipeline(
         image_encoder=encoder, caption_encoder=caption_encoder, captioner=captioner
     )
-    reconstruction = pipeline.run(smoke_capture, stages.append)
+    reconstruction = pipeline.run(smoke_capture, StageRecorder(stages))
     return reconstruction, stages
 
 

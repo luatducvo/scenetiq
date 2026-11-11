@@ -77,32 +77,51 @@ class JobRunner:
 
     def _run(self, record: SceneRecord, capture: Capture) -> None:
         store = self._store
-        stages = list(Stage)
-        progress = JobProgress(
+        reporter = _JobReporter(store, record)
+        try:
+            store.update_job(record.job_id, status=JobStatus.RUNNING)
+            reconstruction = self._pipeline.run(capture, reporter)
+            store.save_reconstruction(record.scene_id, reconstruction)
+        except Exception as exc:
+            logger.exception("job %s failed", record.job_id)
+            store.update_job(record.job_id, status=JobStatus.FAILED, error=str(exc) or repr(exc))
+            reporter.report(JobStatus.FAILED)
+        else:
+            store.update_job(record.job_id, status=JobStatus.SUCCEEDED)
+            reporter.report(JobStatus.SUCCEEDED)
+        finally:
+            self.release()
+
+
+class _JobReporter:
+    """Records what one job's Pipeline reports and forwards its progress to the notebook."""
+
+    def __init__(self, store: SceneStore, record: SceneRecord) -> None:
+        self._store = store
+        self._job_id = record.job_id
+        self._progress = JobProgress(
             job_id=record.job_id,
             scene_id=record.scene_id,
             status=JobStatus.RUNNING.value,
             stage="",
             step=0,
-            total=len(stages),
+            total=len(_STAGES),
         )
 
-        def on_stage(stage: Stage) -> None:
-            nonlocal progress
-            store.update_job(record.job_id, stage=stage.value)
-            progress = replace(progress, stage=stage.value, step=stages.index(stage) + 1)
-            report_progress(progress)
+    def stage(self, stage: Stage) -> None:
+        self._store.update_job(self._job_id, stage=stage.value)
+        self._progress = replace(self._progress, stage=stage.value, step=_STAGES.index(stage) + 1)
+        report_progress(self._progress)
 
-        try:
-            store.update_job(record.job_id, status=JobStatus.RUNNING)
-            reconstruction = self._pipeline.run(capture, on_stage)
-            store.save_reconstruction(record.scene_id, reconstruction)
-        except Exception as exc:
-            logger.exception("job %s failed", record.job_id)
-            store.update_job(record.job_id, status=JobStatus.FAILED, error=str(exc) or repr(exc))
-            report_progress(replace(progress, status=JobStatus.FAILED.value))
-        else:
-            store.update_job(record.job_id, status=JobStatus.SUCCEEDED)
-            report_progress(replace(progress, status=JobStatus.SUCCEEDED.value))
-        finally:
-            self.release()
+    def checkpoint(self) -> None:
+        pass
+
+    def note(self, message: str) -> None:
+        logger.info("job %s note: %s", self._job_id, message)
+
+    def report(self, status: JobStatus) -> None:
+        """Send the job's final ``status`` to the notebook."""
+        report_progress(replace(self._progress, status=status.value))
+
+
+_STAGES = list(Stage)
