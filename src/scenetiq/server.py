@@ -11,7 +11,6 @@ from scenetiq.api import create_app
 from scenetiq.config import Settings
 from scenetiq.domain import CaptionEncoder, Pipeline, QueryParser, TextEncoder
 from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, FakeTextEncoder
-from scenetiq.spatial import NoRelationParser
 
 
 class Components(NamedTuple):
@@ -49,10 +48,11 @@ def build_components(settings: Settings) -> Components:
         from scenetiq.pipeline.real import RealPipeline, RealPipelineOptions
         from scenetiq.pipeline.reconstruct import DA3Reconstructor
         from scenetiq.pipeline.siglip import SigLIP2Encoder
+        from scenetiq.query_parser import VLMQueryParser
 
         encoder = SigLIP2Encoder(settings.siglip)  # one model for Instance crops and Query text
         caption_encoder = Qwen3TextEmbedder(settings.caption_embedding)  # Descriptions, Queries
-        # One vision-language model for Captioning and, later, the Query parser; it stays loaded.
+        # One vision-language model for Captioning and the Query parser; it stays loaded.
         captioner = QwenVLCaptioner(settings.captioning)
         pipeline = RealPipeline(
             reconstructor=DA3Reconstructor(settings.da3),
@@ -69,8 +69,8 @@ def build_components(settings: Settings) -> Components:
             captioner=captioner,
             caption_encoder=caption_encoder,
         )
-        # Until the parser on `captioner` exists, every Query is answered as a plain Query.
-        return Components(pipeline, encoder, caption_encoder, NoRelationParser())
+        query_parser = VLMQueryParser(captioner, settings.query_parser)
+        return Components(pipeline, encoder, caption_encoder, query_parser)
     raise ValueError(f"unknown pipeline {settings.pipeline!r}; expected 'fake' or 'real'")
 
 

@@ -22,18 +22,6 @@ from scenetiq.domain import Constraint, Instance, ParsedQuery, Relation
 from scenetiq.query import Anchor, Match
 
 
-class NoRelationParser:
-    """A Query parser that reads every Query as one without a Relation.
-
-    It stands in on the real backend until the parser on the vision-language model exists,
-    so every Query there is answered as a plain Query.
-    """
-
-    def parse(self, text: str) -> ParsedQuery:
-        """Return ``text`` as a parsed Query without constraints."""
-        return ParsedQuery.without_relations(text)
-
-
 class UnsupportedRelationError(NotImplementedError):
     """Raised when a parsed Query uses a Relation that has no scoring function yet."""
 

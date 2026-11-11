@@ -247,8 +247,8 @@ class ParsedQuery:
     Raises:
         ValueError: If the objects, the target and the constraints do not fit together:
             an object id repeats, the target or a constraint names an object that is not
-            listed, a Relation has the wrong number of Anchors, or a subject is its own
-            Anchor.
+            listed, a Relation has the wrong number of Anchors, a subject is its own
+            Anchor, or a Relation names one Anchor twice.
     """
 
     objects: tuple[QueryObject, ...]
@@ -279,6 +279,8 @@ class ParsedQuery:
                 )
             if c.subject in c.anchors:
                 raise ValueError(f"{c.relation} uses object {c.subject!r} as its own Anchor")
+            if len(set(c.anchors)) != len(c.anchors):
+                raise ValueError(f"{c.relation} names one Anchor twice: {list(c.anchors)}")
 
     @classmethod
     def without_relations(cls, text: str) -> ParsedQuery:

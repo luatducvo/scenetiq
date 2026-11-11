@@ -26,9 +26,19 @@ def caption_encoder():
 
 
 @pytest.fixture(scope="module")
-def real_result(smoke_capture: Capture, encoder, caption_encoder):
+def captioner():
+    """One Qwen3-VL model shared by the Pipeline and the Query parser, as on the server."""
+    from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
+
+    return QwenVLCaptioner()
+
+
+@pytest.fixture(scope="module")
+def real_result(smoke_capture: Capture, encoder, caption_encoder, captioner):
     stages: list[Stage] = []
-    pipeline = RealPipeline(image_encoder=encoder, caption_encoder=caption_encoder)
+    pipeline = RealPipeline(
+        image_encoder=encoder, caption_encoder=caption_encoder, captioner=captioner
+    )
     reconstruction = pipeline.run(smoke_capture, stages.append)
     return reconstruction, stages
 
@@ -168,12 +178,12 @@ def test_qwen3_embedding_ranks_the_description_a_query_describes_first(caption_e
         assert int(np.argmax(similarities)) == expected, (text, similarities)
 
 
-def test_only_the_query_encoders_stay_on_the_gpu_after_a_run(real_result):
+def test_only_the_query_models_stay_on_the_gpu_after_a_run(real_result):
     import torch
 
-    # SigLIP2 (3.74 GB) and Qwen3-Embedding-0.6B (1.19 GB) at bf16 stay; SAM2 (0.90 GB)
-    # or Qwen3-VL-8B (17 GB) left behind would push this past 5.5 GB.
-    assert torch.cuda.memory_allocated() < 5_500_000_000
+    # SigLIP2 (3.74 GB), Qwen3-Embedding-0.6B (1.19 GB) and Qwen3-VL-8B (about 17.5 GB) at
+    # bf16 stay, about 22.5 GB; SAM2 (0.90 GB) or DA3 left behind would push this past 23 GB.
+    assert torch.cuda.memory_allocated() < 23_000_000_000
 
 
 def test_threads_sharing_siglip2_load_it_once():
@@ -298,3 +308,69 @@ def test_query_for_a_present_object_matches_that_object(
     assert share >= MIN_POINTS_IN_BOX, (
         f"best Match (Instance {best}): only {share:.0%} of its in-photo points are in the box"
     )
+
+
+SMOKE_SPATIAL_QUERY_ENV = "SCENETIQ_SMOKE_SPATIAL_QUERY"
+DEFAULT_SPATIAL_QUERY = "the object nearest to the chair"
+
+
+@pytest.fixture(scope="module")
+def query_parser(captioner):
+    """The real Query parser on the Pipeline's Qwen3-VL, as on the server."""
+    from scenetiq.query_parser import VLMQueryParser
+
+    return VLMQueryParser(captioner, _configured_settings().query_parser)
+
+
+def _answer(text, rec, query_parser, encoder, caption_encoder):
+    """The parsed Query and Matches of ``text``, routed as the Query endpoint routes them."""
+    import time
+
+    from scenetiq.query import run_query
+    from scenetiq.spatial import run_spatial_query
+
+    settings = _configured_settings()
+    captioned = any(inst.caption_embeddings for inst in rec.instances)
+
+    def rank(phrase: str, top_k: int):
+        return run_query(
+            rec.instances,
+            encoder.encode(phrase),
+            top_k,
+            settings.rrf_k,
+            caption_encoder.encode_query(phrase) if captioned else None,
+        )
+
+    started = time.perf_counter()
+    parsed = query_parser.parse(text)  # a QueryParseError fails the test: shape is checked
+    print(f"parse of {text!r} took {time.perf_counter() - started:.1f} s: {parsed}")
+    matches = None
+    if parsed.constraints:
+        matches = run_spatial_query(
+            rec.instances, parsed, rank, settings.query_top_k, settings.spatial
+        )
+    return parsed, matches if matches is not None else rank(text, settings.query_top_k)
+
+
+def test_a_query_with_a_relation_returns_matches_with_anchors(
+    real_result, query_parser, encoder, caption_encoder
+):
+    """Shape only. Set SCENETIQ_SMOKE_SPATIAL_QUERY to a Relation between objects in the Scene."""
+    rec, _ = real_result
+    assert len(rec.instances) >= 2, "a Query with an Anchor needs two Instances"
+    text = os.environ.get(SMOKE_SPATIAL_QUERY_ENV, DEFAULT_SPATIAL_QUERY)
+    parsed, matches = _answer(text, rec, query_parser, encoder, caption_encoder)
+    assert parsed.constraints, f"the parser found no Relation in {text!r}"
+    print(f"{text!r}: {[(m.instance_id, round(m.score, 3), m.anchors) for m in matches]}")
+    assert 1 <= len(matches) <= _configured_settings().query_top_k
+    assert all(m.anchors for m in matches)
+
+
+def test_a_query_without_a_relation_returns_no_anchors(
+    real_result, query_parser, encoder, caption_encoder
+):
+    rec, _ = real_result
+    parsed, matches = _answer("a chair", rec, query_parser, encoder, caption_encoder)
+    assert parsed.constraints == ()
+    assert matches
+    assert all(m.anchors == () for m in matches)

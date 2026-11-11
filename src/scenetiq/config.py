@@ -201,6 +201,19 @@ class CaptioningOptions:
 
 
 @dataclass(frozen=True)
+class QueryParserOptions:
+    """Settings of the Query parser on the Captioning stage's vision-language model (ADR 0009).
+
+    Attributes:
+        max_new_tokens: Longest reply generated per Query; a reply cut off here is a parse
+            failure. The reply ends when its JSON closes, so a generous limit costs nothing
+            on a normal reply. Separate from ``CaptioningOptions.max_new_tokens``.
+    """
+
+    max_new_tokens: int = 1024
+
+
+@dataclass(frozen=True)
 class CaptionEmbeddingOptions:
     """Settings of the text model that embeds Descriptions and Query text (ADR 0008).
 
@@ -265,13 +278,15 @@ class Settings:
         embedding: Embedding stage.
         siglip: The encoder of Instance crops and Query text.
         captioning: Captioning stage.
+        query_parser: The Query parser, which runs on the Captioning stage's model.
         caption_embedding: The encoder of Descriptions and Query text.
         spatial: Queries with a Relation.
 
     Raises:
-        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``view_stride``
-            or ``spatial.candidates_per_object`` is below 1, ``spatial.falloff`` is not
-            positive, or ``spatial.caption_margin`` or ``spatial.image_margin`` is negative.
+        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``view_stride``,
+            ``spatial.candidates_per_object`` or ``query_parser.max_new_tokens`` is below
+            1, ``spatial.falloff`` is not positive, or ``spatial.caption_margin`` or
+            ``spatial.image_margin`` is negative.
     """
 
     storage_root: Path
@@ -294,6 +309,7 @@ class Settings:
     embedding: EmbeddingOptions = field(default_factory=EmbeddingOptions)
     siglip: SigLIP2Options = field(default_factory=SigLIP2Options)
     captioning: CaptioningOptions = field(default_factory=CaptioningOptions)
+    query_parser: QueryParserOptions = field(default_factory=QueryParserOptions)
     caption_embedding: CaptionEmbeddingOptions = field(default_factory=CaptionEmbeddingOptions)
     spatial: SpatialOptions = field(default_factory=SpatialOptions)
 
@@ -314,6 +330,11 @@ class Settings:
         if self.siglip.prompt_max_words < 0:
             raise ValueError(
                 f"siglip.prompt_max_words must not be negative, got {self.siglip.prompt_max_words}"
+            )
+        if self.query_parser.max_new_tokens < 1:
+            raise ValueError(
+                "query_parser.max_new_tokens must be at least 1, "
+                f"got {self.query_parser.max_new_tokens}"
             )
         if self.spatial.candidates_per_object < 1:
             raise ValueError(

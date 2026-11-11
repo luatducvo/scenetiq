@@ -46,7 +46,7 @@ The header shows the backend's status from when the page loaded; click **Ping** 
 3. **Viewer:**
    - The Scene fills the browser window. **Full screen** expands it to the whole display (Esc to leave), and **← Scenes** goes back.
    - Drag to orbit, right-drag to pan, scroll to zoom.
-   - Type a Query to highlight and box the best-matching objects (`query_top_k` of `CONFIG`, 1 by default). Each Match shows its name, read from the photos by a vision-language model, in the list and on its box. A Query always returns a Match when the Scene has objects, even if none fits; judge it by the name. When part of a Query was not taken into account, such as "left of", a line above the Matches says so.
+   - Type a Query to highlight and box the best-matching objects (`query_top_k` of `CONFIG`, 1 by default). Each Match shows its name, read from the photos by a vision-language model, in the list and on its box. A Query always returns a Match when the Scene has objects, even if none fits; judge it by the name. A Query in English or Vietnamese can also pick an object by where it is, such as "the box on the shelf", "the chair nearest the window" or "the largest table"; the objects it was measured against are marked in their own colour. When part of a Query was not taken into account, such as "left of", or the Query could not be read, a line above the Matches says so. Each Query first waits for the vision-language model to read it, and the first Query after the backend starts also waits for that model to load.
    - **Instances** gives each Instance its own colour, to check how the Scene was split. Grey points belong to no Instance. Clear a Query first; its highlight takes priority.
 4. **Scenes:** reopen or delete processed Scenes.
 

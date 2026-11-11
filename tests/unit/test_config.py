@@ -191,3 +191,25 @@ def test_candidates_may_be_a_tenth_below_on_captions_and_a_twentieth_below_on_im
 def test_spatial_settings_that_cannot_work_are_refused_by_name(overrides: dict, named: str):
     with pytest.raises(ValueError, match=named.replace(".", r"\.")):
         Settings.from_overrides("tok", overrides)
+
+
+def test_the_query_parser_has_its_own_generous_token_limit():
+    settings = Settings.from_overrides("tok", {})
+    assert settings.query_parser.max_new_tokens == 1024
+    overridden = Settings.from_overrides("tok", {"query_parser": {"max_new_tokens": 256}})
+    assert overridden.query_parser.max_new_tokens == 256
+    assert overridden.captioning.max_new_tokens == 320
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"query_parser": {"max_new_tokens": 0}},
+        {"query_parser": {"max_new_tokens": -5}},
+        {"query_parser": {"max_new_tokens": 1024.0}},
+        {"query_parser": {"max_tokens": 1024}},
+    ],
+)
+def test_query_parser_settings_that_cannot_work_are_refused_by_name(overrides: dict):
+    with pytest.raises(ValueError, match=r"query_parser\.max"):
+        Settings.from_overrides("tok", overrides)

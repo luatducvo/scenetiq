@@ -16,7 +16,8 @@ Chạy local theo lệnh trong `AGENTS.md` thì dùng `FakePipeline`, không có
 ```text
 Trình duyệt → Cloudflare Tunnel → FastAPI trên Colab
 Ảnh → Reconstructing → Fusing → Aligning → Superpoints → Masking → Merging → Embedding → Captioning → lưu đĩa
-Câu Query → SigLIP2 text + Qwen3-Embedding → hai bảng xếp hạng → RRF → top-K Match
+Câu Query → parser trên Qwen3-VL → (không có Relation) SigLIP2 text + Qwen3-Embedding → hai bảng xếp hạng → RRF → top-K Match
+                                 → (có Relation) xếp hạng như trên cho từng vật → giải Relation trên hình học đã lưu → Match kèm Anchor
 ```
 
 ## Upload và khởi động job
@@ -157,7 +158,15 @@ Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red 
 4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score`, `caption_score` (cosine thô của Description tốt nhất) và `caption_aspect` (Aspect của Description đó) để debug.
 5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene không Instance nào có Caption thì chỉ xếp theo ảnh.
 
-Mọi Query trước hết đi qua parser và có thể được giải theo Relation ([ADR 0009](adr/0009-spatial-queries-parsed-and-solved.md)). Response có thêm `relations_applied` (Relation đã quyết định Match), `relations_stated` (Query sau khi parse có Relation), `unsupported` (những phần Query mà tập Relation không diễn đạt được, trích nguyên văn theo parser) và `parse_failed` (parser không đọc được Query). Phần không hỗ trợ chỉ được báo lại, các Relation còn lại vẫn được áp dụng. Khi parse thất bại, hoặc có Relation nhưng không có phép gán hợp lệ (ví dụ Scene có ít Instance hơn số vật trong Query, lúc đó `relations_stated` đúng còn `relations_applied` sai), Query chạy như các bước trên với câu gốc và vẫn trả 200. Lý do parse thất bại được ghi log lên notebook.
+Mọi Query trước hết đi qua parser và có thể được giải theo Relation ([ADR 0009](adr/0009-spatial-queries-parsed-and-solved.md)). Parser nằm trong [query_parser.py](../src/scenetiq/query_parser.py) và chạy trên chính Qwen3-VL của stage Captioning (cùng một instance với Pipeline):
+
+1. Gửi một prompt **chỉ có chữ**, bằng tiếng Anh, kèm **nguyên văn Query, không cắt** (giới hạn 64 token chỉ áp dụng cho SigLIP2), đặt ở dòng cuối dưới dạng một chuỗi JSON để dấu nháy hay câu lệnh trong Query không phá được prompt. Prompt liệt kê 13 Relation, mỗi cái một dòng nghĩa, yêu cầu mỗi vật là một cụm từ tiếng Anh ngắn (chỉ tả vật đó, không kèm Relation hay vật khác) dù Query viết bằng tiếng Việt, và đưa những gì tập Relation không diễn đạt được (trái, phải, trước, sau, phủ định, đếm, thứ tự) vào `unsupported`, trích nguyên văn. Không có ví dụ mẫu, vì model sẽ chép lại (ADR 0008).
+2. Câu trả lời bị ép theo một JSON schema cố định (`objects`, `target`, `constraints`, `unsupported`) bằng xgrammar, với một logits processor mới cho mỗi lần sinh. Giới hạn là `query_parser.max_new_tokens` = 1024, riêng với Captioning.
+3. Kiểm tra lần hai: câu trả lời bị cắt hoặc không đọc được, id vật lặp lại, `target` hay vật trong constraint không có trong danh sách, Relation sai số Anchor, hoặc vật làm Anchor của chính nó đều là parse thất bại.
+
+Vì vậy **mọi Query phải chờ một lần sinh**, kể cả Query không có Relation, và Query đầu tiên sau khi khởi động lại còn phải chờ nạp Qwen3-VL. Trong lúc job đang Captioning, Query chen vào giữa hai Instance. Chạy local thì dùng parser giả, không có model.
+
+Response có thêm `relations_applied` (Relation đã quyết định Match), `relations_stated` (Query sau khi parse có Relation), `unsupported` (những phần Query mà tập Relation không diễn đạt được, trích nguyên văn theo parser) và `parse_failed` (parser không đọc được Query). Phần không hỗ trợ chỉ được báo lại, các Relation còn lại vẫn được áp dụng. Khi parse thất bại, hoặc có Relation nhưng không có phép gán hợp lệ (ví dụ Scene có ít Instance hơn số vật trong Query, lúc đó `relations_stated` đúng còn `relations_applied` sai), Query chạy như các bước trên với câu gốc và vẫn trả 200. Lý do parse thất bại được ghi log lên notebook.
 
 Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box, đánh dấu các Anchor bằng màu riêng, và hiện một dòng thông báo khi có phần Query không được tính đến hoặc parse thất bại.
 
@@ -179,4 +188,5 @@ Nếu server khởi động lại giữa chừng, job dở dang cũng bị đán
 - **EXIF không được áp dụng:** ảnh dọc lưu dạng ảnh ngang kèm cờ EXIF sẽ đi qua mọi stage trong tư thế nằm ngang.
 - **Ảnh xoay nhiều có thể làm sai Gravity alignment:** GeoCalib chỉ đúng đến khoảng ±45°. Nếu mọi View xoay giống nhau, bước đồng thuận không phát hiện được.
 - **Không có kiểm tra trước về VRAM:** chỉ số ảnh upload bị giới hạn, còn số View vượt sức GPU thì job chỉ lỗi OOM khi chạy.
+- **Parser chưa được chạy thử trên Colab:** thời gian parse mỗi Query, thời gian nạp ở Query đầu tiên, việc đọc Query tiếng Việt, và việc sinh chỉ có chữ với cùng kích thước vocabulary của xgrammar đều chưa được đo. Câu trả lời parse sai mà vẫn hợp lệ (ví dụ chọn nhầm Relation) không bị phát hiện, chỉ thấy qua Anchor trên viewer.
 - **`view_stride: 10` bỏ 90% số ảnh:** các ảnh này vẫn được lưu nhưng không dùng ở stage nào, kể cả Embedding.

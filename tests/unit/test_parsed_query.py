@@ -40,6 +40,7 @@ def test_a_consistent_near_query_is_accepted():
 
 
 _TWO = (QueryObject("a", "chair"), QueryObject("b", "window"))
+_THREE = (*_TWO, QueryObject("c", "door"))
 
 
 @pytest.mark.parametrize(
@@ -55,6 +56,7 @@ _TWO = (QueryObject("a", "chair"), QueryObject("b", "window"))
         (_TWO, "a", (Constraint(Relation.LARGEST, "a", ("b",)),), "0 Anchor"),
         (_TWO, "a", (Constraint(Relation.BETWEEN, "a", ("b",)),), "2 Anchor"),
         (_TWO, "a", (Constraint(Relation.NEAR, "a", ("a",)),), "own Anchor"),
+        (_THREE, "a", (Constraint(Relation.BETWEEN, "a", ("b", "b")),), "twice"),
         (_TWO, "a", (Constraint(Relation.NEAR, "a", ("b",)),) * 5, "at most 4 constraints"),
     ],
 )

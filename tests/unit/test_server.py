@@ -7,6 +7,7 @@ from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
 from scenetiq.pipeline.real import RealPipeline
 from scenetiq.pipeline.reconstruct import DA3Reconstructor
 from scenetiq.pipeline.siglip import SigLIP2Encoder
+from scenetiq.query_parser import VLMQueryParser
 from scenetiq.server import build_components
 
 
@@ -51,13 +52,27 @@ def test_real_pipeline_gets_every_stage_setting_without_loading_a_model(tmp_path
     assert pipeline.captioner.options.max_new_tokens == 200
 
 
-def test_the_real_backend_reads_no_relation_in_any_query_until_its_parser_exists(
+def test_the_real_backend_parses_queries_on_the_captioning_model_without_loading_it(
     tmp_path: Path,
 ):
-    settings = Settings.from_overrides("tok", {"storage_root": str(tmp_path), "pipeline": "real"})
-    parsed = build_components(settings).query_parser.parse("the chair near the window")
-    assert parsed.constraints == ()
-    assert [o.phrase for o in parsed.objects] == ["the chair near the window"]
+    settings = Settings.from_overrides(
+        "tok",
+        {
+            "storage_root": str(tmp_path),
+            "pipeline": "real",
+            "captioning": {"max_new_tokens": 200},
+            "query_parser": {"max_new_tokens": 512},
+        },
+    )
+    components = build_components(settings)
+    parser = components.query_parser
+    assert isinstance(parser, VLMQueryParser)
+    assert isinstance(components.pipeline, RealPipeline)
+    captioner = components.pipeline.captioner
+    assert isinstance(captioner, QwenVLCaptioner)
+    assert parser.model is captioner
+    assert parser.options.max_new_tokens == 512
+    assert captioner.options.max_new_tokens == 200
 
 
 def test_fake_pipeline_comes_with_fake_encoders_and_parser(tmp_path: Path):

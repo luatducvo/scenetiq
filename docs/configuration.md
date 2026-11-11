@@ -171,6 +171,14 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 | `max_pixels` | `200704` | Pixel budget per crop (448 × 448). Larger crops are shrunk, keeping their shape. |
 | `max_new_tokens` | `320` | Longest reply per Instance. The reply is forced to follow a fixed JSON schema (Name, up to three Synonyms, one Description per Aspect), so the only way to lose a Caption is a reply cut short here; the log then says why. |
 
+### `query_parser`: objects and Relations of a Query
+
+Every Query is first read by the Captioning model (`captioning.model_id`) in one text-only generation, which splits it into objects, the wanted object, Relations and the parts no Relation can express (ADR 0009). The Query reaches it whole, in any language, and each object comes back as a short English phrase. The reply is forced to follow a fixed JSON schema and then checked again; a reply that fails the check is a parse failure, logged with its reason, and the Query is answered as a plain Query. Every Query therefore waits for one generation, also a Query without a Relation and also while a job is captioning (between two Instances), and the first Query after a restart also waits for the model to load. On the local backend a fake parser stands in and no model runs.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `max_new_tokens` | `1024` | Longest reply per Query, separate from `captioning.max_new_tokens`. The reply ends when its JSON closes, so a generous limit costs nothing on a normal Query; a reply cut short here is a parse failure. |
+
 ### `caption_embedding`: Descriptions and Query text
 
 | Key | Default | Meaning |
@@ -182,7 +190,7 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 
 ### `spatial`: Queries with a Relation
 
-A Query such as "the chair near the window" is split into objects and Relations (ADR 0009). Each object's phrase is ranked like a plain Query and its first Instances are shortlisted. A candidate margin then drops the shortlisted Instances that fit the phrase much worse than the best one: an Instance stays a candidate when, on the Caption channel (its best-matching Description) or on the image channel, its similarity is no more than that channel's margin below the best among the object's shortlist. An Instance without a Caption is judged on the image channel alone. The best of each channel always stays, so every object keeps at least one candidate, and a spatial Query can return fewer than `query_top_k` Matches but always at least one. The margin is not a threshold on Matches. The combination of candidates that best satisfies the Relations decides the Matches. A Query without a Relation ignores these settings. On the real backend no Query has a Relation yet, because the parser on the vision-language model does not exist.
+A Query such as "the chair near the window" is split into objects and Relations (ADR 0009). Each object's phrase is ranked like a plain Query and its first Instances are shortlisted. A candidate margin then drops the shortlisted Instances that fit the phrase much worse than the best one: an Instance stays a candidate when, on the Caption channel (its best-matching Description) or on the image channel, its similarity is no more than that channel's margin below the best among the object's shortlist. An Instance without a Caption is judged on the image channel alone. The best of each channel always stays, so every object keeps at least one candidate, and a spatial Query can return fewer than `query_top_k` Matches but always at least one. The margin is not a threshold on Matches. The combination of candidates that best satisfies the Relations decides the Matches. A Query without a Relation ignores these settings. The parser that finds the Relations has its own section, `query_parser`.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -209,6 +217,7 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Negative prompt word limit | `{"siglip": {"prompt_max_words": -1}}` | `siglip.prompt_max_words must not be negative, got -1` |
 | No candidates per object | `{"spatial": {"candidates_per_object": 0}}` | `spatial.candidates_per_object must be at least 1, got 0` |
 | Falloff not positive | `{"spatial": {"falloff": 0}}` | `spatial.falloff must be positive, got 0.0` |
+| Parser token limit below 1 | `{"query_parser": {"max_new_tokens": 0}}` | `query_parser.max_new_tokens must be at least 1, got 0` |
 | Negative candidate margin | `{"spatial": {"image_margin": -0.01}}` | `spatial.image_margin must not be negative, got -0.01` (likewise `spatial.caption_margin`) |
 | Removed setting | `{"match_threshold": 0.5}` | `unknown config key: match_threshold` |
 
@@ -222,3 +231,4 @@ Other values are not range-checked, so `{"captioning": {"max_new_tokens": 1}}` s
 | 255 Masks per View | `MAX_MASKS_PER_VIEW` in `pipeline/masking.py` | MV3DIS stores mask ranks as `uint8`. |
 | Patch size 14, sky threshold 0.3 | Vendored DA3 | Part of the upstream model code. |
 | MV3DIS `DEFAULT_ARGS` | Vendored MV3DIS | Upstream defaults of the algorithm. |
+| Query parser schema and prompt | `PARSE_SCHEMA` and `parse_prompt` in `query_parser.py` | Built from the Relation set and its limits in the code, so they cannot drift apart from the solver. |
