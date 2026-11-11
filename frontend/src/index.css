@@ -894,7 +894,7 @@ body {
 .scene-viewer-root {
   position: fixed;
   inset: 0;
-  background-color: #111114;
+  background-color: var(--bg-canvas);
   overflow: hidden;
 }
 .viewer-canvas-wrap {
@@ -1266,7 +1266,7 @@ input:checked + .switch-slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 17, 20, 0.7);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* Responsive adjustments */

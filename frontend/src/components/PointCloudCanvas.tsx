@@ -78,7 +78,7 @@ export function PointCloudCanvas({ geometry, pointScale = 1, onPointHover, child
       }}
       onPointerMissed={onPointHover && (() => onPointHover(null))}
     >
-      <color attach="background" args={['#111114']} />
+      <color attach="background" args={['#ffffff']} />
       <PointPickRadius radius={pointSize / 2} />
       <points geometry={geometry} {...pickHandlers}>
         <pointsMaterial size={pointSize} vertexColors sizeAttenuation />
