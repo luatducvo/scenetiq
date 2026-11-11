@@ -220,6 +220,21 @@ class CaptionEmbeddingOptions:
 
 
 @dataclass(frozen=True)
+class SpatialOptions:
+    """Settings of Queries with a Relation (ADR 0009). Neither default is validated.
+
+    Attributes:
+        candidates_per_object: M, how many Instances of each object's phrase ranking are
+            its candidates. The wanted object takes ``query_top_k`` when that is larger.
+        falloff: The fraction of the Scene extent at which a distance-based Relation's
+            score drops to ``1/e``.
+    """
+
+    candidates_per_object: int = 5
+    falloff: float = 0.1
+
+
+@dataclass(frozen=True)
 class Settings:
     """Backend settings.
 
@@ -243,10 +258,12 @@ class Settings:
         siglip: The encoder of Instance crops and Query text.
         captioning: Captioning stage.
         caption_embedding: The encoder of Descriptions and Query text.
+        spatial: Queries with a Relation.
 
     Raises:
-        ValueError: If ``min_views`` is below 1 or above ``max_views``, or ``view_stride``
-            is below 1.
+        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``view_stride``
+            or ``spatial.candidates_per_object`` is below 1, or ``spatial.falloff`` is not
+            positive.
     """
 
     storage_root: Path
@@ -270,6 +287,7 @@ class Settings:
     siglip: SigLIP2Options = field(default_factory=SigLIP2Options)
     captioning: CaptioningOptions = field(default_factory=CaptioningOptions)
     caption_embedding: CaptionEmbeddingOptions = field(default_factory=CaptionEmbeddingOptions)
+    spatial: SpatialOptions = field(default_factory=SpatialOptions)
 
     def __post_init__(self) -> None:
         """Refuse View limits that no Capture could satisfy."""
@@ -289,6 +307,13 @@ class Settings:
             raise ValueError(
                 f"siglip.prompt_max_words must not be negative, got {self.siglip.prompt_max_words}"
             )
+        if self.spatial.candidates_per_object < 1:
+            raise ValueError(
+                "spatial.candidates_per_object must be at least 1, "
+                f"got {self.spatial.candidates_per_object}"
+            )
+        if not self.spatial.falloff > 0:
+            raise ValueError(f"spatial.falloff must be positive, got {self.spatial.falloff}")
 
     @classmethod
     def from_overrides(cls, token: str, overrides: Mapping[str, Any]) -> Settings:

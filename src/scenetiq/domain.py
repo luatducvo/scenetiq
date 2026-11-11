@@ -1,4 +1,6 @@
-"""Core domain types: Capture, View, Reconstruction, Instance, Caption, Aspect and Stages.
+"""Core domain types: Capture, View, Reconstruction, Instance, Caption, Relation and Stages.
+
+Also the parsed Query, and the protocols of the Pipeline, the encoders and the parser.
 
 Terms follow ``GLOSSARY.md``.
 """
@@ -168,6 +170,122 @@ class Reconstruction:
     instances: list[Instance] = field(default_factory=list)
 
 
+class Relation(StrEnum):
+    """A spatial relationship between Instances that a Query states (ADR 0009).
+
+    The set is closed: the parser's schema, its prompt and the solver all follow it. The
+    values are the names the parser writes.
+    """
+
+    ABOVE = "above"
+    BELOW = "below"
+    ON = "on"
+    UNDER = "under"
+    NEAR = "near"
+    FAR_FROM = "far_from"
+    BETWEEN = "between"
+    NEAREST_TO = "nearest_to"
+    FARTHEST_FROM = "farthest_from"
+    LARGEST = "largest"
+    SMALLEST = "smallest"
+    TALLEST = "tallest"
+    LOWEST = "lowest"
+
+    @property
+    def anchor_count(self) -> int:
+        """How many Anchors the Relation takes: 0, 1 or 2."""
+        if self in (Relation.LARGEST, Relation.SMALLEST, Relation.TALLEST, Relation.LOWEST):
+            return 0
+        return 2 if self is Relation.BETWEEN else 1
+
+
+MAX_QUERY_OBJECTS = 4
+"""Most objects a parsed Query may mention."""
+MAX_CONSTRAINTS = 4
+"""Most constraints a parsed Query may state."""
+
+
+@dataclass(frozen=True)
+class QueryObject:
+    """One object a Query mentions.
+
+    Attributes:
+        object_id: Id of the object within its parsed Query, such as ``"a"``.
+        phrase: Short English phrase naming the object, ranked like a Query of its own.
+    """
+
+    object_id: str
+    phrase: str
+
+
+@dataclass(frozen=True)
+class Constraint:
+    """A Relation a Query states between one object and its Anchor objects.
+
+    Attributes:
+        relation: The Relation.
+        subject: Id of the object the Relation is about.
+        anchors: Ids of the objects it is measured against, as many as the Relation takes.
+    """
+
+    relation: Relation
+    subject: str
+    anchors: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ParsedQuery:
+    """A Query split into the objects it mentions and the Relations between them.
+
+    Attributes:
+        objects: The objects, one to :data:`MAX_QUERY_OBJECTS`, each with a unique id.
+        target: Id of the object the user wants; the other objects are Anchors.
+        constraints: Up to :data:`MAX_CONSTRAINTS` Relations between the objects. A
+            Query without constraints is answered as a plain Query, with its original text.
+        unsupported: Parts of the Query the Relation set cannot express, quoted from it.
+
+    Raises:
+        ValueError: If the objects, the target and the constraints do not fit together:
+            an object id repeats, the target or a constraint names an object that is not
+            listed, a Relation has the wrong number of Anchors, or a subject is its own
+            Anchor.
+    """
+
+    objects: tuple[QueryObject, ...]
+    target: str
+    constraints: tuple[Constraint, ...] = ()
+    unsupported: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Refuse a parsed Query whose parts do not fit together."""
+        if not self.objects:
+            raise ValueError("a parsed Query needs at least one object")
+        if len(self.objects) > MAX_QUERY_OBJECTS:
+            raise ValueError(f"a parsed Query has at most {MAX_QUERY_OBJECTS} objects")
+        if len(self.constraints) > MAX_CONSTRAINTS:
+            raise ValueError(f"a parsed Query has at most {MAX_CONSTRAINTS} constraints")
+        ids = [o.object_id for o in self.objects]
+        if len(set(ids)) != len(ids):
+            raise ValueError(f"a parsed Query repeats an object id: {ids}")
+        if self.target not in ids:
+            raise ValueError(f"the target {self.target!r} is not one of the objects {ids}")
+        for c in self.constraints:
+            for named in (c.subject, *c.anchors):
+                if named not in ids:
+                    raise ValueError(f"{c.relation} names object {named!r}, which is not listed")
+            if len(c.anchors) != c.relation.anchor_count:
+                raise ValueError(
+                    f"{c.relation} takes {c.relation.anchor_count} Anchor(s), got {len(c.anchors)}"
+                )
+            if c.subject in c.anchors:
+                raise ValueError(f"{c.relation} uses object {c.subject!r} as its own Anchor")
+
+    @classmethod
+    def without_relations(cls, text: str) -> ParsedQuery:
+        """A Query with no Relation: one object, the whole text, which is the target."""
+        return cls(objects=(QueryObject("a", text),), target="a")
+
+
 StageCallback = Callable[[Stage], None]
 
 
@@ -196,4 +314,12 @@ class CaptionEncoder(Protocol):
 
     def encode_query(self, text: str) -> FloatArray:
         """Return the L2-normalised embedding of Query ``text``."""
+        ...
+
+
+class QueryParser(Protocol):
+    """Splits a Query into the objects it mentions and the Relations between them."""
+
+    def parse(self, text: str) -> ParsedQuery:
+        """Return the parsed Query of ``text``, without constraints when it states no Relation."""
         ...

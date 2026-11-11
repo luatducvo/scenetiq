@@ -228,16 +228,27 @@ export interface InstanceInfo {
   name: string | null
 }
 
-/** One of the top-K Instances for a Query (ADR 0008). */
+/** An Instance a Match was measured against, and the phrase of the object it stands for. */
+export interface AnchorInfo {
+  instance_id: number
+  phrase: string
+}
+
+/** One of the top-K Instances for a Query (ADR 0008, ADR 0009). */
 export interface MatchInfo {
   instance_id: number
-  /** Fused rank score in [0, 1], relative to this Query only. */
+  /**
+   * Fused rank score in [0, 1], or the assignment score when Relations were applied;
+   * relative to this Query only.
+   */
   score: number
   image_score: number
   /** Similarity of the best-matching Description, or null without a Caption. */
   caption_score: number | null
   /** The Aspect of that Description, or null without a Caption. */
   caption_aspect: Aspect | null
+  /** The Anchors of the Match's assignment; empty when no Relation was applied. */
+  anchors: AnchorInfo[]
 }
 
 /** A fixed side of an Instance that a Caption describes. */
@@ -245,6 +256,8 @@ export type Aspect = 'identity' | 'appearance' | 'material' | 'use'
 
 export interface QueryResult {
   matches: MatchInfo[]
+  /** Whether the Query's Relations decided the Matches. */
+  relations_applied: boolean
 }
 
 /** Per-point Instance ids (-1 = none), in the same order as the point cloud. */

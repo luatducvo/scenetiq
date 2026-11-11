@@ -57,8 +57,16 @@ A free-text description from the user (e.g. "red chair") asked against one Recon
 _Avoid_: Search, prompt, question
 
 **Match**:
-One of the top-K Instances for a Query, ranked by fusing image similarity with the similarity of its best-matching Description; carries a normalised fused score. A Query on a Reconstruction with Instances always has at least one Match.
+One of the top-K Instances for a Query, ranked by fusing image similarity with the similarity of its best-matching Description; carries a normalised fused score. For a Query with a Relation it is ranked instead by how well its combination with the Anchors satisfies the Relations, and carries those Anchors. A Query on a Reconstruction with Instances always has at least one Match.
 _Avoid_: Hit, result, detection, low-confidence match
 
+**Relation**:
+A spatial relationship between Instances that a Query states, such as near, on or between. The set is closed; each Relation takes a fixed number of Anchors and is scored from stored bounding boxes and centroids.
+_Avoid_: Predicate, spatial filter, edge
+
+**Anchor**:
+An Instance a Query uses as a reference to single out the Match (the window in "the chair near the window"). The viewer marks it in its own colour.
+_Avoid_: Reference object, landmark, context object
+
 **Spatial reasoning**:
-Answering Queries about relations between Instances (e.g. "the cup left of the laptop"). Out of scope for v1.
+Answering Queries about Relations between Instances. The first slice covers Relations that do not depend on where the user stands: above, below, on, under, near, far from, between, nearest to, farthest from, largest, smallest, tallest and lowest. Left, right, in front of, behind, negation, counting and ordinals are not covered.

@@ -18,10 +18,19 @@ from pydantic import BaseModel, Field
 
 from scenetiq.artifacts import INSTANCE_IDS_FILE, POINTS_FILE, load_instances
 from scenetiq.config import Settings
-from scenetiq.domain import Aspect, CaptionEncoder, Capture, Pipeline, TextEncoder, View
+from scenetiq.domain import (
+    Aspect,
+    CaptionEncoder,
+    Capture,
+    Pipeline,
+    QueryParser,
+    TextEncoder,
+    View,
+)
 from scenetiq.jobs import JobBusyError, JobRunner
-from scenetiq.query import MissingEmbeddingsError, run_query
+from scenetiq.query import Match, MissingEmbeddingsError, run_query
 from scenetiq.runtime_log import UploadProgress, report_progress
+from scenetiq.spatial import run_spatial_query
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureError
 
 logger = logging.getLogger(__name__)
@@ -35,6 +44,7 @@ def create_app(
     pipeline: Pipeline,
     text_encoder: TextEncoder,
     caption_encoder: CaptionEncoder,
+    query_parser: QueryParser,
 ) -> FastAPI:
     """Build the SceneTIQ API.
 
@@ -43,6 +53,7 @@ def create_app(
         pipeline: Turns an uploaded Capture into a Reconstruction.
         text_encoder: Encodes Query text for matching against Instance image embeddings.
         caption_encoder: Encodes Query text for matching against Instance Captions.
+        query_parser: Splits every Query into objects and Relations (ADR 0009).
 
     Returns:
         A FastAPI app; every route requires ``Authorization: Bearer <token>``.
@@ -211,7 +222,7 @@ def create_app(
 
     @app.post("/scenes/{scene_id}/query")
     def query_scene(request: Request, scene_id: str, body: QueryIn) -> QueryOut:
-        """Find the Instances that match a free-text Query."""
+        """Find the Instances that match a free-text Query, honouring its Relations."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         text = body.text.strip()
         if not text:
@@ -219,14 +230,26 @@ def create_app(
         instances = load_instances(directory)
         # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
         captioned = any(inst.caption_embeddings for inst in instances)
-        try:
-            matches = run_query(
+
+        def rank(phrase: str, top_k: int) -> list[Match]:
+            return run_query(
                 instances,
-                text_encoder.encode(text),
-                settings.query_top_k,
+                text_encoder.encode(phrase),
+                top_k,
                 settings.rrf_k,
-                caption_encoder.encode_query(text) if captioned else None,
+                caption_encoder.encode_query(phrase) if captioned else None,
             )
+
+        parsed = query_parser.parse(text)
+        try:
+            matches = None
+            if parsed.constraints:
+                matches = run_spatial_query(
+                    instances, parsed, rank, settings.query_top_k, settings.spatial
+                )
+            relations_applied = matches is not None
+            if matches is None:  # no Relation, or no valid assignment: the plain Query
+                matches = rank(text, settings.query_top_k)
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return QueryOut(
@@ -237,9 +260,13 @@ def create_app(
                     image_score=m.image_score,
                     caption_score=m.caption_score,
                     caption_aspect=m.caption_aspect,
+                    anchors=[
+                        AnchorOut(instance_id=a.instance_id, phrase=a.phrase) for a in m.anchors
+                    ],
                 )
                 for m in matches
-            ]
+            ],
+            relations_applied=relations_applied,
         )
 
     return app
@@ -274,11 +301,21 @@ class QueryIn(BaseModel):
     text: str = Field(max_length=500)
 
 
-class MatchOut(BaseModel):
-    """One Match: an Instance id, its normalised fused score and the per-channel similarities.
+class AnchorOut(BaseModel):
+    """An Instance a Match was measured against, and the phrase of the object it stands for."""
 
-    ``caption_score`` is the similarity of the best-matching Description and
-    ``caption_aspect`` its Aspect; both are null for an Instance without a Caption.
+    instance_id: int
+    phrase: str
+
+
+class MatchOut(BaseModel):
+    """One Match: an Instance id, its score, the per-channel similarities and its Anchors.
+
+    ``score`` is the normalised fused score, or the assignment score when Relations were
+    applied (ADR 0009); either way it is relative to one Query. ``caption_score`` is the
+    similarity of the best-matching Description and ``caption_aspect`` its Aspect; both are
+    null for an Instance without a Caption. When Relations were applied, the similarities are
+    those of the wanted object's phrase. ``anchors`` is empty when they were not.
     """
 
     instance_id: int
@@ -286,12 +323,14 @@ class MatchOut(BaseModel):
     image_score: float
     caption_score: float | None
     caption_aspect: Aspect | None
+    anchors: list[AnchorOut]
 
 
 class QueryOut(BaseModel):
-    """The top-K Matches for a Query, best first."""
+    """The top-K Matches for a Query, best first, and whether its Relations were applied."""
 
     matches: list[MatchOut]
+    relations_applied: bool
 
 
 def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:

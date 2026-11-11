@@ -159,3 +159,25 @@ def test_short_queries_are_wrapped_in_the_siglip_prompt_by_default():
     siglip = Settings.from_overrides("tok", {}).siglip
     assert siglip.prompt == "This is a photo of {}."
     assert siglip.prompt_max_words == 4
+
+
+def test_spatial_queries_take_five_candidates_per_object_and_a_tenth_of_the_extent():
+    spatial = Settings.from_overrides("tok", {}).spatial
+    assert (spatial.candidates_per_object, spatial.falloff) == (5, 0.1)
+    overridden = Settings.from_overrides("tok", {"spatial": {"candidates_per_object": 3}})
+    assert overridden.spatial.candidates_per_object == 3
+    assert overridden.spatial.falloff == 0.1
+
+
+@pytest.mark.parametrize(
+    ("overrides", "named"),
+    [
+        ({"spatial": {"candidates_per_object": 0}}, "spatial.candidates_per_object"),
+        ({"spatial": {"falloff": 0}}, "spatial.falloff"),
+        ({"spatial": {"falloff": -0.1}}, "spatial.falloff"),
+        ({"spatial": {"candidates_per_object": 2.5}}, "spatial.candidates_per_object"),
+    ],
+)
+def test_spatial_settings_that_cannot_work_are_refused_by_name(overrides: dict, named: str):
+    with pytest.raises(ValueError, match=named.replace(".", r"\.")):
+        Settings.from_overrides("tok", overrides)

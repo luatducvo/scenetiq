@@ -18,16 +18,31 @@ class MissingEmbeddingsError(ValueError):
 
 
 @dataclass(frozen=True)
+class Anchor:
+    """An Instance a Match was measured against, for a Query with a Relation.
+
+    Attributes:
+        instance_id: The Instance standing for the Anchor object.
+        phrase: The phrase of the object it stands for.
+    """
+
+    instance_id: int
+    phrase: str
+
+
+@dataclass(frozen=True)
 class Match:
     """An Instance returned for a Query.
 
     Attributes:
         instance_id: The Matched Instance.
-        score: Fused rank score normalised to [0, 1]; relative to this Query only.
+        score: Fused rank score normalised to [0, 1], or for a Query with a Relation the
+            score of its assignment (ADR 0009); relative to this Query only.
         image_score: Cosine similarity of the Query to the Instance's image embedding.
         caption_score: Cosine similarity of the Query to the Instance's best-matching
             Description, or ``None`` when it has no Caption.
         caption_aspect: The Aspect of that Description, or ``None`` without a Caption.
+        anchors: The Anchors of its assignment, empty for a Query without a Relation.
     """
 
     instance_id: int
@@ -35,6 +50,7 @@ class Match:
     image_score: float
     caption_score: float | None = None
     caption_aspect: Aspect | None = None
+    anchors: tuple[Anchor, ...] = ()
 
 
 def best_description(

@@ -180,6 +180,17 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 | `batch_size` | `32` | Descriptions encoded per forward pass. |
 | `max_length` | `256` | Longest input in tokens; longer text is cut. |
 
+### `spatial`: Queries with a Relation
+
+A Query such as "the chair near the window" is split into objects and Relations (ADR 0009). Each object's phrase is ranked like a plain Query, its first candidates are kept, and the combination that best satisfies the Relations decides the Matches. A Query without a Relation ignores these settings. On the real backend no Query has a Relation yet, because the parser on the vision-language model does not exist.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `candidates_per_object` | `5` | M: how many Instances of each object's phrase ranking are its candidates. The wanted object takes `query_top_k` when that is larger. A larger value lets a lower-ranked Instance win through the Relations. |
+| `falloff` | `0.1` | Fraction of the Scene extent (the diagonal of the box around every Instance) at which a distance-based Relation, such as near, drops to `1/e`. Smaller makes near stricter. |
+
+Neither default has been validated on real Scenes.
+
 ## Invalid configuration
 
 The backend refuses to start on any of these. On Colab, the install cell reports them before anything is installed.
@@ -194,6 +205,8 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Values below 1 | `{"view_stride": 0}` | `view_stride must be at least 1, got 0` |
 | Negative RRF constant | `{"rrf_k": -1}` | `rrf_k must not be negative, got -1` |
 | Negative prompt word limit | `{"siglip": {"prompt_max_words": -1}}` | `siglip.prompt_max_words must not be negative, got -1` |
+| No candidates per object | `{"spatial": {"candidates_per_object": 0}}` | `spatial.candidates_per_object must be at least 1, got 0` |
+| Falloff not positive | `{"spatial": {"falloff": 0}}` | `spatial.falloff must be positive, got 0.0` |
 | Removed setting | `{"match_threshold": 0.5}` | `unknown config key: match_threshold` |
 
 Other values are not range-checked, so `{"captioning": {"max_new_tokens": 1}}` starts normally and then leaves every Instance without a Caption.

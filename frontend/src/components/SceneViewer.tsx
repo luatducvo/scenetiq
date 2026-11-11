@@ -11,7 +11,7 @@ import {
   type InstanceInfo,
   type QueryResult,
 } from '../api'
-import { highlightColors, instanceColors, matchColor } from '../highlight'
+import { ANCHOR_COLOR, anchorIds, highlightColors, instanceColors, matchColor } from '../highlight'
 import { PointCloudCanvas } from './PointCloudCanvas'
 
 interface Props {
@@ -93,8 +93,8 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
 
   const boxes = useMemo(() => {
     if (!scene || !result) return []
-    return result.matches.flatMap((m, rank) => {
-      const inst = scene.instances.get(m.instance_id)
+    const boxOf = (instanceId: number, color: [number, number, number], label: string | null) => {
+      const inst = scene.instances.get(instanceId)
       if (!inst) return []
       const box = new THREE.Box3(
         new THREE.Vector3(...inst.bbox_min),
@@ -106,14 +106,22 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
         inst.bbox_min[1],
         (inst.bbox_min[2] + inst.bbox_max[2]) / 2,
       )
-      return [
-        {
-          helper: new THREE.Box3Helper(box, new THREE.Color(...matchColor(rank))),
-          name: inst.name,
-          top,
-        },
-      ]
-    })
+      return [{ helper: new THREE.Box3Helper(box, new THREE.Color(...color)), label, top }]
+    }
+    const matchBoxes = result.matches.flatMap((m, rank) =>
+      boxOf(m.instance_id, matchColor(rank), scene.instances.get(m.instance_id)?.name ?? null),
+    )
+    // An Anchor is labelled with the phrase it stood for, so a misread Anchor shows.
+    const anchors = anchorIds(result.matches)
+    const phrases = new Map<number, Set<string>>()
+    for (const a of result.matches.flatMap((m) => m.anchors)) {
+      if (!anchors.has(a.instance_id)) continue
+      phrases.set(a.instance_id, (phrases.get(a.instance_id) ?? new Set()).add(a.phrase))
+    }
+    const anchorBoxes = [...phrases].flatMap(([id, ps]) =>
+      boxOf(id, ANCHOR_COLOR, `Anchor: ${[...ps].join(', ')}`),
+    )
+    return [...matchBoxes, ...anchorBoxes]
   }, [scene, result])
 
   function toggleFullscreen() {
@@ -145,9 +153,9 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
             {boxes.map((b, i) => (
               <group key={i}>
                 <primitive object={b.helper} />
-                {b.name && (
+                {b.label && (
                   <Html position={b.top} center>
-                    <span className="box-label">{b.name}</span>
+                    <span className="box-label">{b.label}</span>
                   </Html>
                 )}
               </group>
@@ -207,6 +215,13 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                       <span className="swatch" style={{ background: `rgb(${matchColor(rank).map((c) => c * 255).join(',')})` }} />
                       {scene?.instances.get(m.instance_id)?.name ?? `Instance ${m.instance_id}`} — score{' '}
                       {m.score.toFixed(3)}
+                      {m.anchors.map((a) => (
+                        <span key={a.instance_id} className="anchor">
+                          {' · '}
+                          <span className="swatch" style={{ background: `rgb(${ANCHOR_COLOR.map((c) => c * 255).join(',')})` }} />
+                          {a.phrase}: {scene?.instances.get(a.instance_id)?.name ?? `Instance ${a.instance_id}`}
+                        </span>
+                      ))}
                     </li>
                   ))}
                 </ol>

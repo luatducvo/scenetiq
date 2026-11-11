@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from scenetiq.config import Settings
-from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeTextEncoder
+from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, FakeTextEncoder
 from scenetiq.pipeline.qwen_embedding import Qwen3TextEmbedder
 from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
 from scenetiq.pipeline.real import RealPipeline
@@ -27,7 +27,12 @@ def test_real_pipeline_gets_every_stage_setting_without_loading_a_model(tmp_path
             "captioning": {"max_new_tokens": 200},
         },
     )
-    pipeline, encoder, caption_encoder = build_components(settings)
+    components = build_components(settings)
+    pipeline, encoder, caption_encoder = (
+        components.pipeline,
+        components.text_encoder,
+        components.caption_encoder,
+    )
     assert isinstance(pipeline, RealPipeline)
     assert isinstance(pipeline.reconstructor, DA3Reconstructor)
     assert isinstance(encoder, SigLIP2Encoder)
@@ -46,9 +51,20 @@ def test_real_pipeline_gets_every_stage_setting_without_loading_a_model(tmp_path
     assert pipeline.captioner.options.max_new_tokens == 200
 
 
-def test_fake_pipeline_comes_with_fake_encoders(tmp_path: Path):
+def test_the_real_backend_reads_no_relation_in_any_query_until_its_parser_exists(
+    tmp_path: Path,
+):
+    settings = Settings.from_overrides("tok", {"storage_root": str(tmp_path), "pipeline": "real"})
+    parsed = build_components(settings).query_parser.parse("the chair near the window")
+    assert parsed.constraints == ()
+    assert [o.phrase for o in parsed.objects] == ["the chair near the window"]
+
+
+def test_fake_pipeline_comes_with_fake_encoders_and_parser(tmp_path: Path):
     settings = Settings.from_overrides("tok", {"storage_root": str(tmp_path)})
-    pipeline, encoder, caption_encoder = build_components(settings)
-    assert isinstance(pipeline, FakePipeline)
-    assert isinstance(encoder, FakeTextEncoder)
-    assert isinstance(caption_encoder, FakeCaptionEncoder)
+    components = build_components(settings)
+    assert isinstance(components.pipeline, FakePipeline)
+    assert isinstance(components.text_encoder, FakeTextEncoder)
+    assert isinstance(components.caption_encoder, FakeCaptionEncoder)
+    assert isinstance(components.query_parser, FakeQueryParser)
+    assert components.query_parser.parse("the chair near the window").constraints == ()

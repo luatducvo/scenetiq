@@ -1,4 +1,4 @@
-"""Deterministic stand-ins for the GPU Pipeline and the text encoders.
+"""Deterministic stand-ins for the GPU Pipeline, the text encoders and the Query parser.
 
 Used by the CPU test suite and selectable on a running backend with
 ``"pipeline": "fake"`` in the config, so the whole system can be exercised without models.
@@ -7,6 +7,7 @@ Used by the CPU test suite and selectable on a running backend with
 from __future__ import annotations
 
 import threading
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -16,6 +17,7 @@ from scenetiq.domain import (
     Capture,
     EmbeddedCaption,
     FloatArray,
+    ParsedQuery,
     Reconstruction,
     Stage,
     StageCallback,
@@ -193,3 +195,21 @@ class FakeCaptionEncoder:
         return FAKE_CAPTION_QUERY_EMBEDDINGS.get(
             text.strip().lower(), UNKNOWN_CAPTION_QUERY_EMBEDDING
         )
+
+
+class FakeQueryParser:
+    """A Query parser that knows only the parsed Queries it was prepared with.
+
+    Args:
+        prepared: Parsed Query by Query text, matched case- and whitespace-insensitively.
+            Any other text is read as a Query without a Relation.
+    """
+
+    def __init__(self, prepared: Mapping[str, ParsedQuery] | None = None) -> None:
+        """Create the fake; see the class docstring for the arguments."""
+        self.prepared = {t.strip().lower(): p for t, p in (prepared or {}).items()}
+
+    def parse(self, text: str) -> ParsedQuery:
+        """Return the prepared parsed Query of ``text``, or one without a Relation."""
+        found = self.prepared.get(text.strip().lower())
+        return found if found is not None else ParsedQuery.without_relations(text)

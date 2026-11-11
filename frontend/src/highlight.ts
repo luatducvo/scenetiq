@@ -14,6 +14,17 @@ export function matchColor(rank: number): [number, number, number] {
   return MATCH_COLORS[rank % MATCH_COLORS.length]
 }
 
+/** The colour of every Anchor, unlike any Match colour (RGB 0-1). */
+export const ANCHOR_COLOR: [number, number, number] = [0.55, 0.4, 1.0]
+
+/** The Instance ids of the Matches' Anchors that are not Matches themselves. */
+export function anchorIds(matches: MatchInfo[]): Set<number> {
+  const matched = new Set(matches.map((m) => m.instance_id))
+  return new Set(
+    matches.flatMap((m) => m.anchors.map((a) => a.instance_id)).filter((id) => !matched.has(id)),
+  )
+}
+
 /** Stepping the hue by the golden ratio keeps consecutive Instance ids far apart. */
 const HUE_STEP = 0.618034
 const INSTANCE_LIGHTNESS = [0.5, 0.65, 0.38]
@@ -57,8 +68,8 @@ export function instanceColors(instanceIds: Int32Array): Float32Array {
 }
 
 /**
- * Colour points for display: Matched Instances get their rank's colour,
- * everything else is the original colour, dimmed while any Match is shown.
+ * Colour points for display: Matched Instances get their rank's colour, their Anchors the
+ * Anchor colour, and everything else is the original colour, dimmed while any Match is shown.
  */
 export function highlightColors(
   base: Float32Array,
@@ -67,10 +78,15 @@ export function highlightColors(
 ): Float32Array {
   if (matches.length === 0) return base.slice()
   const rankOf = new Map(matches.map((m, i) => [m.instance_id, i]))
+  const anchors = anchorIds(matches)
   const out = new Float32Array(base.length)
   for (let p = 0; p < instanceIds.length; p++) {
     const rank = rankOf.get(instanceIds[p])
-    if (rank === undefined) {
+    if (anchors.has(instanceIds[p])) {
+      out[3 * p] = ANCHOR_COLOR[0]
+      out[3 * p + 1] = ANCHOR_COLOR[1]
+      out[3 * p + 2] = ANCHOR_COLOR[2]
+    } else if (rank === undefined) {
       out[3 * p] = base[3 * p] * 0.35
       out[3 * p + 1] = base[3 * p + 1] * 0.35
       out[3 * p + 2] = base[3 * p + 2] * 0.35

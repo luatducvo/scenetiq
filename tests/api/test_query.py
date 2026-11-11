@@ -37,6 +37,7 @@ def _uncaptioned_client(make_client: Callable[..., TestClient], settings: Settin
 def test_query_returns_the_best_instance_with_a_full_score(client: TestClient):
     scene = _ready_scene(client)
     result = _query(client, scene, "red chair")
+    # The fake parser reads no Relation, so the Query is plain and has no Anchors.
     # First in both rankings: (1/61 + 1/61) / (2/61) = 1.
     assert result == {
         "matches": [
@@ -46,8 +47,10 @@ def test_query_returns_the_best_instance_with_a_full_score(client: TestClient):
                 "image_score": 1.0,
                 "caption_score": 1.0,
                 "caption_aspect": "identity",
+                "anchors": [],
             }
-        ]
+        ],
+        "relations_applied": False,
     }
 
 
@@ -175,7 +178,7 @@ def test_scene_without_instances_returns_no_matches(make_client: Callable[..., T
     )
     client = make_client(pipeline=FakePipeline(reconstruction=empty))
     scene = _ready_scene(client)
-    assert _query(client, scene, "red chair") == {"matches": []}
+    assert _query(client, scene, "red chair") == {"matches": [], "relations_applied": False}
 
 
 def test_scene_whose_instances_lack_embeddings_cannot_be_queried(

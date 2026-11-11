@@ -10,7 +10,7 @@ from PIL import Image
 
 from scenetiq.api import create_app
 from scenetiq.config import Settings
-from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeTextEncoder
+from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, FakeTextEncoder
 
 TOKEN = "test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -72,6 +72,7 @@ def make_client(settings: Settings, pipeline: FakePipeline) -> Iterator[Callable
             "pipeline": pipeline,
             "text_encoder": FakeTextEncoder(),
             "caption_encoder": FakeCaptionEncoder(),
+            "query_parser": FakeQueryParser(),
         }
         kwargs.update(overrides)
         client = TestClient(create_app(**kwargs))  # type: ignore[arg-type]
