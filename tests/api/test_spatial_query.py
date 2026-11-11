@@ -726,3 +726,18 @@ def test_with_query_top_k_above_m_only_a_spatial_query_returns_fewer_matches(
     # Without a Relation no margin applies: query_top_k Matches, best first.
     plain = _query(client, scene, "chair")["matches"]
     assert [m["instance_id"] for m in plain] == [0, 1, 2]
+
+
+def test_a_spatial_query_shortlists_the_top_k_it_asks_for(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=1, top_k=1, margins=WIDE)
+
+    resp = client.post(
+        f"/scenes/{scene}/query", json={"text": NEAR_QUERY, "top_k": 2}, headers=AUTH
+    )
+
+    # Asking for 2 shortlists both chairs, though M and query_top_k are 1. Chair 1 is 1 m
+    # from the lamp, exp(-1) = 0.367879; chair 0 is (6, 4) away, exp(-sqrt(52)) = 0.000738.
+    assert resp.status_code == 200
+    assert [m["instance_id"] for m in resp.json()["matches"]] == [1, 0]

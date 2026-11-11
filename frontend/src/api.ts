@@ -118,6 +118,9 @@ export interface BackendOptions {
   upload_max_side: number
   /** JPEG quality in (0, 1] that photos are re-encoded at. */
   upload_jpeg_quality: number
+  /** How many Matches a Query returns when it does not ask, and at most. */
+  query_top_k: number
+  query_max_top_k: number
 }
 
 export async function getOptions(cfg: BackendConfig): Promise<BackendOptions> {
@@ -322,16 +325,18 @@ export async function getInstances(cfg: BackendConfig, sceneId: string): Promise
   return (await request(cfg, `/scenes/${sceneId}/instances`)).json()
 }
 
+/** Run a Query; `topK` asks for that many Matches instead of the backend's default. */
 export async function queryScene(
   cfg: BackendConfig,
   sceneId: string,
   text: string,
+  topK?: number,
 ): Promise<QueryResult> {
   return (
     await request(cfg, `/scenes/${sceneId}/query`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(topK === undefined ? { text } : { text, top_k: topK }),
     })
   ).json()
 }

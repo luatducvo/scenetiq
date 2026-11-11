@@ -5,13 +5,14 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import {
   getInstanceIds,
   getInstances,
+  getOptions,
   getPointCloud,
   queryScene,
   type BackendConfig,
   type InstanceInfo,
   type QueryResult,
 } from '../api'
-import { highlightColors, matchColor, namesColors } from '../highlight'
+import { heatmapColor, heatmapPositions, highlightColors, namesColors } from '../highlight'
 import { PointCloudCanvas } from './PointCloudCanvas'
 
 interface Props {
@@ -77,6 +78,19 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   const [queryError, setQueryError] = useState<string | null>(null)
   const [showNames, setShowNames] = useState(false)
   const [pointScale, setPointScale] = useState(readPointScale)
+  const [topK, setTopK] = useState<number | null>(null)
+  const [maxTopK, setMaxTopK] = useState<number | null>(null)
+  // The text of the result shown, which a new K re-runs.
+  const [shownText, setShownText] = useState<string | null>(null)
+
+  useEffect(() => {
+    getOptions(config)
+      .then((o) => {
+        setTopK(o.query_top_k)
+        setMaxTopK(o.query_max_top_k)
+      })
+      .catch((err) => setQueryError(`Cannot read the backend's options: ${err}`))
+  }, [config])
 
   useEffect(() => {
     let cancelled = false
@@ -158,13 +172,12 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     writePointScale(value)
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!text.trim()) return
+  async function runQuery(query: string, k: number | null) {
     setQuerying(true)
     setQueryError(null)
     try {
-      setResult(await queryScene(config, sceneId, text.trim()))
+      setResult(await queryScene(config, sceneId, query, k ?? undefined))
+      setShownText(query)
     } catch (err) {
       setQueryError(String(err))
     } finally {
@@ -172,7 +185,23 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     }
   }
 
+  function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (text.trim()) runQuery(text.trim(), topK)
+  }
+
+  function changeTopK(k: number) {
+    setTopK(k)
+    if (result && shownText && !querying) runQuery(shownText, k)
+  }
+
+  function clear() {
+    setResult(null)
+    setShownText(null)
+  }
+
   const notice = result && queryNotice(result)
+  const positions = result ? heatmapPositions(result.matches) : []
 
   return (
     <div className="viewer" ref={viewerRef}>
@@ -203,7 +232,7 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
               {querying ? 'Searching…' : 'Query'}
             </button>
             {result && (
-              <button type="button" onClick={() => setResult(null)}>
+              <button type="button" onClick={clear}>
                 Clear
               </button>
             )}
@@ -217,6 +246,20 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
           >
             {showNames ? 'Original colours' : 'Names'}
           </button>
+          {topK !== null && maxTopK !== null && (
+            <label className="slider" title="How many Matches a Query returns">
+              Matches {topK}
+              <input
+                type="range"
+                min={1}
+                max={maxTopK}
+                step={1}
+                value={topK}
+                disabled={querying}
+                onChange={(e) => changeTopK(Number(e.target.value))}
+              />
+            </label>
+          )}
           <label className="slider" title="Point size">
             Points
             <input
@@ -248,7 +291,10 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                 <ol>
                   {result.matches.map((m, rank) => (
                     <li key={m.instance_id}>
-                      <span className="swatch" style={{ background: cssColor(matchColor(rank)) }} />
+                      <span
+                        className="swatch"
+                        style={{ background: cssColor(heatmapColor(positions[rank])) }}
+                      />
                       {scene?.instances.get(m.instance_id)?.name ?? `Instance ${m.instance_id}`}
                     </li>
                   ))}

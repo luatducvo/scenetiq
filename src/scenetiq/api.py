@@ -112,6 +112,8 @@ def create_app(
             max_views=settings.max_views,
             upload_max_side=settings.upload_max_side,
             upload_jpeg_quality=settings.upload_jpeg_quality,
+            query_top_k=settings.query_top_k,
+            query_max_top_k=settings.query_max_top_k,
         )
 
     @app.post("/captures", status_code=status.HTTP_201_CREATED)
@@ -270,6 +272,12 @@ def create_app(
         text = body.text.strip()
         if not text:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Query text is empty")
+        top_k = settings.query_top_k if body.top_k is None else body.top_k
+        if not 1 <= top_k <= settings.query_max_top_k:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"top_k must be 1-{settings.query_max_top_k}, got {top_k}",
+            )
         instances = load_instances(directory)
         # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
         captioned = any(inst.caption_embeddings for inst in instances)
@@ -292,12 +300,10 @@ def create_app(
         try:
             matches = None
             if parsed is not None and parsed.constraints:
-                matches = run_spatial_query(
-                    instances, parsed, rank, settings.query_top_k, settings.spatial
-                )
+                matches = run_spatial_query(instances, parsed, rank, top_k, settings.spatial)
             relations_applied = matches is not None
             if matches is None:  # no Relation, no valid assignment or no parse: plain Query
-                matches = rank(text, settings.query_top_k)
+                matches = rank(text, top_k)
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return QueryOut(
@@ -324,16 +330,20 @@ def create_app(
 
 
 class OptionsOut(BaseModel):
-    """The View limits of a Capture, and how the frontend prepares photos (ADR 0010).
+    """What the frontend configures itself from.
 
-    The frontend shrinks every photo so that its long side is at most ``upload_max_side``
-    pixels and re-encodes it as JPEG at ``upload_jpeg_quality`` in (0, 1].
+    The View limits of a Capture; how the frontend prepares photos (ADR 0010): it shrinks
+    every photo so that its long side is at most ``upload_max_side`` pixels and re-encodes
+    it as JPEG at ``upload_jpeg_quality`` in (0, 1]; and how many Matches a Query returns
+    by default and at most.
     """
 
     min_views: int
     max_views: int
     upload_max_side: int
     upload_jpeg_quality: float
+    query_top_k: int
+    query_max_top_k: int
 
 
 class CaptureIn(BaseModel):
@@ -413,9 +423,10 @@ class InstanceOut(BaseModel):
 
 
 class QueryIn(BaseModel):
-    """A free-text Query."""
+    """A free-text Query, and how many Matches it asks for (``query_top_k`` when null)."""
 
     text: str = Field(max_length=500)
+    top_k: int | None = None
 
 
 class AnchorOut(BaseModel):

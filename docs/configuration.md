@@ -40,7 +40,8 @@ The backend reads its settings once, at startup. They apply to new Captures and 
 |---|---|---|
 | `storage_root` | `./data` | Directory for Scenes and the SQLite database. |
 | `pipeline` | `"fake"` | `"real"` runs the GPU models. `"fake"` runs none and returns a fixed result, for testing. |
-| `query_top_k` | `1` | How many Matches a Query returns: the top K of the fused ranking (ADR 0008). There is no relevance threshold, so a Query always returns Matches when the Scene has Instances. |
+| `query_top_k` | `5` | How many Matches a Query returns when it does not ask for a number: the top K of the fused ranking (ADR 0008). There is no relevance threshold, so a Query always returns Matches when the Scene has Instances. The viewer's Matches slider starts here. |
+| `query_max_top_k` | `20` | The most Matches a Query may ask for (`top_k` in the request, the viewer's slider). It must not be below `query_top_k`. |
 | `rrf_k` | `60` | Reciprocal Rank Fusion constant. Each ranking adds `1 / (rrf_k + rank)` to an Instance's fused value; a larger value flattens the difference between ranks. |
 | `min_views` | `1` | Fewest photos a Capture may upload. |
 | `max_views` | `2000` | Most photos a Capture may upload. It has no upper limit. |

@@ -34,7 +34,10 @@ def _uncaptioned_client(make_client: Callable[..., TestClient], settings: Settin
     return make_client(settings=settings, pipeline=FakePipeline(reconstruction=rec))
 
 
-def test_query_returns_the_best_instance_with_a_full_score(client: TestClient):
+def test_query_returns_the_best_instance_with_a_full_score(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client = make_client(settings=_settings(tmp_path, query_top_k=1))
     scene = _ready_scene(client)
     result = _query(client, scene, "red chair")
     # The fake parser reads no Relation, so the Query is plain and has no Anchors.
@@ -167,7 +170,10 @@ def test_a_query_resembling_nothing_still_returns_the_closest_instance(
     assert "low_confidence" not in result
 
 
-def test_query_text_is_case_and_whitespace_insensitive_in_fake_encoder(client: TestClient):
+def test_query_text_is_case_and_whitespace_insensitive_in_fake_encoder(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client = make_client(settings=_settings(tmp_path, query_top_k=1))
     scene = _ready_scene(client)
     assert [m["instance_id"] for m in _query(client, scene, "  Red Chair ")["matches"]] == [0]
 
@@ -288,3 +294,39 @@ def test_a_scene_with_captions_encodes_the_query_for_them(make_client: Callable[
     scene = _ready_scene(client)
     _query(client, scene, "table")
     assert counting.queries == ["table"]
+
+
+def _query_k(client: TestClient, scene_id: str, text: str, top_k: int | None):
+    body: dict[str, object] = {"text": text}
+    if top_k is not None:
+        body["top_k"] = top_k
+    return client.post(f"/scenes/{scene_id}/query", json=body, headers=AUTH)
+
+
+def test_a_query_returns_as_many_matches_as_it_asks_for(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client = make_client(settings=_settings(tmp_path, query_top_k=1))
+    scene = _ready_scene(client)
+
+    resp = _query_k(client, scene, "wooden thing", top_k=2)
+
+    # The ranking worked out above: table, chair, lamp.
+    assert resp.status_code == 200
+    assert [m["instance_id"] for m in resp.json()["matches"]] == [1, 0]
+
+
+def test_a_query_without_top_k_returns_five_matches_by_default(client: TestClient):
+    scene = _ready_scene(client)
+
+    matches = _query_k(client, scene, "wooden thing", top_k=None).json()["matches"]
+
+    # The fake Scene has only three Instances, so five asked for gives all three.
+    assert [m["instance_id"] for m in matches] == [1, 0, 2]
+
+
+@pytest.mark.parametrize("top_k", [0, 21])
+def test_a_query_asking_for_no_or_too_many_matches_is_refused(client: TestClient, top_k: int):
+    scene = _ready_scene(client)
+
+    assert _query_k(client, scene, "table", top_k=top_k).status_code == 422

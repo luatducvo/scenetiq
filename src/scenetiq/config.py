@@ -262,7 +262,9 @@ class Settings:
     Attributes:
         storage_root: Directory holding the SQLite database and all Scene data.
         token: Shared secret every request must present as a bearer token.
-        query_top_k: How many Matches a Query returns (ADR 0008).
+        query_top_k: How many Matches a Query returns when it does not ask for a number
+            (ADR 0008).
+        query_max_top_k: The most Matches a Query may ask for.
         rrf_k: The Reciprocal Rank Fusion constant used to rank Matches.
         pipeline: Which Pipeline to run: ``"fake"`` or ``"real"``.
         min_views: Fewest photos a Capture may upload.
@@ -286,7 +288,8 @@ class Settings:
         spatial: Queries with a Relation.
 
     Raises:
-        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``upload_max_side``
+        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``query_max_top_k`` is
+            below ``query_top_k``, ``upload_max_side``
             is below 1, ``upload_jpeg_quality`` is outside (0, 1], ``view_stride``,
             ``spatial.candidates_per_object`` or ``query_parser.max_new_tokens`` is below
             1, ``spatial.falloff`` is not positive, or ``spatial.caption_margin`` or
@@ -295,7 +298,8 @@ class Settings:
 
     storage_root: Path
     token: str
-    query_top_k: int = 1
+    query_top_k: int = 5
+    query_max_top_k: int = 20
     rrf_k: int = 60
     pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
@@ -337,6 +341,11 @@ class Settings:
             raise ValueError(f"view_stride must be at least 1, got {self.view_stride}")
         if self.query_top_k < 1:
             raise ValueError(f"query_top_k must be at least 1, got {self.query_top_k}")
+        if self.query_max_top_k < self.query_top_k:
+            raise ValueError(
+                f"query_max_top_k ({self.query_max_top_k}) must not be below "
+                f"query_top_k ({self.query_top_k})"
+            )
         if self.rrf_k < 0:
             raise ValueError(f"rrf_k must not be negative, got {self.rrf_k}")
         if self.siglip.prompt_max_words < 0:

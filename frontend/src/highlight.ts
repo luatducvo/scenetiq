@@ -1,17 +1,29 @@
 import * as THREE from 'three'
 import type { MatchInfo } from './api'
 
-/** Distinct highlight colours for ranked Matches (RGB 0-1). */
-const MATCH_COLORS:[number, number, number][] = [
-  [1.0, 0.84, 0.0],
-  [0.0, 0.9, 1.0],
-  [1.0, 0.3, 0.9],
-  [0.4, 1.0, 0.3],
-  [1.0, 0.5, 0.1],
-]
+/** Hue of the coolest heatmap colour (blue); the hottest is 0 (red). */
+const COOLEST_HUE = 0.66
 
-export function matchColor(rank: number): [number, number, number] {
-  return MATCH_COLORS[rank % MATCH_COLORS.length]
+/**
+ * The heatmap colour at `position` in [0, 1], from blue (0) through green and yellow to red
+ * (1). Linear like {@link instanceColor}, because the renderer converts vertex colours to sRGB.
+ */
+export function heatmapColor(position: number): [number, number, number] {
+  const t = Math.min(1, Math.max(0, position))
+  const color = new THREE.Color().setHSL((1 - t) * COOLEST_HUE, 1, 0.5, THREE.SRGBColorSpace)
+  return [color.r, color.g, color.b]
+}
+
+/**
+ * Each Match's heatmap position, stretched over the scores shown: the best Match is 1 and
+ * the lowest 0. Scores of one Query are often close together, so a fixed 0-1 scale would
+ * give them all one colour. When every score is equal, including a single Match, all are 1.
+ */
+export function heatmapPositions(matches: MatchInfo[]): number[] {
+  const scores = matches.map((m) => m.score)
+  const lo = Math.min(...scores)
+  const hi = Math.max(...scores)
+  return scores.map((s) => (hi - lo > 1e-9 ? (s - lo) / (hi - lo) : 1))
 }
 
 /** Stepping the hue by the golden ratio keeps consecutive Instance ids far apart. */
@@ -62,19 +74,23 @@ export function namesColors(instanceIds: Int32Array, named: Set<number>): Float3
   return out
 }
 
-/** Colour points for display: Matched Instances get their rank's colour; every other point keeps its original colour. */
+/**
+ * Colour points for display: Matched Instances get their heatmap colour (see
+ * {@link heatmapPositions}); every other point keeps its original colour.
+ */
 export function highlightColors(
   base: Float32Array,
   instanceIds: Int32Array,
   matches: MatchInfo[],
 ): Float32Array {
   if (matches.length === 0) return base.slice()
-  const rankOf = new Map(matches.map((m, i) => [m.instance_id, i]))
+  const positions = heatmapPositions(matches)
+  const colorOf = new Map(matches.map((m, i) => [m.instance_id, heatmapColor(positions[i])]))
   const out = base.slice()
   for (let p = 0; p < instanceIds.length; p++) {
-    const rank = rankOf.get(instanceIds[p])
-    if (rank === undefined) continue
-    const [r, g, b] = matchColor(rank)
+    const color = colorOf.get(instanceIds[p])
+    if (color === undefined) continue
+    const [r, g, b] = color
     out[3 * p] = r
     out[3 * p + 1] = g
     out[3 * p + 2] = b
