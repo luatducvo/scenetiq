@@ -285,7 +285,7 @@ def create_app(
         # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
         captioned = any(inst.caption_embeddings for inst in instances)
 
-        def rank(wanted: QueryObject, top_k: int, score_ratio: float | None) -> list[Match]:
+        def rank(wanted: QueryObject, top_k: int | None, score_ratio: float | None) -> list[Match]:
             return run_query(
                 instances,
                 text_encoder.encode(wanted.phrase),
@@ -293,6 +293,8 @@ def create_app(
                 score_ratio,
                 caption_encoder.encode_query(wanted.phrase) if captioned else None,
                 wanted.aspects,
+                phrase=wanted.phrase,
+                negative_query_threshold=settings.negative_query_threshold,
             )
 
         # Only a parse failure the parser reports falls back; any other exception is a bug.
@@ -431,7 +433,7 @@ class InstanceOut(BaseModel):
 
 
 class QueryIn(BaseModel):
-    """A free-text Query, and the most Matches it asks for (``query_top_k`` when null)."""
+    """A free-text Query, and the most Matches it asks for (all semantic matches when null)."""
 
     text: str = Field(max_length=500)
     top_k: int | None = None

@@ -4,7 +4,6 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import {
   getInstanceIds,
   getInstances,
-  getOptions,
   getPointCloud,
   listScenes,
   queryScene,
@@ -65,7 +64,6 @@ interface HoverMode {
 const HEATMAP_GRADIENT = heatmapGradient()
 
 const SUGGESTIONS = ['red chair', 'something to sit on', 'the lamp near the sofa']
-const RERUN_DELAY_MS = 400
 
 export function SceneViewer({ config, sceneId, onBack }: Props) {
   const viewerRef = useRef<HTMLDivElement>(null)
@@ -79,9 +77,6 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   const [queryError, setQueryError] = useState<string | null>(null)
   const [showNames, setShowNames] = useState(false)
   const [pointScale, setPointScale] = useState(readPointScale)
-  const [topK, setTopK] = useState<number | null>(null)
-  const [maxTopK, setMaxTopK] = useState<number | null>(null)
-  const [shownText, setShownText] = useState<string | null>(null)
   const [showDisplayOptions, setShowDisplayOptions] = useState(false)
   /** The point under the pointer, and the hover mode it was picked in (see `hoverable`). */
   const [hovered, setHovered] = useState<{ hit: PointHit; mode: HoverMode } | null>(null)
@@ -93,13 +88,6 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
         if (found) setSceneSummary(found)
       })
       .catch(() => {})
-
-    getOptions(config)
-      .then((o) => {
-        setTopK(o.query_top_k)
-        setMaxTopK(o.query_max_top_k)
-      })
-      .catch((err) => setQueryError(`Cannot read the backend's options: ${err}`))
   }, [config, sceneId])
 
   useEffect(() => {
@@ -188,18 +176,15 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   }
 
   const latestQuery = useRef(0)
-  const rerunTimer = useRef<number | undefined>(undefined)
-  useEffect(() => () => window.clearTimeout(rerunTimer.current), [])
 
-  async function runQuery(query: string, k: number | null) {
+  async function runQuery(query: string) {
     const id = ++latestQuery.current
     setQuerying(true)
     setQueryError(null)
     try {
-      const answer = await queryScene(config, sceneId, query, k ?? undefined)
+      const answer = await queryScene(config, sceneId, query)
       if (id !== latestQuery.current) return
       setResult(answer)
-      setShownText(query)
     } catch (err) {
       if (id === latestQuery.current) setQueryError(String(err))
     } finally {
@@ -209,27 +194,19 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (text.trim()) runQuery(text.trim(), topK)
+    if (text.trim()) runQuery(text.trim())
   }
 
   function applySuggestion(s: string) {
     setText(s)
-    runQuery(s, topK)
+    runQuery(s)
   }
 
   function clearSearch() {
-    window.clearTimeout(rerunTimer.current)
     latestQuery.current += 1
     setQuerying(false)
     setResult(null)
-    setShownText(null)
     setText('')
-  }
-
-  function changeTopK(k: number) {
-    setTopK(k)
-    window.clearTimeout(rerunTimer.current)
-    if (shownText) rerunTimer.current = window.setTimeout(() => runQuery(shownText, k), RERUN_DELAY_MS)
   }
 
   const pointSizeLabel =
@@ -325,6 +302,21 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
               ))}
             </div>
           )}
+
+          {result && (
+            <div className="query-result-meta-row">
+              <span
+                className={`query-result-count ${result.matches.length === 0 ? 'query-result-empty' : ''}`}
+              >
+                {result.matches.length === 0
+                  ? 'No matching objects found in scene'
+                  : `${result.matches.length} ${result.matches.length === 1 ? 'object' : 'objects'} found`}
+              </span>
+              {result.relations_applied && (
+                <span className="query-result-badge">Spatial relation applied</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Top-right: Tools buttons matching Figma node 10:225 */}
@@ -369,24 +361,6 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                 onChange={(e) => changePointScale(Number(e.target.value))}
               />
             </div>
-
-            {topK !== null && maxTopK !== null && (
-              <div className="display-option-group">
-                <div className="display-option-label-row">
-                  <span className="option-name">Results to show</span>
-                  <span className="option-val">{topK}</span>
-                </div>
-                <input
-                  type="range"
-                  className="option-slider"
-                  min={1}
-                  max={maxTopK}
-                  step={1}
-                  value={topK}
-                  onChange={(e) => changeTopK(Number(e.target.value))}
-                />
-              </div>
-            )}
 
             <div className="display-option-toggle-row">
               <div className="toggle-text-wrap">

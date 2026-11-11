@@ -280,6 +280,9 @@ class Settings:
         query_score_ratio: A Query without a Relation keeps an Instance as a Match only
             when its score is at least this fraction of the best Match's (ADR 0011). 0
             keeps every Instance that scores above the Scene's average. Not validated.
+        negative_query_threshold: Minimum semantic label or caption similarity across the
+            Scene required for a Query to be considered positive; below this, it is treated
+            as a negative Query and returns 0 Matches (ADR 0012).
         pipeline: Which Pipeline to run: ``"fake"`` or ``"real"``.
         min_views: Fewest photos a Capture may upload.
         max_views: Most photos a Capture may upload.
@@ -317,6 +320,7 @@ class Settings:
     query_top_k: int = 5
     query_max_top_k: int = 20
     query_score_ratio: float = 0.5
+    negative_query_threshold: float = 0.35
     pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
     max_views: int = 2000
@@ -364,6 +368,10 @@ class Settings:
             )
         if not 0 <= self.query_score_ratio <= 1:
             raise ValueError(f"query_score_ratio must be in [0, 1], got {self.query_score_ratio}")
+        if not 0 <= self.negative_query_threshold <= 1:
+            raise ValueError(
+                f"negative_query_threshold must be in [0, 1], got {self.negative_query_threshold}"
+            )
         if not 0 <= self.embedding.masked_weight <= 1:
             raise ValueError(
                 f"embedding.masked_weight must be in [0, 1], got {self.embedding.masked_weight}"

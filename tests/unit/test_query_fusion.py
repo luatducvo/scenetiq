@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from scenetiq.domain import Aspect, Caption, Instance
-from scenetiq.query import best_description, run_query, standardize
+from scenetiq.query import best_description, is_semantic_match, run_query, standardize
 
 
 def _instance(iid: int, image: list[float], caption: list[float] | None = None) -> Instance:
@@ -166,3 +166,114 @@ def test_a_query_about_one_aspect_ranks_captions_on_that_aspect():
     matches = run_query([floor, chair], query, 1, None, query, (Aspect.IDENTITY,))
     assert [m.instance_id for m in matches] == [2]
     assert matches[0].caption_aspect is Aspect.IDENTITY
+
+
+def test_is_semantic_match_recognizes_name_and_synonym_words():
+    zero = np.zeros(3, dtype=np.float32)
+    chair = Instance(
+        1,
+        zero,
+        zero,
+        zero,
+        np.array([1.0, 0.0], np.float32),
+        Caption("office chair", synonyms=("desk chair", "work seat")),
+    )
+    assert is_semantic_match("chair", chair)
+    assert is_semantic_match("office chair", chair)
+    assert is_semantic_match("work seat", chair)
+    assert is_semantic_match("desk", chair)
+
+
+def test_is_semantic_match_rejects_unrelated_words():
+    zero = np.zeros(3, dtype=np.float32)
+    chair = Instance(
+        1,
+        zero,
+        zero,
+        zero,
+        np.array([1.0, 0.0], np.float32),
+        Caption("office chair", synonyms=("desk chair",)),
+    )
+    assert not is_semantic_match("cat", chair, caption_score=0.1)
+    assert not is_semantic_match("refrigerator", chair, caption_score=0.0)
+
+
+def test_negative_query_with_no_semantic_matches_returns_empty_list():
+    zero = np.zeros(3, dtype=np.float32)
+    chair = Instance(
+        1,
+        zero,
+        zero,
+        zero,
+        np.array([1.0, 0.0], np.float32),
+        Caption("chair"),
+        _vectors(identity=[0.1, 0.0]),
+    )
+    desk = Instance(
+        2,
+        zero,
+        zero,
+        zero,
+        np.array([0.0, 1.0], np.float32),
+        Caption("desk"),
+        _vectors(identity=[0.1, 0.0]),
+    )
+    query = np.array([1.0, 0.0])
+    # "cat" matches neither "chair" nor "desk", so run_query returns []
+    matches = run_query([chair, desk], query, None, 0.5, query, phrase="cat")
+    assert matches == []
+
+
+def test_semantic_label_filtering_excludes_unrelated_instances():
+    zero = np.zeros(3, dtype=np.float32)
+    chair1 = Instance(
+        1,
+        zero,
+        zero,
+        zero,
+        np.array([1.0, 0.0], np.float32),
+        Caption("office chair"),
+        _vectors(identity=[1.0, 0.0]),
+    )
+    chair2 = Instance(
+        2,
+        zero,
+        zero,
+        zero,
+        np.array([0.9, 0.1], np.float32),
+        Caption("wooden chair"),
+        _vectors(identity=[0.9, 0.1]),
+    )
+    floor = Instance(
+        3,
+        zero,
+        zero,
+        zero,
+        np.array([0.5, 0.5], np.float32),
+        Caption("floor"),
+        _vectors(identity=[0.1, 0.0]),
+    )
+    query = np.array([1.0, 0.0])
+    # Searching for "chair" returns only chair1 and chair2, excluding floor
+    matches = run_query([chair1, chair2, floor], query, None, 0.5, query, phrase="chair")
+    assert [m.instance_id for m in matches] == [1, 2]
+
+
+def test_run_query_without_top_k_returns_all_qualifying_semantic_matches():
+    zero = np.zeros(3, dtype=np.float32)
+    chairs = [
+        Instance(
+            i,
+            zero,
+            zero,
+            zero,
+            np.array([1.0, 0.0], np.float32),
+            Caption("chair"),
+            _vectors(identity=[1.0, 0.0]),
+        )
+        for i in range(1, 9)
+    ]
+    query = np.array([1.0, 0.0])
+    # All 8 chairs qualify; without top_k, all 8 are returned
+    matches = run_query(chairs, query, None, 0.5, query, phrase="chair")
+    assert len(matches) == 8

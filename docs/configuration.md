@@ -43,6 +43,7 @@ The backend reads its settings once, at startup. They apply to new Captures and 
 | `query_top_k` | `5` | The most Matches a Query returns when it does not ask for a number (ADR 0011). A Query can return fewer, see `query_score_ratio`, but always at least one when the Scene has Instances. The viewer's Matches slider starts here. |
 | `query_max_top_k` | `20` | The most Matches a Query may ask for (`top_k` in the request, the viewer's slider). It must not be below `query_top_k`. |
 | `query_score_ratio` | `0.5` | A Query without a Relation keeps an Instance as a Match only when its score is at least this fraction of the best Match's, in [0, 1] (ADR 0011). A score is the Instance's fused value, its image and Caption similarities standardized within the Scene and averaged, divided by the best one. Higher returns fewer Matches; `0` keeps every Instance above the Scene's average. Not validated; measure it with `python -m scenetiq.evaluation`. |
+| `negative_query_threshold` | `0.35` | Minimum semantic similarity across the Scene required for a Query to be considered positive; below this, it is treated as a negative Query and returns 0 Matches (ADR 0012). |
 | `min_views` | `1` | Fewest photos a Capture may upload. |
 | `max_views` | `2000` | Most photos a Capture may upload. It has no upper limit. |
 | `upload_max_side` | `2048` | The frontend shrinks every photo so that its long side is at most this many pixels before uploading it (ADR 0010). The Embedding and Captioning stages crop from these photos, so a smaller value blurs small Instances. |

@@ -100,25 +100,15 @@ def test_a_query_matching_another_aspect_of_another_instance_lifts_that_instance
     assert [m["caption_score"] for m in matches] == [None, pytest.approx(0.8)]
 
 
-def test_an_instance_is_scored_only_over_the_descriptions_it_has(
+def test_negative_query_without_matching_semantic_labels_returns_no_matches(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client = make_client(settings=_settings(tmp_path, query_top_k=3))
     scene = _ready_scene(client)
     result = _query(client, scene, "metal legs")
-    # The chair has only Identity and Appearance Descriptions. The Caption query
-    # (-0.6, 0, -0.8, 0, ...) gives them -0.6 and -0.8, so its best is Identity at -0.6; its
-    # missing Material and Use do not count as 0. The table's Descriptions are all
-    # orthogonal (0.0, Identity first). Caption: table 0.0, chair -0.6 -> standardized 1, -1.
-    # Image (unknown text resembles the chair): chair 0.3, table 0, lamp 0 -> mean 0.1,
-    # deviation sqrt(0.02) -> standardized 1.414214, -0.707107, -0.707107.
-    # Fused: chair 0.207107, table 0.146447, lamp -0.353553. Scores: 1, 0.707107.
-    matches = result["matches"]
-    assert [m["instance_id"] for m in matches] == [0, 1]
-    assert [m["score"] for m in matches] == pytest.approx([1.0, 0.707107], abs=1e-6)
-    assert matches[0]["caption_score"] == pytest.approx(-0.6)
-    assert matches[0]["caption_aspect"] == "identity"
-    assert matches[1]["caption_score"] == pytest.approx(0.0)
+    # Neither the chair nor the table matches "metal legs" in their Semantic Labels,
+    # and caption similarities are below the negative threshold, so 0 Matches are returned.
+    assert result["matches"] == []
 
 
 def test_matches_are_scored_against_the_best_one(
@@ -157,15 +147,13 @@ def test_the_score_ratio_comes_from_settings(
     assert [m["instance_id"] for m in result["matches"]] == [1]
 
 
-def test_a_query_resembling_nothing_still_returns_the_closest_instance(
+def test_a_negative_query_resembling_nothing_returns_no_matches(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
-    client = _uncaptioned_client(make_client, _settings(tmp_path))
+    client = make_client(settings=_settings(tmp_path))
     scene = _ready_scene(client)
     result = _query(client, scene, "spaceship")
-    assert [m["instance_id"] for m in result["matches"]] == [0]
-    assert result["matches"][0]["image_score"] == pytest.approx(0.3, abs=1e-3)
-    assert "low_confidence" not in result
+    assert result["matches"] == []
 
 
 def test_query_text_is_case_and_whitespace_insensitive_in_fake_encoder(
