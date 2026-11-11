@@ -102,15 +102,23 @@ class RealPipeline:
         reporter.stage(Stage.RECONSTRUCTING)
         with track_stage_memory(Stage.RECONSTRUCTING):
             view_data = self.reconstructor.reconstruct(capture.views)
+        reporter.note(f"Reconstructed {len(capture.views)} Views.")
 
         reporter.stage(Stage.FUSING)
         geometry = fuse(view_data, opts.fusion)
 
         reporter.stage(Stage.ALIGNING)
         with track_stage_memory(Stage.ALIGNING):
-            geometry, view_data = gravity_align(
+            aligned, view_data = gravity_align(
                 geometry, view_data, self.up_estimator, opts.alignment
             )
+        # gravity_align returns its inputs unchanged when the Views do not agree on up.
+        if aligned is geometry:
+            reporter.note(
+                "The Scene could not be aligned to gravity: its Views did not agree on up, "
+                "so above, below, on, under, tallest and lowest may be wrong."
+            )
+        geometry = aligned
         points = geometry.vertices
 
         reporter.stage(Stage.SUPERPOINTS)
@@ -145,8 +153,13 @@ class RealPipeline:
                 opts.embedding,
             )
         # Instances no View sees well enough cannot be queried: drop them.
+        merged = len(np.unique(instance_ids[instance_ids >= 0]))
         unseen = np.isin(instance_ids, list(embeddings), invert=True)
         instance_ids = np.where(unseen, -1, instance_ids).astype(np.int32)
+        reporter.note(
+            f"Found {len(embeddings)} Instances; dropped {merged - len(embeddings)} "
+            "that no View sees well enough."
+        )
 
         reporter.stage(Stage.CAPTIONING)
         with track_stage_memory(Stage.CAPTIONING):
@@ -159,6 +172,7 @@ class RealPipeline:
                 opts.captioning,
             )
             caption_data = embed_descriptions(captions, self.caption_encoder)
+        reporter.note(f"{len(captions)} of {len(embeddings)} Instances got a Caption.")
 
         return Reconstruction(
             points=points,

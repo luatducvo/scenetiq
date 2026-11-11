@@ -79,15 +79,15 @@ class JobRunner:
         store = self._store
         reporter = _JobReporter(store, record)
         try:
-            store.update_job(record.job_id, status=JobStatus.RUNNING)
+            store.start_job(record.job_id)
             reconstruction = self._pipeline.run(capture, reporter)
             store.save_reconstruction(record.scene_id, reconstruction)
         except Exception as exc:
             logger.exception("job %s failed", record.job_id)
-            store.update_job(record.job_id, status=JobStatus.FAILED, error=str(exc) or repr(exc))
+            store.finish_job(record.job_id, JobStatus.FAILED, error=str(exc) or repr(exc))
             reporter.report(JobStatus.FAILED)
         else:
-            store.update_job(record.job_id, status=JobStatus.SUCCEEDED)
+            store.finish_job(record.job_id, JobStatus.SUCCEEDED)
             reporter.report(JobStatus.SUCCEEDED)
         finally:
             self.release()
@@ -109,7 +109,7 @@ class _JobReporter:
         )
 
     def stage(self, stage: Stage) -> None:
-        self._store.update_job(self._job_id, stage=stage.value)
+        self._store.start_stage(self._job_id, stage.value)
         self._progress = replace(self._progress, stage=stage.value, step=_STAGES.index(stage) + 1)
         report_progress(self._progress)
 
@@ -118,6 +118,7 @@ class _JobReporter:
 
     def note(self, message: str) -> None:
         logger.info("job %s note: %s", self._job_id, message)
+        self._store.add_note(self._job_id, message)
 
     def report(self, status: JobStatus) -> None:
         """Send the job's final ``status`` to the notebook."""

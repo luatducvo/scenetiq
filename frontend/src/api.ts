@@ -7,12 +7,31 @@ export interface BackendConfig {
 
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
+/** When one Stage of a job started and ended (null while it runs); ISO 8601 UTC. */
+export interface StageTiming {
+  stage: string
+  started_at: string
+  finished_at: string | null
+}
+
+/** One line of a job's summary, with the Stage running when it was recorded. */
+export interface JobNote {
+  at: string
+  stage: string | null
+  message: string
+}
+
 export interface Job {
   job_id: string
   scene_id: string
   status: JobStatus
   stage: string | null
   error: string | null
+  started_at: string | null
+  finished_at: string | null
+  /** Every Stage that started, in order. */
+  stages: StageTiming[]
+  notes: JobNote[]
 }
 
 export interface SceneSummary {

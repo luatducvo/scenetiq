@@ -33,7 +33,14 @@ from scenetiq.jobs import JobBusyError, JobRunner
 from scenetiq.query import QUERY_LOGGER, Match, MissingEmbeddingsError, run_query
 from scenetiq.runtime_log import UploadProgress, report_progress
 from scenetiq.spatial import run_spatial_query
-from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureError
+from scenetiq.storage import (
+    JobEvent,
+    JobEventKind,
+    JobStatus,
+    SceneRecord,
+    SceneStore,
+    UnknownCaptureError,
+)
 
 logger = logging.getLogger(__name__)
 _query_logger = logging.getLogger(QUERY_LOGGER)
@@ -167,18 +174,28 @@ def create_app(
         return {"scene_id": record.scene_id, "job_id": record.job_id}
 
     @app.get("/jobs/{job_id}")
-    def get_job(request: Request, job_id: str) -> dict[str, str | None]:
-        """Report a job's status, current stage and error."""
-        record = request.app.state.store.get_job(job_id)
+    def get_job(request: Request, job_id: str) -> JobOut:
+        """Report a job's status, current stage, error, stage timings and notes."""
+        store: SceneStore = request.app.state.store
+        record = store.get_job(job_id)
         if record is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown job")
-        return {
-            "job_id": record.job_id,
-            "scene_id": record.scene_id,
-            "status": record.status.value,
-            "stage": record.stage,
-            "error": record.error,
-        }
+        events = store.job_events(job_id)
+        return JobOut(
+            job_id=record.job_id,
+            scene_id=record.scene_id,
+            status=record.status.value,
+            stage=record.stage,
+            error=record.error,
+            started_at=record.started_at,
+            finished_at=record.finished_at,
+            stages=_stage_timings(events, record.finished_at),
+            notes=[
+                NoteOut(at=e.at, stage=e.stage, message=e.message)
+                for e in events
+                if e.kind is JobEventKind.NOTE
+            ],
+        )
 
     @app.get("/scenes")
     def list_scenes(request: Request) -> list[dict[str, str]]:
@@ -296,6 +313,41 @@ class SceneIn(BaseModel):
     capture_id: str = Field(pattern=_ID_PATTERN)
 
 
+class StageOut(BaseModel):
+    """When one Stage of a job started and ended (null while it runs)."""
+
+    stage: str
+    started_at: str
+    finished_at: str | None
+
+
+class NoteOut(BaseModel):
+    """One note of a job, with the Stage running when it was recorded."""
+
+    at: str
+    stage: str | None
+    message: str
+
+
+class JobOut(BaseModel):
+    """A job's status and what it reported.
+
+    ``stages`` lists every Stage that started, in order; a Stage ends when the next starts
+    or the job ends. ``notes`` are in the order recorded. Timestamps are ISO 8601 UTC;
+    ``started_at`` and ``finished_at`` are null until the job starts and ends.
+    """
+
+    job_id: str
+    scene_id: str
+    status: str
+    stage: str | None
+    error: str | None
+    started_at: str | None
+    finished_at: str | None
+    stages: list[StageOut]
+    notes: list[NoteOut]
+
+
 class InstanceOut(BaseModel):
     """An Instance's position and extent, in metres, and its Caption's Name (or null)."""
 
@@ -366,6 +418,16 @@ def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:
             f"Scene is not ready: its job is {record.status.value}",
         )
     return store.reconstruction_dir(scene_id)
+
+
+def _stage_timings(events: list[JobEvent], finished_at: str | None) -> list[StageOut]:
+    starts = [e for e in events if e.kind is JobEventKind.STAGE and e.stage is not None]
+    # A Stage ends when the next one starts; the last one when the job ends.
+    ends = [e.at for e in starts[1:]] + [finished_at][: len(starts)]
+    return [
+        StageOut(stage=e.stage or "", started_at=e.at, finished_at=end)
+        for e, end in zip(starts, ends, strict=True)
+    ]
 
 
 def _scene_summary(record: SceneRecord) -> dict[str, str]:

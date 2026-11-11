@@ -143,8 +143,14 @@ def fake_reconstruction(with_captions: bool = True) -> Reconstruction:
     )
 
 
+FAKE_NOTE = "Reconstructed the fake Scene."
+"""The note the fake Pipeline records during its first Stage."""
+
+
 class FakePipeline:
     """A Pipeline that reports every Stage and returns a fixed Reconstruction.
+
+    It records :data:`FAKE_NOTE` during its first Stage.
 
     Args:
         reconstruction: What to return; defaults to :func:`fake_reconstruction`.
@@ -169,6 +175,8 @@ class FakePipeline:
         self.captures.append(capture)
         for i, stage in enumerate(Stage):
             reporter.stage(stage)
+            if i == 0:
+                reporter.note(FAKE_NOTE)
             if i == 0 and self.gate is not None:
                 self.gate.wait(timeout=10)
             if i == 0 and self.error is not None:

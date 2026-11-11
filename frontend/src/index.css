@@ -67,6 +67,9 @@ button.danger { color: var(--error); }
 .stages li { color: var(--muted); }
 .stages li.active { color: var(--accent); font-weight: 600; }
 .stages li.done { color: var(--done); }
+.stage-time { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.job-notes { margin: 0.8rem 0 0; padding-left: 1.2rem; }
+.job-notes li { margin: 0.2rem 0; }
 
 .viewer { position: fixed; inset: 0; background: #111114; }
 .canvas-wrap { position: absolute; inset: 0; }

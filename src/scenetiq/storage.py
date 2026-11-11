@@ -33,7 +33,21 @@ class JobStatus(StrEnum):
 
 @dataclass(frozen=True)
 class SceneRecord:
-    """Metadata of one Scene and the job that processes it."""
+    """Metadata of one Scene and the job that processes it.
+
+    Attributes:
+        scene_id: The Scene.
+        job_id: The job that reconstructs it.
+        name: The name the user gave it.
+        created_at: When it was created, ISO 8601 UTC.
+        status: Where its job is in its lifecycle.
+        stage: The Stage its job is in or stopped at, if one has started.
+        error: Why its job failed, if it did.
+        started_at: When its job started running, ISO 8601 UTC.
+        finished_at: When its job ended, ISO 8601 UTC; ``None`` while it runs, and for a
+            job interrupted by a restart.
+        instance_count: How many Instances its Reconstruction has, once saved.
+    """
 
     scene_id: str
     job_id: str
@@ -42,19 +56,68 @@ class SceneRecord:
     status: JobStatus
     stage: str | None
     error: str | None
+    started_at: str | None = None
+    finished_at: str | None = None
+    instance_count: int | None = None
+
+
+class JobEventKind(StrEnum):
+    """What a job event records."""
+
+    STAGE = "stage"
+    NOTE = "note"
+
+
+@dataclass(frozen=True)
+class JobEvent:
+    """One thing a job reported, in the order reported.
+
+    Attributes:
+        at: When, ISO 8601 UTC.
+        kind: A Stage starting, or a note.
+        stage: The Stage that started, or the Stage running when the note was recorded.
+        message: The note; empty for a Stage event.
+    """
+
+    at: str
+    kind: JobEventKind
+    stage: str | None
+    message: str
 
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scenes (
-    scene_id   TEXT PRIMARY KEY,
-    job_id     TEXT UNIQUE NOT NULL,
-    name       TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    status     TEXT NOT NULL,
-    stage      TEXT,
-    error      TEXT
-)
+    scene_id       TEXT PRIMARY KEY,
+    job_id         TEXT UNIQUE NOT NULL,
+    name           TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    stage          TEXT,
+    error          TEXT,
+    started_at     TEXT,
+    finished_at    TEXT,
+    instance_count INTEGER
+);
+CREATE TABLE IF NOT EXISTS job_events (
+    seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id  TEXT NOT NULL,
+    at      TEXT NOT NULL,
+    kind    TEXT NOT NULL,
+    stage   TEXT,
+    message TEXT NOT NULL
+);
 """
+
+# Columns added after the first schema, so that an older database can be brought up to date.
+_ADDED_SCENE_COLUMNS = {
+    "started_at": "TEXT",
+    "finished_at": "TEXT",
+    "instance_count": "INTEGER",
+}
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 class SceneStore:
@@ -72,7 +135,11 @@ class SceneStore:
         self._db = sqlite3.connect(root / "scenetiq.db", check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         with self._lock, self._db:
-            self._db.execute(_SCHEMA)
+            self._db.executescript(_SCHEMA)
+            present = {row["name"] for row in self._db.execute("PRAGMA table_info(scenes)")}
+            for column, kind in _ADDED_SCENE_COLUMNS.items():
+                if column not in present:
+                    self._db.execute(f"ALTER TABLE scenes ADD COLUMN {column} {kind}")
 
     def close(self) -> None:
         """Close the database connection."""
@@ -92,7 +159,7 @@ class SceneStore:
             scene_id=uuid.uuid4().hex,
             job_id=uuid.uuid4().hex,
             name=name,
-            created_at=datetime.now(UTC).isoformat(),
+            created_at=_now(),
             status=JobStatus.QUEUED,
             stage=None,
             error=None,
@@ -100,15 +167,14 @@ class SceneStore:
         self.views_dir(record.scene_id).mkdir(parents=True)
         with self._lock, self._db:
             self._db.execute(
-                "INSERT INTO scenes VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO scenes (scene_id, job_id, name, created_at, status)"
+                " VALUES (?, ?, ?, ?, ?)",
                 (
                     record.scene_id,
                     record.job_id,
                     record.name,
                     record.created_at,
                     record.status.value,
-                    None,
-                    None,
                 ),
             )
         return record
@@ -207,6 +273,55 @@ class SceneStore:
                 (status.value if status else None, stage, error, job_id),
             )
 
+    def start_job(self, job_id: str) -> None:
+        """Mark ``job_id`` running and record when it started."""
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE scenes SET status = ?, started_at = ? WHERE job_id = ?",
+                (JobStatus.RUNNING.value, _now(), job_id),
+            )
+
+    def finish_job(self, job_id: str, status: JobStatus, error: str | None = None) -> None:
+        """Record that ``job_id`` ended with ``status`` (and ``error``, if it failed)."""
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE scenes SET status = ?, error = COALESCE(?, error), finished_at = ?"
+                " WHERE job_id = ?",
+                (status.value, error, _now(), job_id),
+            )
+
+    def start_stage(self, job_id: str, stage: str) -> None:
+        """Record that ``job_id`` entered ``stage``."""
+        with self._lock, self._db:
+            self._db.execute("UPDATE scenes SET stage = ? WHERE job_id = ?", (stage, job_id))
+            self._db.execute(
+                "INSERT INTO job_events (job_id, at, kind, stage, message) VALUES (?, ?, ?, ?, ?)",
+                (job_id, _now(), JobEventKind.STAGE.value, stage, ""),
+            )
+
+    def add_note(self, job_id: str, message: str) -> None:
+        """Record a note of ``job_id``, under the Stage it is in."""
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT INTO job_events (job_id, at, kind, stage, message)"
+                " SELECT job_id, ?, ?, stage, ? FROM scenes WHERE job_id = ?",
+                (_now(), JobEventKind.NOTE.value, message, job_id),
+            )
+
+    def job_events(self, job_id: str) -> list[JobEvent]:
+        """Return everything ``job_id`` reported, in the order reported."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT at, kind, stage, message FROM job_events WHERE job_id = ? ORDER BY seq",
+                (job_id,),
+            ).fetchall()
+        return [
+            JobEvent(
+                at=r["at"], kind=JobEventKind(r["kind"]), stage=r["stage"], message=r["message"]
+            )
+            for r in rows
+        ]
+
     def get_scene(self, scene_id: str) -> SceneRecord | None:
         """Return the Scene with ``scene_id``, or ``None``."""
         return self._one("SELECT * FROM scenes WHERE scene_id = ?", scene_id)
@@ -226,6 +341,11 @@ class SceneStore:
     def delete_scene(self, scene_id: str) -> None:
         """Remove ``scene_id``'s metadata and its directory."""
         with self._lock, self._db:
+            self._db.execute(
+                "DELETE FROM job_events WHERE job_id IN"
+                " (SELECT job_id FROM scenes WHERE scene_id = ?)",
+                (scene_id,),
+            )
             self._db.execute("DELETE FROM scenes WHERE scene_id = ?", (scene_id,))
         shutil.rmtree(self.scene_dir(scene_id), ignore_errors=True)
 
@@ -277,4 +397,7 @@ def _record(row: sqlite3.Row) -> SceneRecord:
         status=JobStatus(row["status"]),
         stage=row["stage"],
         error=row["error"],
+        started_at=row["started_at"],
+        finished_at=row["finished_at"],
+        instance_count=row["instance_count"],
     )
