@@ -98,6 +98,9 @@ def test_token_stays_out_of_the_overrides():
         ({"superpoints": {"primitives": "superpoint"}}, "superpoints.primitives"),
         ({"pipeline": "reel"}, "pipeline"),
         ({"siglip": {"prompt_max_words": -1}}, "siglip.prompt_max_words"),
+        ({"upload_max_side": 0}, "upload_max_side"),
+        ({"upload_jpeg_quality": 0}, "upload_jpeg_quality"),
+        ({"upload_jpeg_quality": 1.5}, "upload_jpeg_quality"),
     ],
 )
 def test_settings_that_cannot_work_are_refused_by_name(overrides: dict, named: str):
@@ -132,6 +135,11 @@ def test_config_that_is_not_a_json_object_is_refused(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("SCENETIQ_CONFIG", raw)
     with pytest.raises(ValueError, match="SCENETIQ_CONFIG"):
         Settings.from_env()
+
+
+def test_photos_are_shrunk_to_2048_px_at_jpeg_quality_0_9_by_default():
+    settings = Settings.from_overrides("tok", {})
+    assert (settings.upload_max_side, settings.upload_jpeg_quality) == (2048, 0.9)
 
 
 def test_query_ranking_defaults_and_the_removed_threshold():

@@ -41,7 +41,7 @@ Vite compiles these values into the JavaScript bundle, so anyone who can load a 
 
 The header shows the backend's status from when the page loaded; click **Ping** to check again. **Offline** usually means the Colab runtime or the tunnel has stopped.
 
-1. **New Scene:** name the Scene and select JPG/PNG photos, between `min_views` and `max_views` of `CONFIG`.
+1. **New Scene:** name the Scene and select JPG/PNG photos, between `min_views` and `max_views` of `CONFIG`. Before anything is sent, the browser turns each photo upright, shrinks it to at most `upload_max_side` px (2048 by default), and re-encodes it without metadata (GPS, camera details). The preview shows every photo with its size before and after; remove any photo with ×.
 2. **Processing:** watch the progress through each stage, with the time each stage took and the total. Notes below the stages say how many Views were reconstructed, how many objects were found and named, and whether the Scene could not be levelled (then "above", "on" and the like may be wrong). Only one Scene is processed at a time. **Cancel job** stops it at the next checkpoint (the end of the current stage, photo or object; a model call already running is not interrupted) and deletes its photos; the Scene stays in the list as cancelled until you delete it. Running Scenes can also be cancelled from the Scene list.
 3. **Viewer:**
    - The Scene fills the browser window. **Full screen** expands it to the whole display (Esc to leave), and **← Scenes** goes back.

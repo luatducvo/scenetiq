@@ -14,17 +14,17 @@ Spec: *Upload preview and photo preparation* user stories; *Configuration*, *HTT
 
 **Status:** ready-for-agent
 
-- [ ] Settings gain `upload_max_side` (at least 1) and `upload_jpeg_quality` (in (0, 1]). Out-of-range values are refused, with unit tests next to the existing config tests.
-- [ ] `GET /options` requires the token and returns `min_views`, `max_views`, `upload_max_side` and `upload_jpeg_quality`. A Seam A test covers the defaults and an override.
-- [ ] Photo preparation is a pure frontend module. It returns the prepared `.jpg` file, a thumbnail URL of about 160 px, both byte sizes and the pixel size. It processes a few files at a time with progress, and always re-encodes.
-- [ ] A file that cannot be decoded is reported by name and left out.
-- [ ] Thumbnail URLs are revoked when a photo is removed or the form unmounts.
-- [ ] The upload form shows the grid with a remove button on each photo, the totals before and after, the preparation progress, and a warning while the count is outside `min_views`–`max_views`.
-- [ ] The upload button is disabled while preparing, while the count is out of range, or with no photos.
-- [ ] If `GET /options` fails, the form shows the error and cannot upload.
-- [ ] The upload sends the prepared files in grid order. Upload progress and retries behave as before.
-- [ ] ADR 0010 records the decision. AGENTS.md updates the EXIF constraint: the frontend applies orientation, the backend does not. The configuration docs list both settings, and the README describes the preview.
-- [ ] The frontend passes lint, typecheck and build.
+- [x] Settings gain `upload_max_side` (at least 1) and `upload_jpeg_quality` (in (0, 1]). Out-of-range values are refused, with unit tests next to the existing config tests.
+- [x] `GET /options` requires the token and returns `min_views`, `max_views`, `upload_max_side` and `upload_jpeg_quality`. A Seam A test covers the defaults and an override.
+- [x] Photo preparation is a pure frontend module. It returns the prepared `.jpg` file, a thumbnail URL of about 160 px, both byte sizes and the pixel size. It processes a few files at a time with progress, and always re-encodes.
+- [x] A file that cannot be decoded is reported by name and left out.
+- [x] Thumbnail URLs are revoked when a photo is removed or the form unmounts.
+- [x] The upload form shows the grid with a remove button on each photo, the totals before and after, the preparation progress, and a warning while the count is outside `min_views`–`max_views`.
+- [x] The upload button is disabled while preparing, while the count is out of range, or with no photos.
+- [x] If `GET /options` fails, the form shows the error and cannot upload.
+- [x] The upload sends the prepared files in grid order. Upload progress and retries behave as before.
+- [x] ADR 0010 records the decision. AGENTS.md updates the EXIF constraint: the frontend applies orientation, the backend does not. The configuration docs list both settings, and the README describes the preview.
+- [x] The frontend passes lint, typecheck and build.
 - [ ] Manual check against the local fake backend:
   - a portrait phone photo shows upright in the grid;
   - a large JPEG comes out at most 2048 px on its long side and smaller in bytes;

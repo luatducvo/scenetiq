@@ -110,6 +110,20 @@ export async function pingBackend(cfg: BackendConfig): Promise<BackendHealth> {
   }
 }
 
+/** The settings the frontend configures itself from (GET /options). */
+export interface BackendOptions {
+  min_views: number
+  max_views: number
+  /** Photos are shrunk so that their long side is at most this many pixels (ADR 0010). */
+  upload_max_side: number
+  /** JPEG quality in (0, 1] that photos are re-encoded at. */
+  upload_jpeg_quality: number
+}
+
+export async function getOptions(cfg: BackendConfig): Promise<BackendOptions> {
+  return (await request(cfg, '/options')).json()
+}
+
 /** How many Views are sent at once. */
 const VIEW_CONCURRENCY = 8
 const VIEW_ATTEMPTS = 5

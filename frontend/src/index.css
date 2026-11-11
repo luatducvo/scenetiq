@@ -67,6 +67,18 @@ button.danger { color: var(--error); }
 .stages li { color: var(--muted); }
 .stages li.active { color: var(--accent); font-weight: 600; }
 .stages li.done { color: var(--done); }
+.photo-grid {
+  list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  max-height: 50vh; overflow-y: auto;
+}
+.photo-grid li { position: relative; display: flex; flex-direction: column; gap: 0.2rem; }
+.photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: #000; }
+.photo-size { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.photo-remove {
+  position: absolute; top: 0.2rem; right: 0.2rem; padding: 0 0.45rem; line-height: 1.4;
+  border-radius: 50%; background: rgba(0, 0, 0, 0.65); color: #fff;
+}
 .stage-time { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
 .job-notes { margin: 0.8rem 0 0; padding-left: 1.2rem; }
 .job-notes li { margin: 0.2rem 0; }

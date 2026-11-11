@@ -104,6 +104,16 @@ def create_app(
         """Report that the backend is up and whether a job holds the single job slot."""
         return {"status": "ok", "job_running": request.app.state.runner.busy}
 
+    @app.get("/options")
+    def get_options() -> OptionsOut:
+        """Report the settings the frontend configures itself from."""
+        return OptionsOut(
+            min_views=settings.min_views,
+            max_views=settings.max_views,
+            upload_max_side=settings.upload_max_side,
+            upload_jpeg_quality=settings.upload_jpeg_quality,
+        )
+
     @app.post("/captures", status_code=status.HTTP_201_CREATED)
     def start_capture(request: Request, body: CaptureIn) -> dict[str, str]:
         """Start staging a Capture, refusing it before any View is sent if it cannot run."""
@@ -311,6 +321,19 @@ def create_app(
         )
 
     return app
+
+
+class OptionsOut(BaseModel):
+    """The View limits of a Capture, and how the frontend prepares photos (ADR 0010).
+
+    The frontend shrinks every photo so that its long side is at most ``upload_max_side``
+    pixels and re-encodes it as JPEG at ``upload_jpeg_quality`` in (0, 1].
+    """
+
+    min_views: int
+    max_views: int
+    upload_max_side: int
+    upload_jpeg_quality: float
 
 
 class CaptureIn(BaseModel):

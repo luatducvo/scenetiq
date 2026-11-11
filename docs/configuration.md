@@ -44,6 +44,8 @@ The backend reads its settings once, at startup. They apply to new Captures and 
 | `rrf_k` | `60` | Reciprocal Rank Fusion constant. Each ranking adds `1 / (rrf_k + rank)` to an Instance's fused value; a larger value flattens the difference between ranks. |
 | `min_views` | `1` | Fewest photos a Capture may upload. |
 | `max_views` | `2000` | Most photos a Capture may upload. It has no upper limit. |
+| `upload_max_side` | `2048` | The frontend shrinks every photo so that its long side is at most this many pixels before uploading it (ADR 0010). The Embedding and Captioning stages crop from these photos, so a smaller value blurs small Instances. |
+| `upload_jpeg_quality` | `0.9` | JPEG quality, in (0, 1], the frontend re-encodes photos at. Re-encoding also drops their metadata. |
 | `view_stride` | `1` | Reconstruct the first photo and every Nth one after it, in upload order. |
 | `cors_origins` | `["http://localhost:3000", "http://127.0.0.1:3000"]` | Browser origins allowed to call the API. |
 

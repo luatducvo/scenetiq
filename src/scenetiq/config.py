@@ -267,6 +267,9 @@ class Settings:
         pipeline: Which Pipeline to run: ``"fake"`` or ``"real"``.
         min_views: Fewest photos a Capture may upload.
         max_views: Most photos a Capture may upload.
+        upload_max_side: The frontend shrinks every photo so that its long side is at most
+            this many pixels before uploading it (ADR 0010).
+        upload_jpeg_quality: The JPEG quality, in (0, 1], the frontend re-encodes photos at.
         view_stride: The Pipeline gets every ``view_stride``-th uploaded View, from the first.
         cors_origins: Browser origins allowed to call the API.
         da3: Reconstructing stage.
@@ -283,7 +286,8 @@ class Settings:
         spatial: Queries with a Relation.
 
     Raises:
-        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``view_stride``,
+        ValueError: If ``min_views`` is below 1 or above ``max_views``, ``upload_max_side``
+            is below 1, ``upload_jpeg_quality`` is outside (0, 1], ``view_stride``,
             ``spatial.candidates_per_object`` or ``query_parser.max_new_tokens`` is below
             1, ``spatial.falloff`` is not positive, or ``spatial.caption_margin`` or
             ``spatial.image_margin`` is negative.
@@ -296,6 +300,8 @@ class Settings:
     pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
     max_views: int = 2000
+    upload_max_side: int = 2048
+    upload_jpeg_quality: float = 0.9
     view_stride: int = 1
     cors_origins: list[str] = field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -320,6 +326,12 @@ class Settings:
         if self.min_views > self.max_views:
             raise ValueError(
                 f"min_views ({self.min_views}) must not exceed max_views ({self.max_views})"
+            )
+        if self.upload_max_side < 1:
+            raise ValueError(f"upload_max_side must be at least 1, got {self.upload_max_side}")
+        if not 0 < self.upload_jpeg_quality <= 1:
+            raise ValueError(
+                f"upload_jpeg_quality must be in (0, 1], got {self.upload_jpeg_quality}"
             )
         if self.view_stride < 1:
             raise ValueError(f"view_stride must be at least 1, got {self.view_stride}")
