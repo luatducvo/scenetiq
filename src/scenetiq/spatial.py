@@ -90,6 +90,130 @@ def near(subject: Instance, anchor: Instance, extent: float, falloff: float) -> 
     return falloff_score(box_gap(subject, anchor), extent, falloff)
 
 
+def far_from(subject: Instance, anchor: Instance, extent: float, falloff: float) -> float:
+    """How far ``subject`` is from ``anchor``: one minus :func:`near`.
+
+    Returns:
+        0 when the boxes touch or overlap, rising towards 1 as they move apart.
+    """
+    return 1.0 - near(subject, anchor, extent, falloff)
+
+
+_UP = 1
+"""Index of the vertical axis. Up is -Y (ADR 0007): a smaller y is higher."""
+
+_FOOTPRINT = [0, 2]
+"""Indices of the horizontal axes: the footprint of a box is its X-Z rectangle."""
+
+
+def _footprint_gap(a: Instance, b: Instance) -> float:
+    lo_a, hi_a = a.bbox_min[_FOOTPRINT], a.bbox_max[_FOOTPRINT]
+    lo_b, hi_b = b.bbox_min[_FOOTPRINT], b.bbox_max[_FOOTPRINT]
+    return float(np.linalg.norm(np.maximum(0.0, np.maximum(lo_a - hi_b, lo_b - hi_a))))
+
+
+def _footprint_share(a: Instance, b: Instance) -> float:
+    """The share of the smaller of two footprints that the two footprints share.
+
+    A footprint without area (a box flat along X or Z) has nothing to share: it counts as
+    fully shared when it touches the other footprint, and as not shared otherwise.
+
+    Returns:
+        A share in [0, 1]: 1 when the smaller footprint lies inside the larger one.
+    """
+    lo_a, hi_a = a.bbox_min[_FOOTPRINT], a.bbox_max[_FOOTPRINT]
+    lo_b, hi_b = b.bbox_min[_FOOTPRINT], b.bbox_max[_FOOTPRINT]
+    smaller = min(float(np.prod(hi_a - lo_a)), float(np.prod(hi_b - lo_b)))
+    if smaller <= 0.0:
+        return 1.0 if _footprint_gap(a, b) == 0.0 else 0.0
+    shared = np.maximum(0.0, np.minimum(hi_a, hi_b) - np.maximum(lo_a, lo_b))
+    return min(1.0, float(np.prod(shared)) / smaller)
+
+
+def above(subject: Instance, anchor: Instance, extent: float, falloff: float) -> float:
+    """How far ``subject`` is above ``anchor``, contact or not.
+
+    Zero unless the subject's centroid is higher (a smaller y, ADR 0007) than the Anchor's;
+    otherwise the falloff of the horizontal gap between the two footprints.
+
+    Args:
+        subject: The Instance the Relation is about.
+        anchor: The Instance it is measured against.
+        extent: The Scene extent, in metres (see :func:`scene_extent`).
+        falloff: The fraction of the extent at which the score drops to ``1/e``.
+
+    Returns:
+        1 when the subject is higher and the footprints touch or overlap, falling towards 0
+        as the footprints move apart; 0 when the subject is not higher.
+    """
+    if subject.centroid[_UP] >= anchor.centroid[_UP]:
+        return 0.0
+    return falloff_score(_footprint_gap(subject, anchor), extent, falloff)
+
+
+def below(subject: Instance, anchor: Instance, extent: float, falloff: float) -> float:
+    """How far ``subject`` is below ``anchor``: :func:`above` with the two swapped."""
+    return above(anchor, subject, extent, falloff)
+
+
+def on(subject: Instance, anchor: Instance, extent: float, falloff: float) -> float:
+    """How well ``subject`` rests on ``anchor``.
+
+    :func:`above`, times the share of the smaller footprint that the two footprints share,
+    times the falloff of the vertical distance between the subject's bottom (its maximum y)
+    and the Anchor's top (its minimum y). The distance counts both ways, so a subject sunk
+    into the Anchor loses as much as one hovering over it.
+
+    Args:
+        subject: The Instance the Relation is about.
+        anchor: The Instance it is measured against.
+        extent: The Scene extent, in metres (see :func:`scene_extent`).
+        falloff: The fraction of the extent at which the score drops to ``1/e``.
+
+    Returns:
+        1 when the subject is higher, its bottom meets the Anchor's top and the smaller
+        footprint lies inside the other; towards 0 otherwise.
+    """
+    gap = abs(float(subject.bbox_max[_UP]) - float(anchor.bbox_min[_UP]))
+    return (
+        above(subject, anchor, extent, falloff)
+        * _footprint_share(subject, anchor)
+        * falloff_score(gap, extent, falloff)
+    )
+
+
+def under(subject: Instance, anchor: Instance, extent: float, falloff: float) -> float:
+    """How well ``subject`` sits under ``anchor``: :func:`on` with the two swapped."""
+    return on(anchor, subject, extent, falloff)
+
+
+def between(subject: Instance, first: Instance, second: Instance, falloff: float) -> float:
+    """How well ``subject`` lies between two Anchors.
+
+    The falloff of the distance from the subject's centroid to the segment joining the
+    Anchors' centroids, scaled by that segment's length instead of the Scene extent.
+
+    Args:
+        subject: The Instance the Relation is about.
+        first: One Anchor.
+        second: The other Anchor; their order does not matter.
+        falloff: The fraction of the segment's length at which the score drops to ``1/e``.
+
+    Returns:
+        1 on the segment, falling towards 0 away from it; 0 when the Anchors' centroids
+        coincide, since nothing lies between one point.
+    """
+    start = np.asarray(first.centroid, dtype=np.float64)
+    segment = np.asarray(second.centroid, dtype=np.float64) - start
+    length = float(np.linalg.norm(segment))
+    if length <= 0.0:
+        return 0.0
+    point = np.asarray(subject.centroid, dtype=np.float64)
+    t = min(1.0, max(0.0, float(np.dot(point - start, segment)) / length**2))
+    distance = float(np.linalg.norm(point - (start + t * segment)))
+    return falloff_score(distance, length, falloff)
+
+
 @dataclass(frozen=True)
 class RelationContext:
     """What a Relation's scoring function sees of one assignment.
@@ -115,6 +239,12 @@ RelationScore = Callable[[RelationContext], float]
 
 RELATION_SCORES: dict[Relation, RelationScore] = {
     Relation.NEAR: lambda c: near(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.FAR_FROM: lambda c: far_from(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.ABOVE: lambda c: above(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.BELOW: lambda c: below(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.ON: lambda c: on(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.UNDER: lambda c: under(c.subject, c.anchors[0], c.extent, c.falloff),
+    Relation.BETWEEN: lambda c: between(c.subject, c.anchors[0], c.anchors[1], c.falloff),
 }
 """The scoring function of each Relation that has one. A Relation missing here fails loudly."""
 

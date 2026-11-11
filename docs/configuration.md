@@ -187,7 +187,7 @@ A Query such as "the chair near the window" is split into objects and Relations 
 | Key | Default | Meaning |
 |---|---|---|
 | `candidates_per_object` | `5` | M: how many Instances of each object's phrase ranking are its candidates. The wanted object takes `query_top_k` when that is larger. A larger value lets a lower-ranked Instance win through the Relations. |
-| `falloff` | `0.1` | Fraction of the Scene extent (the diagonal of the box around every Instance) at which a distance-based Relation, such as near, drops to `1/e`. Smaller makes near stricter. |
+| `falloff` | `0.1` | Fraction of the Scene extent (the diagonal of the box around every Instance) at which a distance-based Relation, such as near, drops to `1/e`; for between, the fraction of the distance between its two Anchors. Smaller makes the Relations stricter. |
 
 Neither default has been validated on real Scenes.
 

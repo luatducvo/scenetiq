@@ -26,6 +26,8 @@ CHAIR_FIRST = l2_normalize([1, 0, 0, 0, 0, 0, 0, 0])  # chair 0.8, lamp 0
 CHAIR_SECOND = l2_normalize([0.6, 0, 0, 0, 0.8, 0, 0, 0])  # chair 0.6 * 0.8 = 0.48, lamp 0
 LAMP_FIRST = l2_normalize([0, 0, 1, 0, 0, 0, 0, 0])  # lamp 1.0, chair 0
 LAMP_SECOND = l2_normalize([0, 0, 0.6, 0, 0, 0.8, 0, 0])  # lamp 0.6, chair 0
+LAMP_THIRD = l2_normalize([0, 0, 0.4, 0, 0, 0, 0.916515, 0])  # lamp 0.4, chair 0
+TABLE_FIRST = l2_normalize([0, 1, 0, 0, 0, 0, 0, 0])  # table 1.0, chair 0, lamp 0
 
 NEAR_QUERY = "the chair near the lamp"
 NEAR_PARSE = ParsedQuery(
@@ -39,7 +41,50 @@ TWO_CHAIRS_PARSE = ParsedQuery(
     target="a",
     constraints=(Constraint(Relation.NEAR, "a", ("b",)),),
 )
-PARSER = FakeQueryParser({NEAR_QUERY: NEAR_PARSE, TWO_CHAIRS_QUERY: TWO_CHAIRS_PARSE})
+LAMP_TABLE_CHAIR = (QueryObject("a", "lamp"), QueryObject("b", "table"), QueryObject("c", "chair"))
+ON_AND_NEAR_QUERY = "the lamp on the table near the chair"
+ON_AND_NEAR_PARSE = ParsedQuery(
+    objects=LAMP_TABLE_CHAIR,
+    target="a",
+    constraints=(
+        Constraint(Relation.ON, "a", ("b",)),
+        Constraint(Relation.NEAR, "a", ("c",)),
+    ),
+)
+BETWEEN_QUERY = "the lamp between the table and the chair"
+BETWEEN_PARSE = ParsedQuery(
+    objects=LAMP_TABLE_CHAIR,
+    target="a",
+    constraints=(Constraint(Relation.BETWEEN, "a", ("b", "c")),),
+)
+PARSER = FakeQueryParser(
+    {
+        NEAR_QUERY: NEAR_PARSE,
+        TWO_CHAIRS_QUERY: TWO_CHAIRS_PARSE,
+        ON_AND_NEAR_QUERY: ON_AND_NEAR_PARSE,
+        BETWEEN_QUERY: BETWEEN_PARSE,
+    }
+)
+
+
+def _box_scene(boxes: dict[int, tuple[list[float], list[float], FloatArray]]) -> Reconstruction:
+    """Instances drawn as their two corner points ``low`` and ``high``, so each Instance's
+    bounding box is exactly ``low``-``high`` and its centroid the box's centre.
+
+    Up is -Y (ADR 0007): a box's top is its smaller y, its footprint its X-Z rectangle.
+    """
+    points, ids = [], []
+    for iid, (low, high, _) in boxes.items():
+        points += [low, high]
+        ids += [iid, iid]
+    pts = np.asarray(points, dtype=np.float32)
+    instance_ids = np.asarray(ids, dtype=np.int32)
+    return Reconstruction(
+        points=pts,
+        colors=np.zeros((len(pts), 3), dtype=np.uint8),
+        instance_ids=instance_ids,
+        instances=build_instances(pts, instance_ids, {i: e for i, (*_, e) in boxes.items()}),
+    )
 
 
 def _flat_scene(boxes: dict[int, tuple[list[float], FloatArray]]) -> Reconstruction:
@@ -48,18 +93,8 @@ def _flat_scene(boxes: dict[int, tuple[list[float], FloatArray]]) -> Reconstruct
     Every scene here spans x 0-8 and y 0-6, so its extent is sqrt(8^2 + 6^2) = 10 and the
     default falloff scale is 0.1 * 10 = 1 metre: near = exp(-gap).
     """
-    points, ids = [], []
-    for iid, (corner, _) in boxes.items():
-        x, y = corner
-        points += [[x, y, 0.0], [x + 1, y + 1, 0.0]]
-        ids += [iid, iid]
-    pts = np.asarray(points, dtype=np.float32)
-    instance_ids = np.asarray(ids, dtype=np.int32)
-    return Reconstruction(
-        points=pts,
-        colors=np.zeros((len(pts), 3), dtype=np.uint8),
-        instance_ids=instance_ids,
-        instances=build_instances(pts, instance_ids, {i: e for i, (_, e) in boxes.items()}),
+    return _box_scene(
+        {i: ([x, y, 0.0], [x + 1, y + 1, 0.0], e) for i, ((x, y), e) in boxes.items()}
     )
 
 
@@ -75,20 +110,22 @@ LAMP_SCENE = {
 def _client(
     make_client: Callable[..., TestClient],
     tmp_path: Path,
-    boxes: dict[int, tuple[list[float], FloatArray]],
+    scene: dict[int, tuple[list[float], FloatArray]] | Reconstruction,
     *,
     candidates: int,
     top_k: int,
 ) -> tuple[TestClient, str]:
+    """A client with ``scene`` (flat boxes for :func:`_flat_scene`, or a Reconstruction)."""
     settings = Settings(
         tmp_path / "s",
         token=TOKEN,
         query_top_k=top_k,
         spatial=SpatialOptions(candidates_per_object=candidates),
     )
+    reconstruction = scene if isinstance(scene, Reconstruction) else _flat_scene(scene)
     client = make_client(
         settings=settings,
-        pipeline=FakePipeline(reconstruction=_flat_scene(boxes)),
+        pipeline=FakePipeline(reconstruction=reconstruction),
         query_parser=PARSER,
     )
     body = upload(client)
@@ -237,4 +274,74 @@ def test_a_spatial_match_carries_the_similarities_of_the_wanted_objects_phrase(
         "caption_score": pytest.approx(1.0, abs=1e-6),
         "caption_aspect": "identity",
         "anchors": [{"instance_id": 1, "phrase": "table"}],
+    }
+
+
+def test_a_query_with_two_relations_returns_the_candidate_that_satisfies_both(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    # Up is -Y: the table's top is y 0, and the lamps resting on it span y -1 to 0. The scene
+    # spans x 0-6, y -1 to 1, z 0-3: extent sqrt(36 + 4 + 9) = 7, falloff scale 0.7.
+    scene = _box_scene(
+        {
+            0: ([0, 0, 0], [3.5, 1, 3], TABLE_FIRST),
+            # On the table, far from the chair. First for "lamp".
+            1: ([0, -1, 0], [1, 0, 1], LAMP_FIRST),
+            # On the table with half its footprint over the edge, 1 m from the chair.
+            2: ([3, -1, 2], [4, 0, 3], LAMP_SECOND),
+            3: ([5, -1, 2], [6, 1, 3], CHAIR_FIRST),
+            # On the floor beside the table, touching the chair.
+            4: ([5, 0, 1], [6, 1, 2], LAMP_THIRD),
+        }
+    )
+    client, scene_id = _client(make_client, tmp_path, scene, candidates=1, top_k=3)
+    # Candidates: lamp [1, 2, 4] (1.0, 0.6, 0.4; query_top_k 3), table [0], chair [3].
+    # Lamp 2: on = above 1 (higher, footprints overlap) * share 0.5 (x 3-3.5 of its 1 x 1)
+    #   * vertical 1 (bottom y 0 meets the table's top y 0) = 0.5; near: gap 1 along x,
+    #   exp(-1 / 0.7) = 0.239651. Product 0.5 * 0.239651 = 0.119826.
+    # Lamp 1: on = 1 (footprint inside, bottom meets top); near: gaps 4 along x, 1 along z,
+    #   sqrt(17) = 4.123106, exp(-4.123106 / 0.7) = 0.002767. Product 0.002767.
+    # Lamp 4: near = 1 (touches the chair), but its centroid y 0.5 equals the table's, so it
+    #   is not above it: on = 0. Product 0.
+    result = _query(client, scene_id, ON_AND_NEAR_QUERY)
+    assert result["relations_applied"] is True
+    assert [m["instance_id"] for m in result["matches"]] == [2, 1, 4]
+    assert [m["score"] for m in result["matches"]] == pytest.approx(
+        [0.119826, 0.002767, 0.0], abs=1e-6
+    )
+    assert [m["image_score"] for m in result["matches"]] == pytest.approx([0.6, 1.0, 0.4])
+    assert result["matches"][0]["anchors"] == [
+        {"instance_id": 0, "phrase": "table"},
+        {"instance_id": 3, "phrase": "chair"},
+    ]
+
+
+def test_a_between_query_returns_a_match_with_both_anchors(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    boxes = {
+        0: ([0.0, 0.0], TABLE_FIRST),  # centroid (0.5, 0.5, 0)
+        1: ([6.0, 0.0], CHAIR_FIRST),  # centroid (6.5, 0.5, 0)
+        2: ([7.0, 5.0], LAMP_FIRST),  # centroid (7.5, 5.5, 0), first for "lamp"
+        3: ([3.0, 1.0], LAMP_SECOND),  # centroid (3.5, 1.5, 0), 1 m off the segment
+    }
+    client, scene = _client(make_client, tmp_path, boxes, candidates=1, top_k=2)
+    # Candidates: lamp [2, 3] (query_top_k 2), table [0], chair [1]. The segment from
+    # (0.5, 0.5) to (6.5, 0.5) is 6 long: scale 0.1 * 6 = 0.6. Lamp 3 is 1 from it:
+    # exp(-1 / 0.6) = exp(-1.666667) = 0.188876. Lamp 2 lies past the chair's end, so it is
+    # measured to (6.5, 0.5): sqrt(1 + 25) = 5.099020, exp(-5.099020 / 0.6) = 0.000204.
+    result = _query(client, scene, BETWEEN_QUERY)
+    assert result["relations_applied"] is True
+    assert [m["instance_id"] for m in result["matches"]] == [3, 2]
+    assert [m["score"] for m in result["matches"]] == pytest.approx([0.188876, 0.000204], abs=1e-6)
+    assert result["matches"][0] == {
+        "instance_id": 3,
+        "score": pytest.approx(0.188876, abs=1e-6),
+        "image_score": pytest.approx(0.6, abs=1e-6),
+        "caption_score": None,
+        "caption_aspect": None,
+        "anchors": [
+            {"instance_id": 0, "phrase": "table"},
+            {"instance_id": 1, "phrase": "chair"},
+        ],
     }

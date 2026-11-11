@@ -227,7 +227,8 @@ class SpatialOptions:
         candidates_per_object: M, how many Instances of each object's phrase ranking are
             its candidates. The wanted object takes ``query_top_k`` when that is larger.
         falloff: The fraction of the Scene extent at which a distance-based Relation's
-            score drops to ``1/e``.
+            score drops to ``1/e``; for between, the fraction of the distance between its
+            two Anchors.
     """
 
     candidates_per_object: int = 5
