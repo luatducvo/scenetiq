@@ -317,9 +317,23 @@ class CaptionEncoder(Protocol):
         ...
 
 
+class QueryParseError(Exception):
+    """Raised by a Query parser that could not read a Query, such as an unusable reply.
+
+    It is the only failure the Query endpoint treats as a parse failure: the Query is then
+    answered as a plain Query and the response says the parse failed. Any other exception
+    from a parser is a bug and fails the request. The message is the reason, and it is
+    logged.
+    """
+
+
 class QueryParser(Protocol):
     """Splits a Query into the objects it mentions and the Relations between them."""
 
     def parse(self, text: str) -> ParsedQuery:
-        """Return the parsed Query of ``text``, without constraints when it states no Relation."""
+        """Return the parsed Query of ``text``, without constraints when it states no Relation.
+
+        Raises:
+            QueryParseError: If the Query could not be read; its message says why.
+        """
         ...

@@ -27,6 +27,18 @@ interface LoadedScene {
   instances: Map<number, InstanceInfo>
 }
 
+/** One line saying what of a Query was not taken into account, or null when it all was. */
+function queryNotice(result: QueryResult): string | null {
+  if (result.parse_failed) {
+    return 'The Query could not be read for Relations, so it was matched as plain text.'
+  }
+  const parts = result.unsupported.map((p) => `"${p}"`)
+  if (result.relations_stated && !result.relations_applied) {
+    parts.push('its Relations, which no set of Instances satisfies')
+  }
+  return parts.length ? `Not taken into account: ${parts.join('; ')}.` : null
+}
+
 /** Load a Scene, fill the window with its point cloud, and highlight the Matches of a Query. */
 export function SceneViewer({ config, sceneId, onBack }: Props) {
   const viewerRef = useRef<HTMLDivElement>(null)
@@ -145,6 +157,8 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     }
   }
 
+  const notice = result && queryNotice(result)
+
   return (
     <div className="viewer" ref={viewerRef}>
       {scene && (
@@ -206,6 +220,7 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
             {queryError && <p className="error">{queryError}</p>}
             {result && (
               <div className="matches">
+                {notice && <p className="muted">{notice}</p>}
                 {result.matches.length === 0 && (
                   <p className="muted">This Scene has no Instances.</p>
                 )}

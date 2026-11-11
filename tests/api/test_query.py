@@ -51,6 +51,9 @@ def test_query_returns_the_best_instance_with_a_full_score(client: TestClient):
             }
         ],
         "relations_applied": False,
+        "relations_stated": False,
+        "unsupported": [],
+        "parse_failed": False,
     }
 
 
@@ -178,7 +181,13 @@ def test_scene_without_instances_returns_no_matches(make_client: Callable[..., T
     )
     client = make_client(pipeline=FakePipeline(reconstruction=empty))
     scene = _ready_scene(client)
-    assert _query(client, scene, "red chair") == {"matches": [], "relations_applied": False}
+    assert _query(client, scene, "red chair") == {
+        "matches": [],
+        "relations_applied": False,
+        "relations_stated": False,
+        "unsupported": [],
+        "parse_failed": False,
+    }
 
 
 def test_scene_whose_instances_lack_embeddings_cannot_be_queried(

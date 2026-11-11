@@ -22,18 +22,21 @@ from scenetiq.domain import (
     Aspect,
     CaptionEncoder,
     Capture,
+    ParsedQuery,
     Pipeline,
+    QueryParseError,
     QueryParser,
     TextEncoder,
     View,
 )
 from scenetiq.jobs import JobBusyError, JobRunner
-from scenetiq.query import Match, MissingEmbeddingsError, run_query
+from scenetiq.query import QUERY_LOGGER, Match, MissingEmbeddingsError, run_query
 from scenetiq.runtime_log import UploadProgress, report_progress
 from scenetiq.spatial import run_spatial_query
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore, UnknownCaptureError
 
 logger = logging.getLogger(__name__)
+_query_logger = logging.getLogger(QUERY_LOGGER)
 
 _ALLOWED_FORMATS = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG"}
 _ID_PATTERN = "^[0-9a-f]{32}$"  # capture ids become directory names, so never accept a path
@@ -240,15 +243,20 @@ def create_app(
                 caption_encoder.encode_query(phrase) if captioned else None,
             )
 
-        parsed = query_parser.parse(text)
+        # Only a parse failure the parser reports falls back; any other exception is a bug.
+        parsed: ParsedQuery | None = None
+        try:
+            parsed = query_parser.parse(text)
+        except QueryParseError as exc:
+            _query_logger.warning("query parse failed, answered as a plain Query: %s", exc)
         try:
             matches = None
-            if parsed.constraints:
+            if parsed is not None and parsed.constraints:
                 matches = run_spatial_query(
                     instances, parsed, rank, settings.query_top_k, settings.spatial
                 )
             relations_applied = matches is not None
-            if matches is None:  # no Relation, or no valid assignment: the plain Query
+            if matches is None:  # no Relation, no valid assignment or no parse: plain Query
                 matches = rank(text, settings.query_top_k)
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
@@ -267,6 +275,9 @@ def create_app(
                 for m in matches
             ],
             relations_applied=relations_applied,
+            relations_stated=parsed is not None and bool(parsed.constraints),
+            unsupported=[] if parsed is None else list(parsed.unsupported),
+            parse_failed=parsed is None,
         )
 
     return app
@@ -327,10 +338,22 @@ class MatchOut(BaseModel):
 
 
 class QueryOut(BaseModel):
-    """The top-K Matches for a Query, best first, and whether its Relations were applied."""
+    """The top-K Matches for a Query, best first, and what of the Query was taken into account.
+
+    ``relations_applied`` is true when the Query's Relations decided the Matches.
+    ``relations_stated`` is true when the parsed Query had at least one Relation, so stated
+    but not applied means no assignment was valid and the Query was answered as a plain
+    Query. ``unsupported`` lists the parts of the Query the Relation set cannot express, as
+    the parser quoted them; they are never applied. ``parse_failed`` is true when the parser
+    could not read the Query, which was then answered as a plain Query; the other three
+    are then false and empty.
+    """
 
     matches: list[MatchOut]
     relations_applied: bool
+    relations_stated: bool
+    unsupported: list[str]
+    parse_failed: bool
 
 
 def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:

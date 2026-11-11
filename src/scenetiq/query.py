@@ -12,6 +12,9 @@ import numpy as np
 
 from scenetiq.domain import Aspect, FloatArray, Instance
 
+QUERY_LOGGER = "scenetiq.query"
+"""Logger of Query-time notes; ``colab_logging.json`` lets it through."""
+
 
 class MissingEmbeddingsError(ValueError):
     """Raised when a Query targets Instances that have no embeddings yet."""

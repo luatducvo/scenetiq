@@ -18,6 +18,7 @@ from scenetiq.domain import (
     EmbeddedCaption,
     FloatArray,
     ParsedQuery,
+    QueryParseError,
     Reconstruction,
     Stage,
     StageCallback,
@@ -201,15 +202,22 @@ class FakeQueryParser:
     """A Query parser that knows only the parsed Queries it was prepared with.
 
     Args:
-        prepared: Parsed Query by Query text, matched case- and whitespace-insensitively.
+        prepared: Parsed Query by Query text, matched case- and whitespace-insensitively;
+            a :class:`QueryParseError` instead prepares a parse failure, which is raised.
             Any other text is read as a Query without a Relation.
     """
 
-    def __init__(self, prepared: Mapping[str, ParsedQuery] | None = None) -> None:
+    def __init__(self, prepared: Mapping[str, ParsedQuery | QueryParseError] | None = None) -> None:
         """Create the fake; see the class docstring for the arguments."""
         self.prepared = {t.strip().lower(): p for t, p in (prepared or {}).items()}
 
     def parse(self, text: str) -> ParsedQuery:
-        """Return the prepared parsed Query of ``text``, or one without a Relation."""
+        """Return the prepared parsed Query of ``text``, or one without a Relation.
+
+        Raises:
+            QueryParseError: If ``text`` was prepared to fail.
+        """
         found = self.prepared.get(text.strip().lower())
+        if isinstance(found, QueryParseError):
+            raise found
         return found if found is not None else ParsedQuery.without_relations(text)

@@ -1,5 +1,6 @@
 """Queries with a Relation, through the HTTP API with the fake parser (ADR 0009)."""
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
@@ -16,11 +17,13 @@ from scenetiq.domain import (
     FloatArray,
     ParsedQuery,
     QueryObject,
+    QueryParseError,
     Reconstruction,
     Relation,
 )
 from scenetiq.fakes import FakePipeline, FakeQueryParser
 from scenetiq.geometry import build_instances, l2_normalize
+from scenetiq.query import QUERY_LOGGER
 
 from .conftest import AUTH, TOKEN, upload, wait_for_job
 
@@ -72,8 +75,25 @@ NEAREST_PARSE = ParsedQuery(
     target="a",
     constraints=(Constraint(Relation.NEAREST_TO, "a", ("b",)),),
 )
+NEAR_LEFT_QUERY = "the chair near the lamp, left of the door"
+NEAR_LEFT_PARSE = ParsedQuery(
+    objects=NEAR_PARSE.objects,
+    target="a",
+    constraints=NEAR_PARSE.constraints,
+    unsupported=("left of the door",),
+)
+BEHIND_QUERY = "the chair behind the lamp"
+BEHIND_PARSE = ParsedQuery(
+    objects=(QueryObject("a", "chair"), QueryObject("b", "lamp")),
+    target="a",
+    unsupported=("behind the lamp",),
+)
+FAILED_QUERY = "the chair the parser cannot read"
 PARSER = FakeQueryParser(
     {
+        NEAR_LEFT_QUERY: NEAR_LEFT_PARSE,
+        BEHIND_QUERY: BEHIND_PARSE,
+        FAILED_QUERY: QueryParseError("the reply was cut off"),
         NEAR_QUERY: NEAR_PARSE,
         TWO_CHAIRS_QUERY: TWO_CHAIRS_PARSE,
         ON_AND_NEAR_QUERY: ON_AND_NEAR_PARSE,
@@ -189,6 +209,9 @@ def test_a_near_query_returns_the_candidate_close_to_the_anchor(
             }
         ],
         "relations_applied": True,
+        "relations_stated": True,
+        "unsupported": [],
+        "parse_failed": False,
     }
 
 
@@ -209,6 +232,9 @@ def test_a_query_the_parser_reads_without_a_relation_is_a_plain_query(
             }
         ],
         "relations_applied": False,
+        "relations_stated": False,
+        "unsupported": [],
+        "parse_failed": False,
     }
 
 
@@ -254,7 +280,8 @@ def test_a_query_without_a_valid_assignment_is_answered_as_a_plain_query(
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=1, top_k=1)
     # One candidate per object: both chairs are Instance 0, so no assignment is valid. The
     # original text is unknown to the fake encoder and resembles chair 0 (0.3), chair 1
-    # (0.3 * 0.6 = 0.18) and the lamp (0): chair 0, first of one ranking, scores 1.
+    # (0.3 * 0.6 = 0.18) and the lamp (0): chair 0, first of one ranking, scores 1. The
+    # Query stated a Relation that was not applied.
     assert _query(client, scene, TWO_CHAIRS_QUERY) == {
         "matches": [
             {
@@ -267,7 +294,145 @@ def test_a_query_without_a_valid_assignment_is_answered_as_a_plain_query(
             }
         ],
         "relations_applied": False,
+        "relations_stated": True,
+        "unsupported": [],
+        "parse_failed": False,
     }
+
+
+def test_a_scene_with_fewer_instances_than_objects_answers_the_plain_query(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    boxes = {0: ([0.0, 0.0], CHAIR_FIRST), 1: ([7.0, 5.0], LAMP_FIRST)}
+    client, scene = _client(make_client, tmp_path, boxes, candidates=2, top_k=2, margins=WIDE)
+    # The between Query names three objects, the Scene has two Instances: no assignment is
+    # valid. The original text is unknown to the fake encoder and resembles chair 0 (0.3) and
+    # the lamp (0). One ranking: 61/61 = 1, then 61/62 = 0.983871.
+    assert _query(client, scene, BETWEEN_QUERY) == {
+        "matches": [
+            {
+                "instance_id": 0,
+                "score": 1.0,
+                "image_score": pytest.approx(0.3, abs=1e-3),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+            {
+                "instance_id": 1,
+                "score": pytest.approx(0.983871, abs=1e-6),
+                "image_score": pytest.approx(0.0, abs=1e-6),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+        ],
+        "relations_applied": False,
+        "relations_stated": True,
+        "unsupported": [],
+        "parse_failed": False,
+    }
+
+
+def test_unsupported_parts_are_reported_and_the_supported_relations_still_decide(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=1, margins=WIDE)
+    # The near Query plus "left of the door": the same Match as the near Query alone, chair 1
+    # 1 m from the lamp, exp(-1) = 0.367879, and the unsupported part reported as quoted.
+    result = _query(client, scene, NEAR_LEFT_QUERY)
+    assert result == {
+        "matches": [
+            {
+                "instance_id": 1,
+                "score": pytest.approx(0.367879, abs=1e-6),
+                "image_score": pytest.approx(0.48, abs=1e-6),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [{"instance_id": 2, "phrase": "lamp"}],
+            }
+        ],
+        "relations_applied": True,
+        "relations_stated": True,
+        "unsupported": ["left of the door"],
+        "parse_failed": False,
+    }
+    assert result["matches"] == _query(client, scene, NEAR_QUERY)["matches"]
+
+
+def test_unsupported_parts_without_a_relation_leave_the_plain_query_and_are_reported(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=1)
+    # Nothing but "behind the lamp", which no Relation expresses: the original text is
+    # ranked, unknown to the fake encoder, so chair 0 (0.3) is first of one ranking: 1.
+    assert _query(client, scene, BEHIND_QUERY) == {
+        "matches": [
+            {
+                "instance_id": 0,
+                "score": 1.0,
+                "image_score": pytest.approx(0.3, abs=1e-3),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            }
+        ],
+        "relations_applied": False,
+        "relations_stated": False,
+        "unsupported": ["behind the lamp"],
+        "parse_failed": False,
+    }
+
+
+def test_a_parse_failure_answers_the_plain_query_and_says_the_parse_failed(
+    make_client: Callable[..., TestClient], tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=2)
+    caplog.set_level(logging.WARNING, logger=QUERY_LOGGER)
+    # The original text is unknown to the fake encoder and resembles chair 0 (0.3), chair 1
+    # (0.3 * 0.6 = 0.18) and the lamp (0). One ranking: 61/61 = 1, then 61/62 = 0.983871.
+    assert _query(client, scene, FAILED_QUERY) == {
+        "matches": [
+            {
+                "instance_id": 0,
+                "score": 1.0,
+                "image_score": pytest.approx(0.3, abs=1e-3),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+            {
+                "instance_id": 1,
+                "score": pytest.approx(0.983871, abs=1e-6),
+                "image_score": pytest.approx(0.18, abs=1e-3),
+                "caption_score": None,
+                "caption_aspect": None,
+                "anchors": [],
+            },
+        ],
+        "relations_applied": False,
+        "relations_stated": False,
+        "unsupported": [],
+        "parse_failed": True,
+    }
+    # The reason reaches the Query logger, which the Colab logging configuration lets through.
+    assert [r.name for r in caplog.records] == [QUERY_LOGGER]
+    assert "the reply was cut off" in caplog.records[0].getMessage()
+
+
+def test_a_parser_bug_is_not_taken_for_a_parse_failure(
+    make_client: Callable[..., TestClient], tmp_path: Path
+):
+    class BrokenParser:
+        def parse(self, text: str) -> ParsedQuery:
+            raise KeyError("a bug inside the parser")
+
+    client = make_client(query_parser=BrokenParser())
+    body = upload(client)
+    assert wait_for_job(client, body["job_id"])["status"] == "succeeded"
+    # TestClient re-raises what the server did not handle: the bug is not swallowed.
+    with pytest.raises(KeyError, match="a bug inside the parser"):
+        client.post(f"/scenes/{body['scene_id']}/query", json={"text": "chair"}, headers=AUTH)
 
 
 def test_the_wanted_object_shortlists_query_top_k_when_that_is_larger(
@@ -413,6 +578,9 @@ def test_a_largest_query_returns_the_biggest_box_over_the_first_ranked_candidate
             },
         ],
         "relations_applied": True,
+        "relations_stated": True,
+        "unsupported": [],
+        "parse_failed": False,
     }
 
 
@@ -493,6 +661,9 @@ def test_an_instance_far_below_the_best_on_both_channels_does_not_stand_in_for_t
             }
         ],
         "relations_applied": True,
+        "relations_stated": True,
+        "unsupported": [],
+        "parse_failed": False,
     }
 
 

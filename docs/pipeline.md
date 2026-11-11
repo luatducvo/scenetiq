@@ -157,7 +157,9 @@ Luồng này nằm trong [query.py](../src/scenetiq/query.py). Với câu `"red 
 4. Trả `query_top_k` Instance đứng đầu (mặc định 1). Điểm được chia cho giá trị lớn nhất có thể, `số bảng / (rrf_k + 1)`, nên nằm trong [0, 1] nhưng chỉ có nghĩa trong một Query. Mỗi Match kèm `image_score`, `caption_score` (cosine thô của Description tốt nhất) và `caption_aspect` (Aspect của Description đó) để debug.
 5. Không có ngưỡng: Scene có Instance thì luôn có Match. Scene không có Instance thì trả danh sách rỗng. Scene không Instance nào có Caption thì chỉ xếp theo ảnh.
 
-Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box.
+Mọi Query trước hết đi qua parser và có thể được giải theo Relation ([ADR 0009](adr/0009-spatial-queries-parsed-and-solved.md)). Response có thêm `relations_applied` (Relation đã quyết định Match), `relations_stated` (Query sau khi parse có Relation), `unsupported` (những phần Query mà tập Relation không diễn đạt được, trích nguyên văn theo parser) và `parse_failed` (parser không đọc được Query). Phần không hỗ trợ chỉ được báo lại, các Relation còn lại vẫn được áp dụng. Khi parse thất bại, hoặc có Relation nhưng không có phép gán hợp lệ (ví dụ Scene có ít Instance hơn số vật trong Query, lúc đó `relations_stated` đúng còn `relations_applied` sai), Query chạy như các bước trên với câu gốc và vẫn trả 200. Lý do parse thất bại được ghi log lên notebook.
+
+Frontend tải `points`, `instance-ids` và `instances` (kèm `name` của Caption) qua [api.ts](../frontend/src/api.ts). [SceneViewer.tsx](../frontend/src/components/SceneViewer.tsx) hiện Name cạnh điểm trong danh sách Match và làm nhãn trên bounding box, đánh dấu các Anchor bằng màu riêng, và hiện một dòng thông báo khi có phần Query không được tính đến hoặc parse thất bại.
 
 ## Khi nào job thất bại
 

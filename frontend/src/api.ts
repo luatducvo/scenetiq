@@ -258,6 +258,15 @@ export interface QueryResult {
   matches: MatchInfo[]
   /** Whether the Query's Relations decided the Matches. */
   relations_applied: boolean
+  /**
+   * Whether the parsed Query had a Relation. Stated but not applied means no set of
+   * Instances could satisfy the Relations, and the Query was matched as plain text.
+   */
+  relations_stated: boolean
+  /** The parts of the Query no Relation can express, as the parser quoted them; never applied. */
+  unsupported: string[]
+  /** Whether the parser could not read the Query, which was then matched as plain text. */
+  parse_failed: boolean
 }
 
 /** Per-point Instance ids (-1 = none), in the same order as the point cloud. */

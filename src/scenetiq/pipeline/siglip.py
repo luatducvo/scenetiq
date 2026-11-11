@@ -16,9 +16,7 @@ import numpy as np
 
 from scenetiq.config import SigLIP2Options
 from scenetiq.domain import FloatArray
-
-QUERY_LOGGER = "scenetiq.query"
-"""Logger of Query-time notes; ``colab_logging.json`` lets it through."""
+from scenetiq.query import QUERY_LOGGER
 
 MAX_TEXT_TOKENS = 64
 """Positions of the SigLIP2 text tower; it was trained on text padded to this length."""
