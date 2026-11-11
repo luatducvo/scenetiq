@@ -29,6 +29,8 @@ export interface Job {
   error: string | null
   started_at: string | null
   finished_at: string | null
+  /** Whether this unfinished job was asked to stop and has not yet. */
+  cancel_requested: boolean
   /** Every Stage that started, in order. */
   stages: StageTiming[]
   notes: JobNote[]

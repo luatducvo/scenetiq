@@ -109,16 +109,14 @@ class RealPipeline:
 
         reporter.stage(Stage.ALIGNING)
         with track_stage_memory(Stage.ALIGNING):
-            aligned, view_data = gravity_align(
+            geometry, view_data, aligned = gravity_align(
                 geometry, view_data, self.up_estimator, opts.alignment
             )
-        # gravity_align returns its inputs unchanged when the Views do not agree on up.
-        if aligned is geometry:
+        if not aligned:
             reporter.note(
                 "The Scene could not be aligned to gravity: its Views did not agree on up, "
                 "so above, below, on, under, tallest and lowest may be wrong."
             )
-        geometry = aligned
         points = geometry.vertices
 
         reporter.stage(Stage.SUPERPOINTS)

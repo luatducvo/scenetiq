@@ -65,7 +65,7 @@ A spatial relationship between Instances that a Query states, such as near, on o
 _Avoid_: Predicate, spatial filter, edge
 
 **Anchor**:
-An Instance a Query uses as a reference to single out the Match (the window in "the chair near the window"). The viewer marks it in its own colour.
+An Instance a Query uses as a reference to single out the Match (the window in "the chair near the window"). A Match carries its Anchors in the API's answer; the viewer does not show them.
 _Avoid_: Reference object, landmark, context object
 
 **Spatial reasoning**:

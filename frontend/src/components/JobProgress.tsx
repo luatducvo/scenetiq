@@ -66,9 +66,14 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
 
   const running = job !== null && !TERMINAL.has(job.status)
   useTick(running)
+  // The backend remembers a cancel request, so "stopping" survives a reload or a cancel
+  // sent from the Scene list.
+  const isStopping = running && (stopping || job.cancel_requested)
+  // A job interrupted by a restart never got an end time: show no duration that ends now.
+  const timed = running || job?.finished_at != null
 
   async function cancel() {
-    if (!window.confirm('Cancel this job? Its photos and partial results will be deleted.')) return
+    if (!window.confirm('Cancel this job? Its photos and unfinished Reconstruction will be deleted.')) return
     setCancelError(null)
     try {
       await cancelJob(config, jobId)
@@ -85,9 +90,12 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
     <div className="panel">
       <h2>Processing</h2>
       <p>
-        Status: <strong>{running && stopping ? 'stopping' : (job?.status ?? 'connecting')}</strong>
-        {job?.started_at && (
-          <span className="muted"> · {formatDuration(secondsBetween(job.started_at, job.finished_at))}</span>
+        Status: <strong>{isStopping ? 'stopping' : (job?.status ?? 'connecting')}</strong>
+        {job?.started_at && timed && (
+          <span className="muted">
+            {' · '}
+            {formatDuration(secondsBetween(job.started_at, job.finished_at))}
+          </span>
         )}
       </p>
       <ol className="stages">
@@ -98,7 +106,7 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
           return (
             <li key={s} className={state}>
               {s}
-              {timing && (
+              {timing && (running || timing.finished_at) && (
                 <span className="stage-time">
                   {' '}
                   {formatDuration(secondsBetween(timing.started_at, timing.finished_at))}
@@ -118,19 +126,19 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
           ))}
         </ul>
       )}
-      {running && !stopping && (
+      {running && !isStopping && (
         <button type="button" className="danger" onClick={cancel}>
           Cancel job
         </button>
       )}
-      {running && stopping && (
+      {isStopping && (
         <p className="muted">
           Stopping at the next checkpoint: the end of the current stage, View or Instance. A
           single model call cannot be interrupted.
         </p>
       )}
       {job?.status === 'cancelled' && (
-        <p className="muted">Cancelled. Its photos and partial results were deleted.</p>
+        <p className="muted">Cancelled. Its photos and unfinished Reconstruction were deleted.</p>
       )}
       {cancelError && <p className="error">Cannot cancel: {cancelError}</p>}
       {job?.status === 'failed' && <p className="error">Failed: {job.error}</p>}

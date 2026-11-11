@@ -86,3 +86,17 @@ def test_a_finished_job_cannot_be_cancelled(client: TestClient):
 
 def test_cancelling_an_unknown_job_is_404(client: TestClient):
     assert client.post("/jobs/nope/cancel", headers=AUTH).status_code == 404
+
+
+def test_a_job_says_it_was_asked_to_stop_until_it_has(make_client: Callable[..., TestClient]):
+    client, gate, body = _held_job(make_client)
+    before = client.get(f"/jobs/{body['job_id']}", headers=AUTH).json()
+
+    client.post(f"/jobs/{body['job_id']}/cancel", headers=AUTH)
+    stopping = client.get(f"/jobs/{body['job_id']}", headers=AUTH).json()
+    gate.set()
+    stopped = wait_for_job(client, body["job_id"])
+
+    assert before["cancel_requested"] is False
+    assert (stopping["status"], stopping["cancel_requested"]) == ("running", True)
+    assert stopped["status"] == "cancelled"

@@ -6,7 +6,7 @@ A Captioning stage after Embedding now asks a local vision-language model (Qwen3
 
 Each non-empty Description is embedded on its own by a separate text embedding model (Qwen3-Embedding-0.6B). An Instance's Caption similarity to a Query is the similarity of its best-matching Description, so a Query about one Aspect is answered by the Description of that Aspect and is not diluted by the others. When the model leaves Identity empty, it is written from the Name and Synonyms, so every Caption has at least one Description. The model's reply is forced, token by token, to follow a fixed JSON schema (constrained decoding with xgrammar), so a reply can be lost only by being cut off at the token limit.
 
-A Query is ranked twice, against the image embeddings and against the best Description of each captioned Instance, and the two rankings are fused with Reciprocal Rank Fusion. The Matches are the top K of that fused ranking: there is no threshold and no Low-confidence Match any more.
+A Query is ranked twice, against the image embeddings and against the best Description of each captioned Instance, and the two rankings are fused with Reciprocal Rank Fusion. The Matches are the top K of that fused ranking, where K is the `top_k` a Query asks for (at most `query_max_top_k`) or `query_top_k` by default: there is no threshold and no Low-confidence Match any more.
 
 ## Considered Options
 

@@ -201,6 +201,8 @@ def create_app(
             error=record.error,
             started_at=record.started_at,
             finished_at=record.finished_at,
+            cancel_requested=request.app.state.runner.cancel_requested(job_id)
+            and record.status in (JobStatus.QUEUED, JobStatus.RUNNING),
             stages=_stage_timings(events, record.finished_at),
             notes=[
                 NoteOut(at=e.at, stage=e.stage, message=e.message)
@@ -216,10 +218,10 @@ def create_app(
         if record is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown job")
         unfinished = record.status in (JobStatus.QUEUED, JobStatus.RUNNING)
-        if not unfinished or not request.app.state.runner.cancel(job_id):
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, f"job is {record.status.value}, not running"
-            )
+        if not unfinished:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"job is {record.status.value}")
+        if not request.app.state.runner.cancel(job_id):
+            raise HTTPException(status.HTTP_409_CONFLICT, "job is already finishing")
         return {"job_id": job_id, "status": "cancelling"}
 
     @app.get("/scenes")
@@ -399,6 +401,7 @@ class JobOut(BaseModel):
     ``stages`` lists every Stage that started, in order; a Stage ends when the next starts
     or the job ends. ``notes`` are in the order recorded. Timestamps are ISO 8601 UTC;
     ``started_at`` and ``finished_at`` are null until the job starts and ends.
+    ``cancel_requested`` is true while an unfinished job has been asked to stop.
     """
 
     job_id: str
@@ -408,6 +411,7 @@ class JobOut(BaseModel):
     error: str | None
     started_at: str | None
     finished_at: str | None
+    cancel_requested: bool
     stages: list[StageOut]
     notes: list[NoteOut]
 

@@ -169,10 +169,11 @@ def test_a_capture_with_consensus_is_rotated_so_up_becomes_minus_y(
 ):
     caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
 
-    aligned, moved = _align(
+    aligned, moved, was_aligned = _align(
         _geometry([[1.0, 2.0, 3.0]]), _views(1), _FixedUps([[0.0, 0.0, 1.0]]), AlignmentOptions()
     )
 
+    assert was_aligned is True
     # Up (0, 0, 1) to (0, -1, 0) is a quarter turn about +X: (x, y, z) to (x, -z, y).
     np.testing.assert_allclose(aligned.vertices, [[1.0, -3.0, 2.0]], atol=1e-6)
     np.testing.assert_allclose(moved.cameras[0].cam_to_world[:3, :3], QUARTER_TURN_ABOUT_X)
@@ -188,7 +189,7 @@ def test_up_estimates_are_read_in_the_frame_of_their_camera():
     cam_to_world[:3, :3] = QUARTER_TURN_ABOUT_X
     view_data = _view_data(cam_to_world)
 
-    aligned, moved = _align(
+    aligned, moved, _ = _align(
         _geometry([[1.0, 2.0, 3.0]]), view_data, _FixedUps([[0.0, -1.0, 0.0]]), AlignmentOptions()
     )
 
@@ -202,8 +203,9 @@ def test_without_consensus_nothing_moves_and_the_log_says_so(caplog: pytest.LogC
     view_data = _views(2)
     estimator = _FixedUps([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]])
 
-    aligned, moved = _align(geometry, view_data, estimator, AlignmentOptions())
+    aligned, moved, was_aligned = _align(geometry, view_data, estimator, AlignmentOptions())
 
+    assert was_aligned is False
     np.testing.assert_array_equal(aligned.vertices, geometry.vertices)
     np.testing.assert_array_equal(moved.cameras[0].cam_to_world, view_data.cameras[0].cam_to_world)
     assert caplog.messages == ["gravity-alignment method=none angle=0.0deg views=2 consensus=0.50"]
@@ -301,7 +303,7 @@ def test_a_qualifying_plane_decides_up_over_the_estimates(caplog: pytest.LogCapt
     caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
     normal = _up_at_degrees(6)
 
-    aligned, _ = gravity_align(
+    aligned, _, _ = gravity_align(
         _geometry([[2 * normal[0], 2 * normal[1], 0.0]]),
         _views(1),
         _FixedUps([[0.0, -1.0, 0.0]]),
@@ -319,7 +321,7 @@ def test_a_qualifying_plane_decides_up_over_the_estimates(caplog: pytest.LogCapt
 def test_without_a_qualifying_plane_the_estimates_decide_up(caplog: pytest.LogCaptureFixture):
     caplog.set_level(logging.INFO, logger=ALIGNMENT_LOGGER)
 
-    aligned, _ = gravity_align(
+    aligned, _, _ = gravity_align(
         _geometry([[1.0, 2.0, 3.0]]),
         _views(1),
         _FixedUps([[0.0, 0.0, 1.0]]),
@@ -339,7 +341,7 @@ def test_without_consensus_no_plane_is_searched_for():
 
     geometry = _geometry([[1.0, 2.0, 3.0]])
 
-    aligned, _ = gravity_align(
+    aligned, _, _ = gravity_align(
         geometry,
         _views(2),
         _FixedUps([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0]]),

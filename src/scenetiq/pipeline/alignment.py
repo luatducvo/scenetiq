@@ -266,7 +266,7 @@ def gravity_align(
     estimator: UpEstimator,
     options: AlignmentOptions | None = None,
     plane_search: PlaneSearch = find_planes,
-) -> tuple[FusedGeometry, ViewData]:
+) -> tuple[FusedGeometry, ViewData, bool]:
     """Rotate the geometry and cameras so that physical up is -Y, if the Views agree on up.
 
     A qualifying plane refines the direction the Views agree on, but never replaces a
@@ -280,7 +280,8 @@ def gravity_align(
         plane_search: The source of candidate planes.
 
     Returns:
-        The aligned geometry and View data, or the inputs when the Views do not agree.
+        The aligned geometry and View data, or the inputs when the Views do not agree, and
+        whether the Scene was aligned.
     """
     opts = options or AlignmentOptions()
     chosen = evenly_spaced_views(len(view_data), opts.max_views)
@@ -301,7 +302,7 @@ def gravity_align(
     consensus = find_up_consensus(world_ups, opts.consensus_angle_deg, opts.consensus_fraction)
     if consensus.direction is None:
         _logger.info("%s", format_alignment_line("none", 0.0, len(chosen), consensus.fraction))
-        return geometry, view_data
+        return geometry, view_data, False
     plane = select_plane(
         plane_search(geometry.vertices, opts),
         consensus.direction,
@@ -318,7 +319,7 @@ def gravity_align(
         None if plane is None else plane.fraction,
     )
     _logger.info("%s", line)
-    return apply_rotation(geometry, view_data, rotation_between(up, CONVENTIONAL_UP))
+    return (*apply_rotation(geometry, view_data, rotation_between(up, CONVENTIONAL_UP)), True)
 
 
 def rotation_between(source: npt.ArrayLike, target: npt.ArrayLike) -> Float64Array:

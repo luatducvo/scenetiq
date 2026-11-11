@@ -76,13 +76,23 @@ class JobRunner:
         """Ask job ``job_id`` to stop at its next checkpoint.
 
         Returns:
-            Whether ``job_id`` is the job holding the slot, so that it will stop.
+            Whether ``job_id`` will stop: it holds the slot, or it was already asked to stop
+            (also in the moment between freeing the slot and publishing its final status).
         """
         with self._lock:
-            if not self._active or self._job_id != job_id:
+            if self._job_id != job_id:
+                return False
+            if self._cancel.is_set():
+                return True
+            if not self._active:
                 return False
             self._cancel.set()
             return True
+
+    def cancel_requested(self, job_id: str) -> bool:
+        """Whether job ``job_id`` is the latest job and was asked to stop."""
+        with self._lock:
+            return self._job_id == job_id and self._cancel.is_set()
 
     def join(self, timeout: float | None = None) -> None:
         """Wait for the most recently started job, if any, to finish."""

@@ -62,9 +62,13 @@ function queryNotice(result: QueryResult): string | null {
   return parts.length ? `Not taken into account: ${parts.join('; ')}.` : null
 }
 
+/** A linear colour, as the points use, written as the sRGB CSS colour that looks the same. */
 function cssColor([r, g, b]: [number, number, number]): string {
-  return `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(',')})`
+  return new THREE.Color().setRGB(r, g, b, THREE.LinearSRGBColorSpace).getStyle()
 }
+
+/** How long the K slider must rest before the shown Query re-runs, so a drag runs one Query. */
+const RERUN_DELAY_MS = 400
 
 /** Load a Scene, fill the window with its point cloud, and highlight the Matches of a Query. */
 export function SceneViewer({ config, sceneId, onBack }: Props) {
@@ -172,16 +176,24 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     writePointScale(value)
   }
 
+  // Only the latest Query may show its answer; an older one still in flight is dropped.
+  const latestQuery = useRef(0)
+  const rerunTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(rerunTimer.current), [])
+
   async function runQuery(query: string, k: number | null) {
+    const id = ++latestQuery.current
     setQuerying(true)
     setQueryError(null)
     try {
-      setResult(await queryScene(config, sceneId, query, k ?? undefined))
+      const answer = await queryScene(config, sceneId, query, k ?? undefined)
+      if (id !== latestQuery.current) return
+      setResult(answer)
       setShownText(query)
     } catch (err) {
-      setQueryError(String(err))
+      if (id === latestQuery.current) setQueryError(String(err))
     } finally {
-      setQuerying(false)
+      if (id === latestQuery.current) setQuerying(false)
     }
   }
 
@@ -192,10 +204,14 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
 
   function changeTopK(k: number) {
     setTopK(k)
-    if (result && shownText && !querying) runQuery(shownText, k)
+    window.clearTimeout(rerunTimer.current)
+    if (shownText) rerunTimer.current = window.setTimeout(() => runQuery(shownText, k), RERUN_DELAY_MS)
   }
 
   function clear() {
+    window.clearTimeout(rerunTimer.current)
+    latestQuery.current += 1
+    setQuerying(false)
     setResult(null)
     setShownText(null)
   }
@@ -255,7 +271,6 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                 max={maxTopK}
                 step={1}
                 value={topK}
-                disabled={querying}
                 onChange={(e) => changeTopK(Number(e.target.value))}
               />
             </label>
