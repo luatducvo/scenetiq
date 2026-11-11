@@ -141,9 +141,6 @@ class _RecordingCaptioner:
         self.calls.append(images)
         return self.replies.get(len(self.calls), "no idea")
 
-    def release(self) -> None:
-        pass
-
 
 def _camera(width: int, height: int) -> Camera:
     k = np.eye(3, dtype=np.float32)

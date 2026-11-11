@@ -68,7 +68,8 @@ class RealPipeline:
         up_estimator: The Aligning stage's source of up vectors (GeoCalib by default,
             ADR 0007).
         captioner: The Captioning stage's vision-language model (Qwen3-VL by default,
-            ADR 0008).
+            ADR 0008). It stays on the GPU after the stage: pass the captioner built in
+            ``server.build_components``.
         caption_encoder: Embeds Captions (Qwen3-Embedding by default). Pass the same
             encoder the API uses for Query text.
     """
@@ -149,16 +150,14 @@ class RealPipeline:
 
         on_stage(Stage.CAPTIONING)
         with track_stage_memory(Stage.CAPTIONING):
-            try:
-                captions = caption_instances(
-                    {iid: plan for iid, plan in plans.items() if iid in embeddings},
-                    [v.path for v in capture.views],
-                    view_data.cameras,
-                    self.captioner,
-                    opts.captioning,
-                )
-            finally:
-                self.captioner.release()
+            # The vision-language model stays on the GPU after the stage, also on failure.
+            captions = caption_instances(
+                {iid: plan for iid, plan in plans.items() if iid in embeddings},
+                [v.path for v in capture.views],
+                view_data.cameras,
+                self.captioner,
+                opts.captioning,
+            )
             caption_data = embed_descriptions(captions, self.caption_encoder)
 
         return Reconstruction(

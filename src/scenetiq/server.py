@@ -31,6 +31,8 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder, Caption
 
         encoder = SigLIP2Encoder(settings.siglip)  # one model for Instance crops and Query text
         caption_encoder = Qwen3TextEmbedder(settings.caption_embedding)  # Descriptions, Queries
+        # One vision-language model for Captioning and, later, the API; it stays loaded.
+        captioner = QwenVLCaptioner(settings.captioning)
         pipeline = RealPipeline(
             reconstructor=DA3Reconstructor(settings.da3),
             masker=SAM2Masker(settings.sam2),
@@ -43,7 +45,7 @@ def build_components(settings: Settings) -> tuple[Pipeline, TextEncoder, Caption
                 embedding=settings.embedding,
                 captioning=settings.captioning,
             ),
-            captioner=QwenVLCaptioner(settings.captioning),
+            captioner=captioner,
             caption_encoder=caption_encoder,
         )
         return pipeline, encoder, caption_encoder

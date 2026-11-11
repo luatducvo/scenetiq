@@ -131,7 +131,7 @@ Với mỗi Instance còn lại sau Embedding:
 4. Đọc JSON một cách dễ dãi (chấp nhận code fence, chữ thừa), giữ tối đa 3 synonym. Câu trả lời không có `name` thì Instance không có Caption, lý do được ghi log, job vẫn chạy tiếp. `identity` trống thì được viết từ Name và Synonyms, ví dụ `"A sofa, also called a couch or settee."`.
 5. Mã hóa **từng Description không trống thành một vector riêng** bằng Qwen3-Embedding.
 
-Qwen3-VL rời GPU khi stage kết thúc, kể cả khi lỗi. Qwen3-Embedding ở lại GPU cùng SigLIP2 để phục vụ Query. Mỗi job ghi một dòng `captioning captioned=… uncaptioned=…` lên notebook.
+Qwen3-VL ở lại GPU sau stage, kể cả khi lỗi, cùng Qwen3-Embedding và SigLIP2 để phục vụ Query. Model được nạp ở lần dùng đầu tiên (bởi job hoặc Query) và mỗi lần sinh giữ khóa của nó, nên một Query chỉ phải chờ tối đa một Instance. Vì vậy job bắt đầu với ít hơn khoảng 17 GB bộ nhớ GPU trống cho DA3 và SAM2. Mỗi job ghi một dòng `captioning captioned=… uncaptioned=…` lên notebook.
 
 ## Lưu kết quả
 

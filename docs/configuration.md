@@ -64,7 +64,7 @@ merge-input points=1200000 primitives=30000
 gpu-memory stage=merging peak_allocated=24.50GB peak_reserved=26.00GB allocated_after=3.74GB
 ```
 
-DA3 and SAM2 leave the GPU when their stage ends and load again for the next job. SigLIP2 stays, so Queries answer without loading it again.
+DA3 and SAM2 leave the GPU when their stage ends and load again for the next job. SigLIP2, Qwen3-Embedding and Qwen3-VL stay, so Queries answer without loading them again. A job therefore starts with those three already on the GPU (about 22 GB together), and the peak of every stage includes them.
 
 ## Stage settings
 
@@ -161,11 +161,11 @@ MV3DIS allocates matrices of superpoint count × superpoint count on the GPU, so
 
 ### `captioning`: a Caption per Instance
 
-The Captioning stage runs after Embedding, on the Instances it kept, and uses its choice of Views. The model leaves the GPU when the stage ends.
+The Captioning stage runs after Embedding, on the Instances it kept, and uses its choice of Views. The model stays on the GPU after the stage, also when it fails.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `model_id` | `Qwen/Qwen3-VL-8B-Instruct` | Vision-language model. About 17 GB at bf16 while the stage runs. |
+| `model_id` | `Qwen/Qwen3-VL-8B-Instruct` | Vision-language model. About 17 GB at bf16, kept on the GPU between jobs. |
 | `views_per_instance` | `3` | How many of the Instance's best Views go into its prompt. At most `embedding.views_per_instance`. |
 | `context_expand` | `0.6` | Context added around the Instance's tight box, as a fraction of its size. The tight box is drawn in red on each crop, and the prompt refers to it as the red box. |
 | `max_pixels` | `200704` | Pixel budget per crop (448 × 448). Larger crops are shrunk, keeping their shape. |

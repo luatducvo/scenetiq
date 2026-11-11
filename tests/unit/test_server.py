@@ -3,6 +3,7 @@ from pathlib import Path
 from scenetiq.config import Settings
 from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeTextEncoder
 from scenetiq.pipeline.qwen_embedding import Qwen3TextEmbedder
+from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
 from scenetiq.pipeline.real import RealPipeline
 from scenetiq.pipeline.reconstruct import DA3Reconstructor
 from scenetiq.pipeline.siglip import SigLIP2Encoder
@@ -23,6 +24,7 @@ def test_real_pipeline_gets_every_stage_setting_without_loading_a_model(tmp_path
             "embedding": {"views_per_instance": 3},
             "siglip": {"batch_size": 8},
             "caption_embedding": {"batch_size": 4},
+            "captioning": {"max_new_tokens": 200},
         },
     )
     pipeline, encoder, caption_encoder = build_components(settings)
@@ -40,6 +42,8 @@ def test_real_pipeline_gets_every_stage_setting_without_loading_a_model(tmp_path
     assert isinstance(caption_encoder, Qwen3TextEmbedder)
     assert caption_encoder.options.batch_size == 4
     assert pipeline.caption_encoder is caption_encoder
+    assert isinstance(pipeline.captioner, QwenVLCaptioner)
+    assert pipeline.captioner.options.max_new_tokens == 200
 
 
 def test_fake_pipeline_comes_with_fake_encoders(tmp_path: Path):

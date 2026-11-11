@@ -90,10 +90,6 @@ class Captioner(Protocol):
         """Return the model's raw reply for PIL ``images`` of one Instance."""
         ...
 
-    def release(self) -> None:
-        """Free the model's GPU memory; called when the Captioning stage ends."""
-        ...
-
 
 def parse_caption(reply: str) -> Caption:
     """Read a Caption from a model reply.
