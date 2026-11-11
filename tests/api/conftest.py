@@ -101,7 +101,7 @@ def wait_for_job(client: TestClient, job_id: str, timeout: float = 5.0) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         body = client.get(f"/jobs/{job_id}", headers=AUTH).json()
-        if body["status"] in ("succeeded", "failed"):
+        if body["status"] in ("succeeded", "failed", "cancelled"):
             return body
         time.sleep(0.02)
     raise AssertionError(f"job {job_id} did not finish")

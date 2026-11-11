@@ -100,6 +100,7 @@ button.danger { color: var(--error); }
 .scene-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .status-succeeded { color: var(--done); }
 .status-failed { color: var(--error); }
+.status-cancelled { color: var(--muted); }
 .status-running, .status-queued { color: var(--accent); }
 
 .query-bar { display: flex; gap: 0.5rem; }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getJob, type BackendConfig, type Job } from '../api'
+import { cancelJob, getJob, type BackendConfig, type Job } from '../api'
 import { formatDuration, secondsBetween } from '../duration'
 
 const STAGES = [
@@ -13,7 +13,7 @@ const STAGES = [
   'captioning',
 ]
 
-const TERMINAL = new Set(['succeeded', 'failed'])
+const TERMINAL = new Set(['succeeded', 'failed', 'cancelled'])
 
 interface Props {
   config: BackendConfig
@@ -35,6 +35,8 @@ function useTick(active: boolean): void {
 export function JobProgress({ config, jobId, onSucceeded }: Props) {
   const [job, setJob] = useState<Job | null>(null)
   const [pollError, setPollError] = useState<string | null>(null)
+  const [stopping, setStopping] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +67,17 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
   const running = job !== null && !TERMINAL.has(job.status)
   useTick(running)
 
+  async function cancel() {
+    if (!window.confirm('Cancel this job? Its photos and partial results will be deleted.')) return
+    setCancelError(null)
+    try {
+      await cancelJob(config, jobId)
+      setStopping(true)
+    } catch (err) {
+      setCancelError(String(err))
+    }
+  }
+
   const timings = new Map(job?.stages.map((s) => [s.stage, s]) ?? [])
   const current = job?.stage ? STAGES.indexOf(job.stage) : -1
 
@@ -72,7 +85,7 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
     <div className="panel">
       <h2>Processing</h2>
       <p>
-        Status: <strong>{job?.status ?? 'connecting'}</strong>
+        Status: <strong>{running && stopping ? 'stopping' : (job?.status ?? 'connecting')}</strong>
         {job?.started_at && (
           <span className="muted"> · {formatDuration(secondsBetween(job.started_at, job.finished_at))}</span>
         )}
@@ -105,6 +118,21 @@ export function JobProgress({ config, jobId, onSucceeded }: Props) {
           ))}
         </ul>
       )}
+      {running && !stopping && (
+        <button type="button" className="danger" onClick={cancel}>
+          Cancel job
+        </button>
+      )}
+      {running && stopping && (
+        <p className="muted">
+          Stopping at the next checkpoint: the end of the current stage, View or Instance. A
+          single model call cannot be interrupted.
+        </p>
+      )}
+      {job?.status === 'cancelled' && (
+        <p className="muted">Cancelled. Its photos and partial results were deleted.</p>
+      )}
+      {cancelError && <p className="error">Cannot cancel: {cancelError}</p>}
       {job?.status === 'failed' && <p className="error">Failed: {job.error}</p>}
       {pollError && <p className="error">Cannot reach backend: {pollError}</p>}
     </div>

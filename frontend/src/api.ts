@@ -5,7 +5,7 @@ export interface BackendConfig {
   token: string
 }
 
-export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
 /** When one Stage of a job started and ended (null while it runs); ISO 8601 UTC. */
 export interface StageTiming {
@@ -228,6 +228,11 @@ export async function createScene(
 
 export async function getJob(cfg: BackendConfig, jobId: string): Promise<Job> {
   return (await request(cfg, `/jobs/${jobId}`)).json()
+}
+
+/** Ask a queued or running job to stop at its next checkpoint; it stops later, not now. */
+export async function cancelJob(cfg: BackendConfig, jobId: string): Promise<void> {
+  await request(cfg, `/jobs/${jobId}/cancel`, { method: 'POST' })
 }
 
 export async function listScenes(cfg: BackendConfig): Promise<SceneSummary[]> {

@@ -29,6 +29,7 @@ class JobStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -337,6 +338,10 @@ class SceneStore:
                 "SELECT * FROM scenes ORDER BY created_at DESC, rowid DESC"
             ).fetchall()
         return [_record(r) for r in rows]
+
+    def discard_scene_data(self, scene_id: str) -> None:
+        """Remove ``scene_id``'s Views and Reconstruction, keeping its record and events."""
+        shutil.rmtree(self.scene_dir(scene_id), ignore_errors=True)
 
     def delete_scene(self, scene_id: str) -> None:
         """Remove ``scene_id``'s metadata and its directory."""

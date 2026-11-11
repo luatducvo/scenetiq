@@ -6,7 +6,7 @@ import logging
 import threading
 from dataclasses import replace
 
-from scenetiq.domain import Capture, Pipeline, Stage
+from scenetiq.domain import Capture, JobCancelledError, Pipeline, Stage
 from scenetiq.runtime_log import JobProgress, report_progress
 from scenetiq.storage import JobStatus, SceneRecord, SceneStore
 
@@ -36,6 +36,8 @@ class JobRunner:
         self._lock = threading.Lock()
         self._active = False
         self._thread: threading.Thread | None = None
+        self._job_id: str | None = None
+        self._cancel = threading.Event()
 
     @property
     def busy(self) -> bool:
@@ -66,7 +68,21 @@ class JobRunner:
         )
         with self._lock:
             self._thread = thread
+            self._job_id = record.job_id
+            self._cancel = threading.Event()
         thread.start()
+
+    def cancel(self, job_id: str) -> bool:
+        """Ask job ``job_id`` to stop at its next checkpoint.
+
+        Returns:
+            Whether ``job_id`` is the job holding the slot, so that it will stop.
+        """
+        with self._lock:
+            if not self._active or self._job_id != job_id:
+                return False
+            self._cancel.set()
+            return True
 
     def join(self, timeout: float | None = None) -> None:
         """Wait for the most recently started job, if any, to finish."""
@@ -77,28 +93,39 @@ class JobRunner:
 
     def _run(self, record: SceneRecord, capture: Capture) -> None:
         store = self._store
-        reporter = _JobReporter(store, record)
+        with self._lock:
+            cancel = self._cancel
+        reporter = _JobReporter(store, record, cancel)
+        outcome, error = JobStatus.FAILED, "job ended unexpectedly"
         try:
             store.start_job(record.job_id)
             reconstruction = self._pipeline.run(capture, reporter)
+            # A cancellation during the last Stage still wins; once saving starts, it cannot.
+            reporter.checkpoint()
             store.save_reconstruction(record.scene_id, reconstruction)
+            outcome, error = JobStatus.SUCCEEDED, None
+        except JobCancelledError:
+            logger.info("job %s cancelled", record.job_id)
+            store.discard_scene_data(record.scene_id)
+            outcome, error = JobStatus.CANCELLED, None
         except Exception as exc:
             logger.exception("job %s failed", record.job_id)
-            store.finish_job(record.job_id, JobStatus.FAILED, error=str(exc) or repr(exc))
-            reporter.report(JobStatus.FAILED)
-        else:
-            store.finish_job(record.job_id, JobStatus.SUCCEEDED)
-            reporter.report(JobStatus.SUCCEEDED)
+            error = str(exc) or repr(exc)
         finally:
+            # A client that sees the final status may start the next job at once: free the
+            # slot first, and publish the status last.
             self.release()
+            store.finish_job(record.job_id, outcome, error=error)
+            reporter.report(outcome)
 
 
 class _JobReporter:
     """Records what one job's Pipeline reports and forwards its progress to the notebook."""
 
-    def __init__(self, store: SceneStore, record: SceneRecord) -> None:
+    def __init__(self, store: SceneStore, record: SceneRecord, cancel: threading.Event) -> None:
         self._store = store
         self._job_id = record.job_id
+        self._cancel = cancel
         self._progress = JobProgress(
             job_id=record.job_id,
             scene_id=record.scene_id,
@@ -109,12 +136,14 @@ class _JobReporter:
         )
 
     def stage(self, stage: Stage) -> None:
+        self.checkpoint()
         self._store.start_stage(self._job_id, stage.value)
         self._progress = replace(self._progress, stage=stage.value, step=_STAGES.index(stage) + 1)
         report_progress(self._progress)
 
     def checkpoint(self) -> None:
-        pass
+        if self._cancel.is_set():
+            raise JobCancelledError(self._job_id)
 
     def note(self, message: str) -> None:
         logger.info("job %s note: %s", self._job_id, message)

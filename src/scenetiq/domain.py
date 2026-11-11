@@ -287,15 +287,27 @@ class ParsedQuery:
         return cls(objects=(QueryObject("a", text),), target="a")
 
 
+class JobCancelledError(Exception):
+    """Raised at a checkpoint of a job the user asked to stop."""
+
+
 class JobReporter(Protocol):
     """What a running Pipeline tells its job: stages, notes and when it may stop."""
 
     def stage(self, stage: Stage) -> None:
-        """Report that ``stage`` starts."""
+        """Report that ``stage`` starts; a checkpoint too.
+
+        Raises:
+            JobCancelledError: If the user asked the job to stop.
+        """
         ...
 
     def checkpoint(self) -> None:
-        """Mark a point where the job may stop if the user asked it to."""
+        """Mark a point where the job may stop if the user asked it to.
+
+        Raises:
+            JobCancelledError: If the user asked the job to stop.
+        """
         ...
 
     def note(self, message: str) -> None:

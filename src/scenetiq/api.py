@@ -197,6 +197,19 @@ def create_app(
             ],
         )
 
+    @app.post("/jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
+    def cancel_job(request: Request, job_id: str) -> dict[str, str]:
+        """Ask a queued or running job to stop at its next checkpoint; returns at once."""
+        record = request.app.state.store.get_job(job_id)
+        if record is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown job")
+        unfinished = record.status in (JobStatus.QUEUED, JobStatus.RUNNING)
+        if not unfinished or not request.app.state.runner.cancel(job_id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, f"job is {record.status.value}, not running"
+            )
+        return {"job_id": job_id, "status": "cancelling"}
+
     @app.get("/scenes")
     def list_scenes(request: Request) -> list[SceneOut]:
         """List every Scene, newest first."""

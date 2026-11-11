@@ -24,7 +24,7 @@ class JobProgress:
     Attributes:
         job_id: The job.
         scene_id: The Scene it reconstructs.
-        status: ``"running"``, ``"succeeded"`` or ``"failed"``.
+        status: ``"running"``, ``"succeeded"``, ``"failed"`` or ``"cancelled"``.
         stage: The current Stage's name; empty before the first Stage starts.
         step: 1-based position of ``stage``; 0 before the first Stage starts.
         total: Number of Stages in a job.

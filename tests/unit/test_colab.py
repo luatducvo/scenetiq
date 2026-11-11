@@ -274,6 +274,7 @@ def test_log_config_shows_errors_with_their_traceback_and_nothing_quieter():
         ("running", "superpoints", 3, "[██░░░░] 3/6 superpoints · scene a1b2c3d4 · 1:05"),
         ("succeeded", "embedding", 6, "[██████] succeeded · scene a1b2c3d4 · 1:05"),
         ("failed", "masking", 4, "[███░░░] failed at masking · scene a1b2c3d4 · 1:05"),
+        ("cancelled", "merging", 5, "[████░░] cancelled at merging · scene a1b2c3d4 · 1:05"),
         ("failed", "", 0, "[░░░░░░] failed · scene a1b2c3d4 · 1:05"),
     ],
 )

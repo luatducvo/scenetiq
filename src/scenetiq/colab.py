@@ -302,8 +302,9 @@ def render_job_bar(progress: JobProgress | None, elapsed: float, width: int = 24
         state = "succeeded"
     else:
         fraction = max(progress.step - 1, 0) / progress.total
-        if progress.status == "failed":
-            state = f"failed at {progress.stage}" if progress.stage else "failed"
+        if progress.status in ("failed", "cancelled"):
+            stopped = progress.status
+            state = f"{stopped} at {progress.stage}" if progress.stage else stopped
         else:
             state = f"{progress.step}/{progress.total} {progress.stage}"
     return f"[{_bar(fraction, width)}] {state} · scene {progress.scene_id[:8]} · {_clock(elapsed)}"

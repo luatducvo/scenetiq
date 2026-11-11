@@ -132,7 +132,7 @@ class RealPipeline:
 
         reporter.stage(Stage.MASKING)
         with track_stage_memory(Stage.MASKING):
-            view_masks = self.masker.masks_for(view_data)
+            view_masks = self.masker.masks_for(view_data, reporter.checkpoint)
 
         reporter.stage(Stage.MERGING)
         report_merge_input(len(points), len(np.unique(primitive_ids)))
@@ -170,6 +170,7 @@ class RealPipeline:
                 view_data.cameras,
                 self.captioner,
                 opts.captioning,
+                reporter.checkpoint,
             )
             caption_data = embed_descriptions(captions, self.caption_encoder)
         reporter.note(f"{len(captions)} of {len(embeddings)} Instances got a Caption.")

@@ -9,7 +9,7 @@ and the reason is logged.
 
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -185,6 +185,7 @@ def caption_instances(
     cameras: Sequence[Camera],
     captioner: Captioner,
     options: CaptioningOptions | None = None,
+    checkpoint: Callable[[], None] | None = None,
 ) -> dict[int, Caption]:
     """Caption every Instance from the first Views of its plan.
 
@@ -195,6 +196,7 @@ def caption_instances(
         cameras: Camera of every View; its size is the depth-map resolution.
         captioner: The vision-language model.
         options: Stage settings.
+        checkpoint: Called before each Instance's generation; it raises to stop the stage.
 
     Returns:
         Instance id -> Caption, for the Instances whose reply had a usable Name. Every
@@ -210,6 +212,8 @@ def caption_instances(
     captions: dict[int, Caption] = {}
     for iid, ordered in crops.items():
         images = [crop for _, crop in sorted(ordered, key=lambda pair: pair[0])]
+        if checkpoint is not None:
+            checkpoint()
         reply = captioner.describe(images)
         try:
             captions[iid] = parse_caption(reply)

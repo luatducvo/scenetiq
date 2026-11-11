@@ -4,6 +4,7 @@ No text prompts are used, so which objects can become Instances does not
 depend on any vocabulary.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -73,15 +74,24 @@ class SAM2Masker:
             )
         return self._generator
 
-    def masks_for(self, view_data: ViewData) -> list[ViewMasks]:
-        """Generate Masks for every View, in View order (a View may get none)."""
+    def masks_for(
+        self, view_data: ViewData, checkpoint: Callable[[], None] | None = None
+    ) -> list[ViewMasks]:
+        """Generate Masks for every View, in View order (a View may get none).
+
+        Args:
+            view_data: Every View, at the depth-map resolution.
+            checkpoint: Called before each View; it raises to stop the stage.
+        """
         try:
-            return self._generate(view_data)
+            return self._generate(view_data, checkpoint)
         finally:
             self._generator = None
             free_gpu_memory()
 
-    def _generate(self, view_data: ViewData) -> list[ViewMasks]:
+    def _generate(
+        self, view_data: ViewData, checkpoint: Callable[[], None] | None
+    ) -> list[ViewMasks]:
         import torch
 
         generator = self._load()
@@ -90,6 +100,8 @@ class SAM2Masker:
         result: list[ViewMasks] = []
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             for image in view_data.images:
+                if checkpoint is not None:
+                    checkpoint()
                 records = generator.generate(np.ascontiguousarray(image))
                 if not records:
                     result.append(

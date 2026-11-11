@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { deleteScene, listScenes, type BackendConfig, type SceneSummary } from '../api'
+import { cancelJob, deleteScene, listScenes, type BackendConfig, type SceneSummary } from '../api'
 import { formatDuration, secondsBetween } from '../duration'
 
 interface Props {
@@ -28,6 +28,16 @@ export function SceneList({ config, onOpen, onOpenJob }: Props) {
     if (!window.confirm(`Delete Scene "${scene.name}"? This cannot be undone.`)) return
     try {
       await deleteScene(config, scene.scene_id)
+      refresh()
+    } catch (err) {
+      setError(String(err))
+    }
+  }
+
+  async function cancel(scene: SceneSummary) {
+    if (!window.confirm(`Cancel processing "${scene.name}"? Its photos will be deleted.`)) return
+    try {
+      await cancelJob(config, scene.job_id)
       refresh()
     } catch (err) {
       setError(String(err))
@@ -71,7 +81,12 @@ export function SceneList({ config, onOpen, onOpenJob }: Props) {
                     </button>
                   )}
                   {(s.status === 'queued' || s.status === 'running') && (
-                    <button onClick={() => onOpenJob(s.job_id)}>Progress</button>
+                    <>
+                      <button onClick={() => onOpenJob(s.job_id)}>Progress</button>
+                      <button className="danger" onClick={() => cancel(s)}>
+                        Cancel
+                      </button>
+                    </>
                   )}
                   {s.status !== 'queued' && s.status !== 'running' && (
                     <button className="danger" onClick={() => remove(s)}>
