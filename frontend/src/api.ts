@@ -40,6 +40,11 @@ export interface SceneSummary {
   name: string
   created_at: string
   status: JobStatus
+  /** When its job started and ended, ISO 8601 UTC; null until then. */
+  started_at: string | null
+  finished_at: string | null
+  /** How many Instances its Reconstruction has; null unless its job succeeded. */
+  instance_count: number | null
 }
 
 /** Raised for any non-2xx response, carrying the backend's reason. */

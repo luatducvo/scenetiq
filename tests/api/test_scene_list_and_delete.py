@@ -55,3 +55,23 @@ def test_failed_scene_can_be_deleted(make_client: Callable[..., TestClient]):
     body = upload(client)
     wait_for_job(client, body["job_id"])
     assert client.delete(f"/scenes/{body['scene_id']}", headers=AUTH).status_code == 204
+
+
+def test_a_finished_scene_lists_its_instance_count_and_when_it_ran(client: TestClient):
+    job = wait_for_job(client, upload(client)["job_id"])
+
+    [scene] = client.get("/scenes", headers=AUTH).json()
+
+    # The fake Reconstruction has three Instances: a chair, a table and a lamp.
+    assert scene["instance_count"] == 3
+    assert (scene["started_at"], scene["finished_at"]) == (job["started_at"], job["finished_at"])
+
+
+def test_a_failed_scene_lists_no_instance_count(make_client: Callable[..., TestClient]):
+    client = make_client(pipeline=FakePipeline(error=RuntimeError("out of memory")))
+    wait_for_job(client, upload(client)["job_id"])
+
+    [scene] = client.get("/scenes", headers=AUTH).json()
+
+    assert scene["instance_count"] is None
+    assert scene["finished_at"] is not None

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { deleteScene, listScenes, type BackendConfig, type SceneSummary } from '../api'
+import { formatDuration, secondsBetween } from '../duration'
 
 interface Props {
   config: BackendConfig
@@ -46,6 +47,8 @@ export function SceneList({ config, onOpen, onOpenJob }: Props) {
               <th>Name</th>
               <th>Created</th>
               <th>Status</th>
+              <th>Instances</th>
+              <th>Processing time</th>
               <th />
             </tr>
           </thead>
@@ -55,6 +58,12 @@ export function SceneList({ config, onOpen, onOpenJob }: Props) {
                 <td>{s.name}</td>
                 <td>{new Date(s.created_at).toLocaleString()}</td>
                 <td className={`status-${s.status}`}>{s.status}</td>
+                <td className="num">{s.instance_count ?? ''}</td>
+                <td className="num">
+                  {s.started_at && s.finished_at && s.status === 'succeeded'
+                    ? formatDuration(secondsBetween(s.started_at, s.finished_at))
+                    : ''}
+                </td>
                 <td className="actions">
                   {s.status === 'succeeded' && (
                     <button className="primary" onClick={() => onOpen(s.scene_id)}>

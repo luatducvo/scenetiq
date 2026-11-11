@@ -97,6 +97,7 @@ button.danger { color: var(--error); }
 .scene-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .scene-table th, .scene-table td { text-align: left; padding: 0.4rem; border-bottom: 1px solid var(--border); }
 .scene-table .actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+.scene-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .status-succeeded { color: var(--done); }
 .status-failed { color: var(--error); }
 .status-running, .status-queued { color: var(--accent); }

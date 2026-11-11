@@ -364,8 +364,13 @@ class SceneStore:
         return cur.rowcount
 
     def save_reconstruction(self, scene_id: str, reconstruction: Reconstruction) -> None:
-        """Persist ``reconstruction`` as the result of ``scene_id``."""
+        """Persist ``reconstruction`` as the result of ``scene_id`` and count its Instances."""
         save_reconstruction(self.scene_dir(scene_id) / "reconstruction", reconstruction)
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE scenes SET instance_count = ? WHERE scene_id = ?",
+                (len(reconstruction.instances), scene_id),
+            )
 
     def reconstruction_dir(self, scene_id: str) -> Path:
         """Directory holding the Reconstruction artifacts of ``scene_id``."""

@@ -198,7 +198,7 @@ def create_app(
         )
 
     @app.get("/scenes")
-    def list_scenes(request: Request) -> list[dict[str, str]]:
+    def list_scenes(request: Request) -> list[SceneOut]:
         """List every Scene, newest first."""
         return [_scene_summary(r) for r in request.app.state.store.list_scenes()]
 
@@ -311,6 +311,24 @@ class SceneIn(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     capture_id: str = Field(pattern=_ID_PATTERN)
+
+
+class SceneOut(BaseModel):
+    """One Scene in the list.
+
+    ``started_at`` and ``finished_at`` (ISO 8601 UTC) are null until its job starts and
+    ends; ``finished_at`` stays null for a job interrupted by a restart.
+    ``instance_count`` is null unless its job succeeded.
+    """
+
+    scene_id: str
+    job_id: str
+    name: str
+    created_at: str
+    status: str
+    started_at: str | None
+    finished_at: str | None
+    instance_count: int | None
 
 
 class StageOut(BaseModel):
@@ -430,14 +448,17 @@ def _stage_timings(events: list[JobEvent], finished_at: str | None) -> list[Stag
     ]
 
 
-def _scene_summary(record: SceneRecord) -> dict[str, str]:
-    return {
-        "scene_id": record.scene_id,
-        "job_id": record.job_id,
-        "name": record.name,
-        "created_at": record.created_at,
-        "status": record.status.value,
-    }
+def _scene_summary(record: SceneRecord) -> SceneOut:
+    return SceneOut(
+        scene_id=record.scene_id,
+        job_id=record.job_id,
+        name=record.name,
+        created_at=record.created_at,
+        status=record.status.value,
+        started_at=record.started_at,
+        finished_at=record.finished_at,
+        instance_count=record.instance_count,
+    )
 
 
 def _validate_image(filename: str, data: bytes) -> None:
