@@ -14,4 +14,4 @@ Spec: *Scene list* user stories 37–39; *HTTP API* (`GET /scenes`); *Storage* (
 - [x] The Scene list shows an Instances column and a processing time column, formatted as minutes and seconds from the two timestamps, blank when missing.
 - [x] The README mentions the new columns.
 - [x] Ruff, ty and pytest are green, and the frontend passes lint, typecheck and build.
-- [x] Manual check against the local fake backend: a finished fake Scene shows 3 Instances and a processing time of a few seconds.
+- [ ] Manual check against the local fake backend: a finished fake Scene shows 3 Instances and a processing time of a few seconds.

@@ -37,4 +37,4 @@ Spec: *Processing page* user stories 43–51 and 61–62; *HTTP API* (`GET /jobs
 - [x] The Processing page shows each stage's duration, a ticking time for the current stage, the total time, and the notes in order. It keeps showing them after a terminal status, and stops polling on one.
 - [x] AGENTS.md's "only the job log says a Scene was left unaligned" constraint is updated: the job notes now say it too. The README describes stage times and notes.
 - [x] Ruff, ty and pytest are green, and the frontend passes lint, typecheck and build.
-- [x] Manual check against the local fake backend: the Processing page shows durations for all eight stages and the fake note.
+- [ ] Manual check against the local fake backend: the Processing page shows durations for all eight stages and the fake note.

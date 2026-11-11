@@ -41,4 +41,4 @@ Spec: *Cancellation* user stories 52–60 and 40–42; *HTTP API* (`POST /jobs/{
 - [x] The Scene list shows a `cancelled` status style, Cancel with a confirmation on running Scenes, and Delete on cancelled ones.
 - [x] AGENTS.md adds the constraint that cancellation is cooperative, through the reporter's checkpoints, never by killing the thread. The README describes Cancel.
 - [x] Ruff, ty and pytest are green, and the frontend passes lint, typecheck and build.
-- [x] Manual check against the local backend. The fake Pipeline finishes instantly without a gate, so either temporarily gate it or check the flow through the Seam A tests. The Cancel buttons should appear, confirm and update the status.
+- [ ] Manual check against the local backend. The fake Pipeline finishes instantly without a gate, so either temporarily gate it or check the flow through the Seam A tests. The Cancel buttons should appear, confirm and update the status.
