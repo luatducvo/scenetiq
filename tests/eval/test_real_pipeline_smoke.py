@@ -152,8 +152,10 @@ def test_siglip2_encodes_a_query_longer_than_its_text_window(encoder):
     assert float(np.linalg.norm(embedding)) == pytest.approx(1.0, abs=1e-3)
 
 
-def test_a_query_returns_the_configured_number_of_matches(real_result, encoder, caption_encoder):
-    # Runs without the Query environment variables, so the top-K cut is always checked.
+def test_a_query_returns_at_most_the_configured_number_of_matches(
+    real_result, encoder, caption_encoder
+):
+    # Runs without the Query environment variables, so the cut of Matches is always checked.
     from scenetiq.query import run_query
 
     rec, _ = real_result
@@ -162,11 +164,12 @@ def test_a_query_returns_the_configured_number_of_matches(real_result, encoder, 
         rec.instances,
         encoder.encode("a chair"),
         settings.query_top_k,
-        settings.rrf_k,
+        settings.query_score_ratio,
         caption_encoder.encode_query("a chair"),
     )
-    assert len(matches) == min(settings.query_top_k, len(rec.instances))
-    assert all(0.0 < m.score <= 1.0 for m in matches)
+    assert 1 <= len(matches) <= min(settings.query_top_k, len(rec.instances))
+    assert matches[0].score == pytest.approx(1.0)
+    assert all(settings.query_score_ratio <= m.score <= 1.0 + 1e-6 for m in matches)
     for m in matches:
         assert (m.caption_aspect is None) == (m.caption_score is None)
     # Over every Instance, the Caption channel must name an Aspect for the captioned ones.
@@ -174,9 +177,10 @@ def test_a_query_returns_the_configured_number_of_matches(real_result, encoder, 
         rec.instances,
         encoder.encode("a chair"),
         len(rec.instances),
-        settings.rrf_k,
+        None,
         caption_encoder.encode_query("a chair"),
     )
+    assert len(everything) == len(rec.instances)
     assert any(m.caption_aspect is not None for m in everything)
 
 
@@ -307,12 +311,12 @@ def test_query_for_a_present_object_matches_that_object(
         rec.instances,
         encoder.encode(text),
         settings.query_top_k,
-        settings.rrf_k,
+        settings.query_score_ratio,
         caption_encoder.encode_query(text),
     )
     print(f"{text!r}: {[(m.instance_id, round(m.score, 3)) for m in matches]}")
 
-    assert len(matches) == min(settings.query_top_k, len(rec.instances))
+    assert 1 <= len(matches) <= min(settings.query_top_k, len(rec.instances))
     best = matches[0].instance_id
     with Image.open(smoke_capture.views[view].path) as photo:
         photo_size = photo.size
@@ -343,19 +347,21 @@ def _answer(text, rec, query_parser, encoder, caption_encoder):
     """The parsed Query and Matches of ``text``, routed as the Query endpoint routes them."""
     import time
 
+    from scenetiq.domain import QueryObject
     from scenetiq.query import run_query
     from scenetiq.spatial import run_spatial_query
 
     settings = _configured_settings()
     captioned = any(inst.caption_embeddings for inst in rec.instances)
 
-    def rank(phrase: str, top_k: int):
+    def rank(wanted: QueryObject, top_k: int, score_ratio: float | None = None):
         return run_query(
             rec.instances,
-            encoder.encode(phrase),
+            encoder.encode(wanted.phrase),
             top_k,
-            settings.rrf_k,
-            caption_encoder.encode_query(phrase) if captioned else None,
+            score_ratio,
+            caption_encoder.encode_query(wanted.phrase) if captioned else None,
+            wanted.aspects,
         )
 
     started = time.perf_counter()
@@ -366,7 +372,10 @@ def _answer(text, rec, query_parser, encoder, caption_encoder):
         matches = run_spatial_query(
             rec.instances, parsed, rank, settings.query_top_k, settings.spatial
         )
-    return parsed, matches if matches is not None else rank(text, settings.query_top_k)
+    if matches is None:
+        wanted = next(o for o in parsed.objects if o.object_id == parsed.target)
+        matches = rank(wanted, settings.query_top_k, settings.query_score_ratio)
+    return parsed, matches
 
 
 def test_a_query_with_a_relation_returns_matches_with_anchors(

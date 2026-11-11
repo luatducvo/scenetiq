@@ -279,15 +279,14 @@ def test_a_query_without_a_valid_assignment_is_answered_as_a_plain_query(
 ):
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=1, top_k=1)
     # One candidate per object: both chairs are Instance 0, so no assignment is valid. The
-    # original text is unknown to the fake encoder and resembles chair 0 (0.3), chair 1
-    # (0.3 * 0.6 = 0.18) and the lamp (0): chair 0, first of one ranking, scores 1. The
-    # Query stated a Relation that was not applied.
+    # plain Query ranks the wanted object's phrase, "chair": chair 0 (0.8) is the best and
+    # scores 1. The Query stated a Relation that was not applied.
     assert _query(client, scene, TWO_CHAIRS_QUERY) == {
         "matches": [
             {
                 "instance_id": 0,
                 "score": 1.0,
-                "image_score": pytest.approx(0.3, abs=1e-3),
+                "image_score": pytest.approx(0.8, abs=1e-3),
                 "caption_score": None,
                 "caption_aspect": None,
                 "anchors": [],
@@ -306,22 +305,15 @@ def test_a_scene_with_fewer_instances_than_objects_answers_the_plain_query(
     boxes = {0: ([0.0, 0.0], CHAIR_FIRST), 1: ([7.0, 5.0], LAMP_FIRST)}
     client, scene = _client(make_client, tmp_path, boxes, candidates=2, top_k=2, margins=WIDE)
     # The between Query names three objects, the Scene has two Instances: no assignment is
-    # valid. The original text is unknown to the fake encoder and resembles chair 0 (0.3) and
-    # the lamp (0). One ranking: 61/61 = 1, then 61/62 = 0.983871.
+    # valid. The plain Query ranks the wanted object's phrase, "lamp": the lamp (1.0) scores
+    # 1, and the chair (0) is as far below the Scene's average as the lamp is above it, so
+    # it scores -1 and is no Match.
     assert _query(client, scene, BETWEEN_QUERY) == {
         "matches": [
             {
-                "instance_id": 0,
-                "score": 1.0,
-                "image_score": pytest.approx(0.3, abs=1e-3),
-                "caption_score": None,
-                "caption_aspect": None,
-                "anchors": [],
-            },
-            {
                 "instance_id": 1,
-                "score": pytest.approx(0.983871, abs=1e-6),
-                "image_score": pytest.approx(0.0, abs=1e-6),
+                "score": 1.0,
+                "image_score": pytest.approx(1.0, abs=1e-3),
                 "caption_score": None,
                 "caption_aspect": None,
                 "anchors": [],
@@ -364,8 +356,9 @@ def test_unsupported_parts_without_a_relation_leave_the_plain_query_and_are_repo
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=1)
-    # Nothing but "behind the lamp", which no Relation expresses: the original text is
-    # ranked, unknown to the fake encoder, so chair 0 (0.3) is first of one ranking: 1.
+    # Nothing but "behind the lamp", which no Relation expresses, and two objects that no
+    # single phrase stands for: the original text is ranked, unknown to the fake encoder,
+    # so chair 0 (0.3) is the best and scores 1.
     assert _query(client, scene, BEHIND_QUERY) == {
         "matches": [
             {
@@ -390,21 +383,14 @@ def test_a_parse_failure_answers_the_plain_query_and_says_the_parse_failed(
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=2)
     caplog.set_level(logging.WARNING, logger=QUERY_LOGGER)
     # The original text is unknown to the fake encoder and resembles chair 0 (0.3), chair 1
-    # (0.3 * 0.6 = 0.18) and the lamp (0). One ranking: 61/61 = 1, then 61/62 = 0.983871.
+    # (0.3 * 0.6 = 0.18) and the lamp (0): mean 0.16, so chair 0 is 0.14 above it and
+    # chair 1 only 0.02. Chair 1 scores 0.02 / 0.14 = 0.142857, below the ratio of 0.5.
     assert _query(client, scene, FAILED_QUERY) == {
         "matches": [
             {
                 "instance_id": 0,
                 "score": 1.0,
                 "image_score": pytest.approx(0.3, abs=1e-3),
-                "caption_score": None,
-                "caption_aspect": None,
-                "anchors": [],
-            },
-            {
-                "instance_id": 1,
-                "score": pytest.approx(0.983871, abs=1e-6),
-                "image_score": pytest.approx(0.18, abs=1e-3),
                 "caption_score": None,
                 "caption_aspect": None,
                 "anchors": [],
@@ -715,7 +701,7 @@ def test_an_object_whose_shortlist_is_cut_to_one_instance_still_yields_a_match(
     ]
 
 
-def test_with_query_top_k_above_m_only_a_spatial_query_returns_fewer_matches(
+def test_a_spatial_query_cuts_by_the_candidate_margin_and_a_plain_one_by_the_score_ratio(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=1, top_k=3)
@@ -723,9 +709,11 @@ def test_with_query_top_k_above_m_only_a_spatial_query_returns_fewer_matches(
     # Only chair 0 is within the image margin, so the spatial Query has one Match.
     spatial = _query(client, scene, NEAR_QUERY)["matches"]
     assert [m["instance_id"] for m in spatial] == [0]
-    # Without a Relation no margin applies: query_top_k Matches, best first.
+    # Without a Relation no margin applies, only the score ratio: chair 0 (0.8), chair 1
+    # (0.48) and the lamp (0) have mean 0.426667, so chair 1 scores 0.053333 / 0.373333 =
+    # 0.142857, below 0.5. With a ratio of 0 it is a Match; the lamp, below average, never.
     plain = _query(client, scene, "chair")["matches"]
-    assert [m["instance_id"] for m in plain] == [0, 1, 2]
+    assert [m["instance_id"] for m in plain] == [0]
 
 
 def test_a_spatial_query_shortlists_the_top_k_it_asks_for(

@@ -1,5 +1,7 @@
 # Captions from a VLM, ranked against Queries by Reciprocal Rank Fusion
 
+> Superseded in part by [ADR 0011](0011-standardized-fusion-relative-cut-instance-masks.md): the two channels are now fused by standardized similarity instead of Reciprocal Rank Fusion, the Matches are cut relative to the best one, and the Caption similarity reads only the Aspects a Query speaks about. Captions, Descriptions and the models are unchanged.
+
 A Query used to be scored only against each Instance's SigLIP2 image embedding, and an Instance was a Match when its sigmoid score cleared a threshold. That misses Queries phrased as synonyms, materials or uses ("couch", "wooden thing", "something to sit on").
 
 A Captioning stage after Embedding now asks a local vision-language model (Qwen3-VL-8B-Instruct) to read each Instance from boxed crops of its best Views. It returns a Caption: a Name, up to three Synonyms, and one short English Description for each of four fixed Aspects (Identity, Appearance, Material, Use).

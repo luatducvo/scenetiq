@@ -40,9 +40,9 @@ The backend reads its settings once, at startup. They apply to new Captures and 
 |---|---|---|
 | `storage_root` | `./data` | Directory for Scenes and the SQLite database. |
 | `pipeline` | `"fake"` | `"real"` runs the GPU models. `"fake"` runs none and returns a fixed result, for testing. |
-| `query_top_k` | `5` | How many Matches a Query returns when it does not ask for a number: the top K of the fused ranking (ADR 0008). There is no relevance threshold, so a Query always returns Matches when the Scene has Instances. The viewer's Matches slider starts here. |
+| `query_top_k` | `5` | The most Matches a Query returns when it does not ask for a number (ADR 0011). A Query can return fewer, see `query_score_ratio`, but always at least one when the Scene has Instances. The viewer's Matches slider starts here. |
 | `query_max_top_k` | `20` | The most Matches a Query may ask for (`top_k` in the request, the viewer's slider). It must not be below `query_top_k`. |
-| `rrf_k` | `60` | Reciprocal Rank Fusion constant. Each ranking adds `1 / (rrf_k + rank)` to an Instance's fused value; a larger value flattens the difference between ranks. |
+| `query_score_ratio` | `0.5` | A Query without a Relation keeps an Instance as a Match only when its score is at least this fraction of the best Match's, in [0, 1] (ADR 0011). A score is the Instance's fused value, its image and Caption similarities standardized within the Scene and averaged, divided by the best one. Higher returns fewer Matches; `0` keeps every Instance above the Scene's average. Not validated; measure it with `python -m scenetiq.evaluation`. |
 | `min_views` | `1` | Fewest photos a Capture may upload. |
 | `max_views` | `2000` | Most photos a Capture may upload. It has no upper limit. |
 | `upload_max_side` | `2048` | The frontend shrinks every photo so that its long side is at most this many pixels before uploading it (ADR 0010). The Embedding and Captioning stages crop from these photos, so a smaller value blurs small Instances. |
@@ -152,6 +152,8 @@ MV3DIS allocates matrices of superpoint count × superpoint count on the GPU, so
 | `min_visible_pixels` | `30` | A View must see at least this many of the Instance's points. |
 | `expansions` | `[0.1, 0.4]` | Context added around the tight crop, as fractions of its size. Each value gives one crop per View. |
 | `visibility_rtol` | `0.05` | Relative depth tolerance of the occlusion test. |
+| `masked_weight` | `0.5` | Share, in [0, 1], that the masked crops take in an Instance's embedding; the context crops take the rest (ADR 0011). A masked crop is the tightest crop with everything outside the Instance filled with grey, so a floor is not embedded as the things standing on it. `0` makes no masked crop. Not validated. |
+| `max_splat_radius` | `12` | Largest square, in depth-map pixels on each side of a point, that a point draws in its Instance's mask. Only points close to the camera reach it. |
 
 ### `siglip`: crops and Query text
 
@@ -171,12 +173,13 @@ The Captioning stage runs after Embedding, on the Instances it kept, and uses it
 | `model_id` | `Qwen/Qwen3-VL-8B-Instruct` | Vision-language model. About 17 GB at bf16, kept on the GPU between jobs. |
 | `views_per_instance` | `3` | How many of the Instance's best Views go into its prompt. At most `embedding.views_per_instance`. |
 | `context_expand` | `0.6` | Context added around the Instance's tight box, as a fraction of its size. The tight box is drawn in red on each crop, and the prompt refers to it as the red box. |
+| `background_dim` | `0.35` | Brightness, in (0, 1], of everything outside the Instance's mask in its crops (ADR 0011). The prompt tells the model that the object is only the part at full brightness. `1` darkens nothing. Not validated. |
 | `max_pixels` | `200704` | Pixel budget per crop (448 × 448). Larger crops are shrunk, keeping their shape. |
 | `max_new_tokens` | `320` | Longest reply per Instance. The reply is forced to follow a fixed JSON schema (Name, up to three Synonyms, one Description per Aspect), so the only way to lose a Caption is a reply cut short here; the log then says why. |
 
 ### `query_parser`: objects and Relations of a Query
 
-Every Query is first read by the Captioning model (`captioning.model_id`) in one text-only generation, which splits it into objects, the wanted object, Relations and the parts no Relation can express (ADR 0009). The Query reaches it whole, in any language, and each object comes back as a short English phrase. The reply is forced to follow a fixed JSON schema and then checked again; a reply that fails the check is a parse failure, logged with its reason, and the Query is answered as a plain Query. Every Query therefore waits for one generation, also a Query without a Relation and also while a job is captioning (between two Instances), and the first Query after a restart also waits for the model to load. On the local backend a fake parser stands in and no model runs.
+Every Query is first read by the Captioning model (`captioning.model_id`) in one text-only generation, which splits it into objects, the wanted object, Relations and the parts no Relation can express (ADR 0009). The Query reaches it whole, in any language, and each object comes back as a short English phrase with the Aspects that phrase speaks about (ADR 0011). The reply is forced to follow a fixed JSON schema and then checked again; a reply that fails the check is a parse failure, logged with its reason, and the Query is answered as a plain Query. Every Query therefore waits for one generation, also a Query without a Relation and also while a job is captioning (between two Instances), and the first Query after a restart also waits for the model to load. On the local backend a fake parser stands in and no model runs.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -216,7 +219,9 @@ The backend refuses to start on any of these. On Colab, the install cell reports
 | Token in the config | `{"token": "abc"}` | `token must not be in the config; it is a secret` |
 | Impossible limits | `{"min_views": 11, "max_views": 10}` | `min_views (11) must not exceed max_views (10)` |
 | Values below 1 | `{"view_stride": 0}` | `view_stride must be at least 1, got 0` |
-| Negative RRF constant | `{"rrf_k": -1}` | `rrf_k must not be negative, got -1` |
+| Score ratio outside [0, 1] | `{"query_score_ratio": 1.5}` | `query_score_ratio must be in [0, 1], got 1.5` |
+| Masked weight outside [0, 1] | `{"embedding": {"masked_weight": 2}}` | `embedding.masked_weight must be in [0, 1], got 2.0` |
+| Background brightness outside (0, 1] | `{"captioning": {"background_dim": 0}}` | `captioning.background_dim must be in (0, 1], got 0.0` |
 | Negative prompt word limit | `{"siglip": {"prompt_max_words": -1}}` | `siglip.prompt_max_words must not be negative, got -1` |
 | No candidates per object | `{"spatial": {"candidates_per_object": 0}}` | `spatial.candidates_per_object must be at least 1, got 0` |
 | Falloff not positive | `{"spatial": {"falloff": 0}}` | `spatial.falloff must be positive, got 0.0` |

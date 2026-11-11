@@ -25,8 +25,10 @@ def _query(client: TestClient, scene_id: str, text: str) -> dict:
     return resp.json()
 
 
-def _settings(tmp_path: Path, query_top_k: int = 1, rrf_k: int = 60) -> Settings:
-    return Settings(tmp_path / "s", token=TOKEN, query_top_k=query_top_k, rrf_k=rrf_k)
+def _settings(tmp_path: Path, query_top_k: int = 1, query_score_ratio: float = 0.5) -> Settings:
+    return Settings(
+        tmp_path / "s", token=TOKEN, query_top_k=query_top_k, query_score_ratio=query_score_ratio
+    )
 
 
 def _uncaptioned_client(make_client: Callable[..., TestClient], settings: Settings) -> TestClient:
@@ -41,7 +43,7 @@ def test_query_returns_the_best_instance_with_a_full_score(
     scene = _ready_scene(client)
     result = _query(client, scene, "red chair")
     # The fake parser reads no Relation, so the Query is plain and has no Anchors.
-    # First in both rankings: (1/61 + 1/61) / (2/61) = 1.
+    # The chair is the best on both channels, and the best Match always scores 1.
     assert result == {
         "matches": [
             {
@@ -60,48 +62,42 @@ def test_query_returns_the_best_instance_with_a_full_score(
     }
 
 
-def test_a_caption_lifts_an_instance_its_image_ranks_lower(
+def test_both_channels_are_fused_and_an_instance_far_below_the_best_is_no_match(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client = make_client(settings=_settings(tmp_path, query_top_k=3))
     scene = _ready_scene(client)
     result = _query(client, scene, "wooden thing")
-    # Image ranking: lamp 0.5, table 0.3, chair 0.1. Caption ranking (lamp has no Caption):
-    # table 1.0 (its Material Description), chair 0.0 (every Description orthogonal, so the
-    # first Aspect, Identity, wins the tie). Fused over two channels, out of 2/61:
-    # table (1/62 + 1/61) -> 0.991935, chair (1/63 + 1/62) -> 0.976062, lamp 1/61 -> 0.5.
-    assert [m["instance_id"] for m in result["matches"]] == [1, 0, 2]
-    assert [m["score"] for m in result["matches"]] == pytest.approx(
-        [0.991935, 0.976062, 0.5], abs=1e-6
-    )
-    assert [m["caption_score"] for m in result["matches"]] == [
-        pytest.approx(1.0),
-        pytest.approx(0.0),
-        None,
-    ]
-    assert [m["image_score"] for m in result["matches"]] == pytest.approx([0.3, 0.1, 0.5], abs=1e-3)
-    assert [m["caption_aspect"] for m in result["matches"]] == ["material", "identity", None]
+    # Image: lamp 0.5, table 0.3, chair 0.1 -> standardized 1.224745, 0, -1.224745.
+    # Caption (the lamp has none, so it takes 0): table 1.0 (its Material Description),
+    # chair 0.0 (every Description orthogonal, so the first Aspect, Identity, wins the tie)
+    # -> standardized 1, -1. Fused, the mean of the two: lamp 0.612372, table 0.5,
+    # chair -1.112372. Scores, out of the lamp's: 1, 0.816497 and a negative one, which is
+    # below the ratio of 0.5, so the chair is no Match.
+    matches = result["matches"]
+    assert [m["instance_id"] for m in matches] == [2, 1]
+    assert [m["score"] for m in matches] == pytest.approx([1.0, 0.816497], abs=1e-6)
+    assert [m["caption_score"] for m in matches] == [None, pytest.approx(1.0)]
+    assert [m["image_score"] for m in matches] == pytest.approx([0.5, 0.3], abs=1e-3)
+    assert [m["caption_aspect"] for m in matches] == [None, "material"]
 
 
-def test_a_query_matching_another_aspect_of_another_instance_flips_the_result(
+def test_a_query_matching_another_aspect_of_another_instance_lifts_that_instance(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
-    client = make_client(settings=_settings(tmp_path, query_top_k=3))
+    client = make_client(settings=_settings(tmp_path, query_top_k=3, query_score_ratio=0.3))
     scene = _ready_scene(client)
     result = _query(client, scene, "red fabric")
-    # Image ranking: lamp 0.6, chair 0.2, table 0.1. Caption query (0, 0.6, 0.8, 0, ...):
-    # the chair's best Description is Appearance (0.8), the table's is Identity (0.6).
-    # chair (1/62 + 1/61) -> 0.991935, table (1/63 + 1/62) -> 0.976062, lamp 1/61 -> 0.5.
-    assert [m["instance_id"] for m in result["matches"]] == [0, 1, 2]
-    assert [m["score"] for m in result["matches"]] == pytest.approx(
-        [0.991935, 0.976062, 0.5], abs=1e-6
-    )
-    assert [m["caption_aspect"] for m in result["matches"]] == ["appearance", "identity", None]
-    assert [m["caption_score"] for m in result["matches"]] == [
-        pytest.approx(0.8),
-        pytest.approx(0.6),
-        None,
-    ]
+    # Image: lamp 0.6, chair 0.2, table 0.1 -> mean 0.3, deviation sqrt(0.14 / 3) = 0.216025
+    # -> standardized 1.388730, -0.462910, -0.925820. Caption query (0, 0.6, 0.8, 0, ...):
+    # the chair's best Description is Appearance (0.8), the table's is Identity (0.6)
+    # -> standardized 1, -1. Fused: lamp 0.694365, chair 0.268545, table -0.962910.
+    # Scores: 1, 0.268545 / 0.694365 = 0.386749, and the table below the ratio of 0.3.
+    matches = result["matches"]
+    assert [m["instance_id"] for m in matches] == [2, 0]
+    assert [m["score"] for m in matches] == pytest.approx([1.0, 0.386749], abs=1e-6)
+    assert [m["caption_aspect"] for m in matches] == [None, "appearance"]
+    assert [m["caption_score"] for m in matches] == [None, pytest.approx(0.8)]
 
 
 def test_an_instance_is_scored_only_over_the_descriptions_it_has(
@@ -113,50 +109,52 @@ def test_an_instance_is_scored_only_over_the_descriptions_it_has(
     # The chair has only Identity and Appearance Descriptions. The Caption query
     # (-0.6, 0, -0.8, 0, ...) gives them -0.6 and -0.8, so its best is Identity at -0.6; its
     # missing Material and Use do not count as 0. The table's Descriptions are all
-    # orthogonal (0.0, Identity first). Caption ranking: table, chair. Image ranking
-    # (unknown text resembles the chair, 0.3): chair, table 0, lamp 0.
-    # Both fuse to 1/61 + 1/62 -> 0.991935; the higher image similarity puts the chair first.
-    # The lamp is third in the image ranking only: (1/63) / (2/61) -> 0.484127.
+    # orthogonal (0.0, Identity first). Caption: table 0.0, chair -0.6 -> standardized 1, -1.
+    # Image (unknown text resembles the chair): chair 0.3, table 0, lamp 0 -> mean 0.1,
+    # deviation sqrt(0.02) -> standardized 1.414214, -0.707107, -0.707107.
+    # Fused: chair 0.207107, table 0.146447, lamp -0.353553. Scores: 1, 0.707107.
     matches = result["matches"]
-    assert [m["instance_id"] for m in matches] == [0, 1, 2]
-    assert [m["score"] for m in matches] == pytest.approx([0.991935, 0.991935, 0.484127], abs=1e-6)
+    assert [m["instance_id"] for m in matches] == [0, 1]
+    assert [m["score"] for m in matches] == pytest.approx([1.0, 0.707107], abs=1e-6)
     assert matches[0]["caption_score"] == pytest.approx(-0.6)
     assert matches[0]["caption_aspect"] == "identity"
     assert matches[1]["caption_score"] == pytest.approx(0.0)
 
 
-def test_matches_are_the_top_k_ranked_by_fused_rank(
+def test_matches_are_scored_against_the_best_one(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client = _uncaptioned_client(make_client, _settings(tmp_path, query_top_k=2))
     scene = _ready_scene(client)
     result = _query(client, scene, "furniture light")
     assert {m["caption_aspect"] for m in result["matches"]} == {None}
-    # Image similarities: table 0.7, lamp 0.6, chair 0. With one ranking and rrf_k = 60
-    # the normalised score is 61 / (60 + rank): 1 for rank 1, 61/62 for rank 2.
+    # Image similarities: table 0.7, lamp 0.6, chair 0 -> mean 0.433333, so the table is
+    # 0.266667 above it and the lamp 0.166667. With one channel the score is the ratio of
+    # those two distances: 0.166667 / 0.266667 = 0.625.
     assert [m["instance_id"] for m in result["matches"]] == [1, 2]
-    assert [m["score"] for m in result["matches"]] == pytest.approx([1.0, 0.983871], abs=1e-6)
+    assert [m["score"] for m in result["matches"]] == pytest.approx([1.0, 0.625], abs=1e-6)
     assert [m["image_score"] for m in result["matches"]] == pytest.approx([0.7, 0.6], abs=1e-3)
 
 
-def test_a_scene_with_fewer_instances_than_k_returns_them_all(
+def test_k_is_only_the_most_matches_a_query_returns(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client = _uncaptioned_client(make_client, _settings(tmp_path, query_top_k=5))
     scene = _ready_scene(client)
     result = _query(client, scene, "furniture light")
-    assert [m["instance_id"] for m in result["matches"]] == [1, 2, 0]
-    assert result["matches"][2]["score"] == pytest.approx(61 / 63, abs=1e-6)
+    # The chair is below the Scene's average, so asking for five still returns two.
+    assert [m["instance_id"] for m in result["matches"]] == [1, 2]
 
 
-def test_the_rrf_constant_comes_from_settings(
+def test_the_score_ratio_comes_from_settings(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
-    client = _uncaptioned_client(make_client, _settings(tmp_path, query_top_k=3, rrf_k=0))
+    settings = _settings(tmp_path, query_top_k=3, query_score_ratio=0.7)
+    client = _uncaptioned_client(make_client, settings)
     scene = _ready_scene(client)
     result = _query(client, scene, "furniture light")
-    # rrf_k = 0: ranks 1, 2, 3 give 1/1, 1/2, 1/3 out of a maximum of 1.
-    assert [m["score"] for m in result["matches"]] == pytest.approx([1.0, 0.5, 1 / 3], abs=1e-6)
+    # The lamp scores 0.625 (worked out above), below a ratio of 0.7.
+    assert [m["instance_id"] for m in result["matches"]] == [1]
 
 
 def test_a_query_resembling_nothing_still_returns_the_closest_instance(
@@ -311,18 +309,19 @@ def test_a_query_returns_as_many_matches_as_it_asks_for(
 
     resp = _query_k(client, scene, "wooden thing", top_k=2)
 
-    # The ranking worked out above: table, chair, lamp.
+    # The Matches worked out above: lamp, table.
     assert resp.status_code == 200
-    assert [m["instance_id"] for m in resp.json()["matches"]] == [1, 0]
+    assert [m["instance_id"] for m in resp.json()["matches"]] == [2, 1]
+    assert [m["instance_id"] for m in _query(client, scene, "wooden thing")["matches"]] == [2]
 
 
-def test_a_query_without_top_k_returns_five_matches_by_default(client: TestClient):
+def test_a_query_without_top_k_returns_up_to_five_matches_by_default(client: TestClient):
     scene = _ready_scene(client)
 
     matches = _query_k(client, scene, "wooden thing", top_k=None).json()["matches"]
 
-    # The fake Scene has only three Instances, so five asked for gives all three.
-    assert [m["instance_id"] for m in matches] == [1, 0, 2]
+    # Five allows both Instances that score close enough to the best (worked out above).
+    assert [m["instance_id"] for m in matches] == [2, 1]
 
 
 @pytest.mark.parametrize("top_k", [0, 21])

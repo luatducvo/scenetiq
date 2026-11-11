@@ -18,7 +18,14 @@ from dataclasses import dataclass
 import numpy as np
 
 from scenetiq.config import SpatialOptions
-from scenetiq.domain import Constraint, Instance, ParsedQuery, Relation
+from scenetiq.domain import (
+    Aspect,
+    Constraint,
+    Instance,
+    ParsedQuery,
+    QueryObject,
+    Relation,
+)
 from scenetiq.query import Anchor, Match
 
 
@@ -464,8 +471,9 @@ def apply_candidate_margin(
     return [m for m in shortlist if passes(m)]
 
 
-PhraseRanking = Callable[[str, int], list[Match]]
-"""Ranks every Instance against a phrase and returns the first ``k`` Matches, best first."""
+PhraseRanking = Callable[[QueryObject, int], list[Match]]
+"""Ranks every Instance against an object's phrase, on the Aspects it speaks about, and
+returns the first ``k`` of that ranking, best first, with nothing cut off by score."""
 
 
 def run_spatial_query(
@@ -485,7 +493,7 @@ def run_spatial_query(
     Args:
         instances: Every Instance of the Reconstruction.
         parsed: The parsed Query; its constraints are solved.
-        rank_phrase: The plain Query ranking, applied to one object's phrase.
+        rank_phrase: The plain Query ranking, applied to one object, with no score cut.
         top_k: How many Matches to return at most.
         options: The candidate count, the candidate margins and the falloff fraction.
 
@@ -505,13 +513,19 @@ def run_spatial_query(
         else options.candidates_per_object
         for o in parsed.objects
     }
-    depth: dict[str, int] = {}
+    # Objects that read the same are ranked once, to the deepest shortlist any of them needs.
+    first: dict[tuple[str, tuple[Aspect, ...]], QueryObject] = {}
+    depth: dict[tuple[str, tuple[Aspect, ...]], int] = {}
     for o in parsed.objects:
-        depth[o.phrase] = max(depth.get(o.phrase, 0), wanted[o.object_id])
-    ranked = {phrase: rank_phrase(phrase, k) for phrase, k in depth.items()}
+        key = (o.phrase, o.aspects)
+        first.setdefault(key, o)
+        depth[key] = max(depth.get(key, 0), wanted[o.object_id])
+    ranked = {key: rank_phrase(o, depth[key]) for key, o in first.items()}
     candidates = {
         o.object_id: apply_candidate_margin(
-            ranked[o.phrase][: wanted[o.object_id]], options.caption_margin, options.image_margin
+            ranked[o.phrase, o.aspects][: wanted[o.object_id]],
+            options.caption_margin,
+            options.image_margin,
         )
         for o in parsed.objects
     }

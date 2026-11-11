@@ -16,6 +16,7 @@ from scenetiq.config import QueryParserOptions
 from scenetiq.domain import (
     MAX_CONSTRAINTS,
     MAX_QUERY_OBJECTS,
+    Aspect,
     Constraint,
     ParsedQuery,
     QueryObject,
@@ -49,8 +50,14 @@ PARSE_SCHEMA: dict[str, Any] = {
                 "properties": {
                     "id": _ID,
                     "phrase": {"type": "string", "minLength": 1, "maxLength": MAX_PHRASE_LENGTH},
+                    "aspects": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": len(Aspect),
+                        "items": {"enum": [a.value for a in Aspect]},
+                    },
                 },
-                "required": ["id", "phrase"],
+                "required": ["id", "phrase", "aspects"],
                 "additionalProperties": False,
             },
         },
@@ -84,8 +91,8 @@ PARSE_SCHEMA: dict[str, Any] = {
 }
 """JSON schema the parser's reply is forced to follow, token by token. Not a setting.
 
-The Relation values, the object ids and the limits come from the domain, so the schema and
-:class:`~scenetiq.domain.ParsedQuery` cannot drift apart. Keys are written in this order,
+The Relation values, the Aspects, the object ids and the limits come from the domain, so the
+schema and :class:`~scenetiq.domain.ParsedQuery` cannot drift apart. Keys are written in this order,
 so the objects exist before a constraint names them. The schema cannot say that ids are
 unique or that a Relation takes a given number of Anchors: :func:`read_parsed_query` checks
 that.
@@ -110,6 +117,14 @@ _RELATION_MEANINGS = {
 }
 
 
+_ASPECT_MEANINGS = {
+    Aspect.IDENTITY: "what kind of thing it is, or its name",
+    Aspect.APPEARANCE: "its colour, shape or size",
+    Aspect.MATERIAL: "what it is made of, or its parts",
+    Aspect.USE: "what it is used for",
+}
+
+
 def _anchor_count_phrase(relation: Relation) -> str:
     count = relation.anchor_count
     return "no anchor" if count == 0 else f"{count} anchor" + ("s" if count > 1 else "")
@@ -129,7 +144,11 @@ _INSTRUCTIONS = (
     f"the ids {_QUOTED_IDS} in the order you list them. Each has an id and a "
     '"phrase": a short English phrase that names that object alone, with its own '
     "attributes such as colour or material, but without any relation and without the "
-    "other objects. Write the phrases in English whatever the language of the query.\n"
+    "other objects. Write the phrases in English whatever the language of the query. Each "
+    'also has "aspects": the sides of the object that its phrase speaks about, one or more '
+    "of " + ", ".join(f'"{a.value}" ({text})' for a, text in _ASPECT_MEANINGS.items()) + ". "
+    'A phrase that only names a kind of thing, such as a chair, speaks about "identity" '
+    "alone.\n"
     '- "target": the id of the object the user wants to find. The other objects only help '
     "to locate it.\n"
     f'- "constraints": the spatial relations the query states, at most {MAX_CONSTRAINTS}. '
@@ -172,7 +191,9 @@ def read_parsed_query(reply: str) -> ParsedQuery:
     """Read a parsed Query from the model's reply, checking it a second time.
 
     Accepts the JSON object bare or surrounded by other text. Phrases and unsupported parts
-    are trimmed, and empty unsupported parts dropped. A reply without constraints is a Query
+    are trimmed, and empty unsupported parts dropped. An object's Aspects are kept once each,
+    in Aspect order; an object with none, or with only unknown ones, speaks about every
+    Aspect. A reply without constraints is a Query
     without a Relation, which the Query endpoint answers with its original text.
 
     Args:
@@ -230,7 +251,10 @@ def _object(item: object) -> QueryObject:
     phrase = item.get("phrase")
     if not isinstance(phrase, str) or not phrase.strip():
         raise QueryParseError(f"object {item['id']!r} has no phrase")
-    return QueryObject(item["id"], phrase.strip())
+    named = item.get("aspects", [])
+    if not isinstance(named, list):
+        raise QueryParseError(f"the aspects of object {item['id']!r} are not a list: {named!r}")
+    return QueryObject(item["id"], phrase.strip(), tuple(a for a in Aspect if a.value in named))
 
 
 def _constraint(item: object) -> Constraint:

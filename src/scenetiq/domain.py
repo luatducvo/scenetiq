@@ -211,10 +211,13 @@ class QueryObject:
     Attributes:
         object_id: Id of the object within its parsed Query, such as ``"a"``.
         phrase: Short English phrase naming the object, ranked like a Query of its own.
+        aspects: The Aspects the phrase speaks about, in Aspect order; its Caption
+            similarity reads only their Descriptions. Empty means every Aspect.
     """
 
     object_id: str
     phrase: str
+    aspects: tuple[Aspect, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -240,7 +243,7 @@ class ParsedQuery:
         objects: The objects, one to :data:`MAX_QUERY_OBJECTS`, each with a unique id.
         target: Id of the object the user wants; the other objects are Anchors.
         constraints: Up to :data:`MAX_CONSTRAINTS` Relations between the objects. A
-            Query without constraints is answered as a plain Query, with its original text.
+            Query without constraints is answered as a plain Query (ADR 0011).
         unsupported: Parts of the Query the Relation set cannot express, quoted from it.
 
     Raises:

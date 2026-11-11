@@ -1,8 +1,13 @@
 """Embedding stage: one semantic embedding per Instance from multi-view crops.
 
-For every Instance, pick the Views that see most of its points, crop it from
-the original full-resolution photos at two context scales, encode the crops
-with SigLIP2, and average them into one L2-normalised embedding.
+For every Instance, pick the Views that see most of its points and crop it from the
+original full-resolution photos: at two context scales, and once more with everything
+outside the Instance greyed out (ADR 0011). SigLIP2 encodes the crops, and the two kinds
+are averaged into one L2-normalised embedding.
+
+A crop is the bounding box of the Instance's pixels, so the crop of a floor or a wall holds
+everything standing on or against it. The greyed crop is what keeps such an Instance from
+taking the embedding of the things around it.
 """
 
 import math
@@ -28,6 +33,10 @@ class ImageEncoder(Protocol):
         ...
 
 
+MASK_FILL = (127, 127, 127)
+"""RGB colour that replaces everything outside the Instance in a masked crop."""
+
+
 def visible_pixels(
     points: FloatArray, camera: Camera, depth: FloatArray, rtol: float
 ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
@@ -39,6 +48,14 @@ def visible_pixels(
     Returns:
         ``(u, v)`` integer pixel coordinates (at the depth-map resolution).
     """
+    u, v, _ = _visible(points, camera, depth, rtol)
+    return u, v
+
+
+def _visible(
+    points: FloatArray, camera: Camera, depth: FloatArray, rtol: float
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64], FloatArray]:
+    """:func:`visible_pixels`, with the depth in metres of every visible point."""
     w2c = c2w_to_w2c(camera.cam_to_world)
     cam = points @ w2c[:3, :3].T + w2c[:3, 3]
     z = cam[:, 2]
@@ -51,7 +68,59 @@ def visible_pixels(
     u, v, z = u[inside], v[inside], z[inside]
     seen = depth[v, u]
     ok = (seen > 0) & (np.abs(z - seen) <= rtol * seen)
-    return u[ok], v[ok]
+    return u[ok], v[ok], z[ok]
+
+
+def splat_radius(
+    z: FloatArray, focal: float, spacing: float, max_radius: int
+) -> npt.NDArray[np.int64]:
+    """How far, in pixels, each point reaches around its pixel in an Instance mask.
+
+    Neighbouring points lie ``spacing`` metres apart, which is ``spacing * focal / z`` pixels
+    for a point ``z`` metres from the camera. Half of that, rounded up, makes the squares
+    of neighbours meet, so the points of one surface draw a mask without holes.
+
+    Args:
+        z: Depth of every point, in metres; positive.
+        focal: Focal length of the View, in pixels.
+        spacing: Distance between neighbouring points of the Reconstruction, in metres.
+        max_radius: Largest radius, for points very close to the camera.
+
+    Returns:
+        One radius per point, between 1 and ``max_radius``.
+    """
+    radius = np.ceil(spacing * focal / (2.0 * np.asarray(z, dtype=np.float64)))
+    return np.clip(radius, 1, max_radius).astype(np.int64)
+
+
+def instance_mask(
+    u: npt.NDArray[np.int64],
+    v: npt.NDArray[np.int64],
+    radius: npt.NDArray[np.int64],
+    width: int,
+    height: int,
+) -> npt.NDArray[np.bool_]:
+    """The pixels an Instance covers in a View: a square around each of its visible points.
+
+    Args:
+        u: Column of every visible point.
+        v: Row of every visible point.
+        radius: Half the side of every point's square, in pixels (see :func:`splat_radius`).
+        width: Width of the View in pixels.
+        height: Height of the View in pixels.
+
+    Returns:
+        ``(height, width)`` booleans, true inside at least one square.
+    """
+    left, right = np.clip(u - radius, 0, width), np.clip(u + radius + 1, 0, width)
+    top, bottom = np.clip(v - radius, 0, height), np.clip(v + radius + 1, 0, height)
+    # Mark each square's corners, then sum along both axes: the count of squares per pixel.
+    corners = np.zeros((height + 1, width + 1), dtype=np.int32)
+    np.add.at(corners, (top, left), 1)
+    np.add.at(corners, (top, right), -1)
+    np.add.at(corners, (bottom, left), -1)
+    np.add.at(corners, (bottom, right), 1)
+    return corners.cumsum(axis=0).cumsum(axis=1)[:height, :width] > 0
 
 
 def select_views(visible_counts: Sequence[int], top_k: int, min_pixels: int) -> list[int]:
@@ -93,11 +162,15 @@ class PlannedView(NamedTuple):
         view_index: Index of the View in the Capture.
         u: Column of every visible point, at the depth-map resolution.
         v: Row of every visible point, at the depth-map resolution.
+        radius: Splat radius of every visible point, at the depth-map resolution (see
+            :func:`splat_radius`), or ``None`` when the point spacing is unknown, in which
+            case the Instance has no mask in this View.
     """
 
     view_index: int
     u: npt.NDArray[np.int64]
     v: npt.NDArray[np.int64]
+    radius: npt.NDArray[np.int64] | None = None
 
 
 ViewPlans = dict[int, list[PlannedView]]
@@ -109,6 +182,7 @@ def plan_views(
     instance_ids: npt.NDArray[np.int32],
     view_data: ViewData,
     options: EmbeddingOptions | None = None,
+    point_spacing: float | None = None,
 ) -> ViewPlans:
     """Choose, for every Instance, the Views that see most of its points.
 
@@ -116,7 +190,11 @@ def plan_views(
         points: ``(N, 3)`` Reconstruction points.
         instance_ids: ``(N,)`` Instance id per point, -1 for none.
         view_data: Cameras and depth at the depth-map resolution.
-        options: ``views_per_instance``, ``min_visible_pixels`` and ``visibility_rtol``.
+        options: ``views_per_instance``, ``min_visible_pixels``, ``visibility_rtol`` and
+            ``max_splat_radius``.
+        point_spacing: Distance between neighbouring points, in metres: the voxel size of
+            the Fusing stage. When omitted the plans carry no splat radii, so no Instance
+            mask can be drawn from them.
 
     Returns:
         A plan for every Instance id, empty when no View sees at least
@@ -127,13 +205,23 @@ def plan_views(
     for iid in (int(i) for i in np.unique(instance_ids) if i >= 0):
         member = points[instance_ids == iid]
         per_view = [
-            visible_pixels(member, cam, view_data.depth[i], opts.visibility_rtol)
+            _visible(member, cam, view_data.depth[i], opts.visibility_rtol)
             for i, cam in enumerate(view_data.cameras)
         ]
         chosen = select_views(
-            [len(u) for u, _ in per_view], opts.views_per_instance, opts.min_visible_pixels
+            [len(u) for u, _, _ in per_view], opts.views_per_instance, opts.min_visible_pixels
         )
-        plans[iid] = [PlannedView(vi, *per_view[vi]) for vi in chosen]
+        plan = []
+        for vi in chosen:
+            u, v, z = per_view[vi]
+            focal = float(view_data.cameras[vi].intrinsics[0, 0])
+            radius = (
+                None
+                if point_spacing is None
+                else splat_radius(z, focal, point_spacing, opts.max_splat_radius)
+            )
+            plan.append(PlannedView(vi, u, v, radius))
+        plans[iid] = plan
     return plans
 
 
@@ -146,6 +234,8 @@ class PhotoPixels(NamedTuple):
         photo: The View's original photo as a PIL RGB image.
         u: Column of every visible point, at the photo's resolution.
         v: Row of every visible point, at the photo's resolution.
+        mask: The Instance's mask as a PIL ``L`` image of the photo's size, 255 inside the
+            Instance, or ``None`` when the plan carries no splat radii.
     """
 
     instance_id: int
@@ -153,6 +243,7 @@ class PhotoPixels(NamedTuple):
     photo: Any
     u: npt.NDArray[np.int64]
     v: npt.NDArray[np.int64]
+    mask: Any = None
 
 
 def photo_pixels(
@@ -180,7 +271,13 @@ def photo_pixels(
                 if p.view_index == vi:
                     pu = (p.u * sx).astype(np.int64)
                     pv = (p.v * sy).astype(np.int64)
-                    yield PhotoPixels(iid, rank, photo, pu, pv)
+                    mask = None
+                    if p.radius is not None:
+                        drawn = instance_mask(p.u, p.v, p.radius, cam.width, cam.height)
+                        mask = Image.fromarray(drawn.astype(np.uint8) * 255)
+                        if mask.size != photo.size:
+                            mask = mask.resize(photo.size, Image.Resampling.BILINEAR)
+                    yield PhotoPixels(iid, rank, photo, pu, pv, mask)
 
 
 def embed_instances(
@@ -191,6 +288,13 @@ def embed_instances(
     options: EmbeddingOptions | None = None,
 ) -> dict[int, FloatArray]:
     """Compute an embedding for every Instance that some View sees well enough.
+
+    Every planned View gives one crop per context scale in ``options.expansions`` and, when
+    the plan can draw the Instance's mask and ``options.masked_weight`` is positive, one
+    crop at the tightest scale with everything outside the mask replaced by
+    :data:`MASK_FILL`. The embedding is the weighted sum of the L2-normalised mean of the
+    masked crops and that of the context crops, L2-normalised. An Instance without a masked
+    crop is embedded from its context crops alone.
 
     Instances with an empty plan get no embedding; the caller drops them, so
     every remaining Instance can be queried.
@@ -207,21 +311,41 @@ def embed_instances(
     """
     opts = options or EmbeddingOptions()
 
+    from PIL import Image
+
     crops: list = []
     owners: list[int] = []
+    masked: list[bool] = []
     for seen in photo_pixels(plans, image_paths, view_data.cameras):
         photo = seen.photo
         for expand in opts.expansions:
             box = crop_box(seen.u, seen.v, expand, photo.width, photo.height, min_size=16)
             crops.append(photo.crop(box))
             owners.append(seen.instance_id)
+            masked.append(False)
+        if seen.mask is not None and opts.masked_weight > 0 and opts.expansions:
+            tight = min(opts.expansions)
+            box = crop_box(seen.u, seen.v, tight, photo.width, photo.height, min_size=16)
+            crop = photo.crop(box)
+            fill = Image.new("RGB", crop.size, MASK_FILL)
+            crops.append(Image.composite(crop, fill, seen.mask.crop(box)))
+            owners.append(seen.instance_id)
+            masked.append(True)
 
     if not crops:
         return {}
     feats = encoder.encode_images(crops)
     owner_arr = np.asarray(owners)
-    return {
-        iid: l2_normalize(feats[owner_arr == iid].mean(axis=0))
-        for iid in plans
-        if np.any(owner_arr == iid)
-    }
+    masked_arr = np.asarray(masked)
+    embeddings: dict[int, FloatArray] = {}
+    for iid in plans:
+        own = owner_arr == iid
+        if not np.any(own):
+            continue
+        embedding = l2_normalize(feats[own & ~masked_arr].mean(axis=0))
+        if np.any(own & masked_arr):
+            inside = l2_normalize(feats[own & masked_arr].mean(axis=0))
+            weight = opts.masked_weight
+            embedding = l2_normalize(weight * inside + (1 - weight) * embedding)
+        embeddings[iid] = embedding
+    return embeddings

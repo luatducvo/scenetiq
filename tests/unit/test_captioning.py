@@ -132,6 +132,60 @@ def test_boxed_crop_adds_context_and_draws_the_tight_box():
     assert crop.getpixel((2, 2)) == (0, 0, 0)  # context: untouched
 
 
+def test_boxed_crop_darkens_everything_outside_the_instances_mask():
+    photo = Image.new("RGB", (100, 80), (200, 100, 40))
+    # The mask covers columns 40..59 and rows 30..39: the upper half of the tight box.
+    mask = Image.new("L", (100, 80), 0)
+    mask.paste(255, (40, 30, 60, 40))
+    u = np.array([40, 59])
+    v = np.array([30, 49])
+    crop = boxed_crop(photo, u, v, expand=0.5, color=(255, 0, 0), mask=mask, dim=0.5)
+    # The crop is (30, 20)..(70, 60), so the mask sits at (10, 10)..(29, 19) inside it.
+    assert crop.getpixel((20, 15)) == (200, 100, 40)  # inside the mask: untouched
+    assert crop.getpixel((20, 25)) == (100, 50, 20)  # in the box, outside the mask: halved
+    assert crop.getpixel((2, 2)) == (100, 50, 20)  # context: halved
+    assert crop.getpixel((10, 25)) == (255, 0, 0)  # the box is drawn over the darkened crop
+    assert photo.getpixel((2, 2)) == (200, 100, 40)  # the photo is not modified
+
+
+def test_boxed_crop_without_a_mask_or_at_full_brightness_darkens_nothing():
+    photo = Image.new("RGB", (100, 80), (200, 100, 40))
+    mask = Image.new("L", (100, 80), 0)
+    u = np.array([40, 59])
+    v = np.array([30, 49])
+    assert boxed_crop(photo, u, v, 0.5, (255, 0, 0), dim=0.5).getpixel((2, 2)) == (200, 100, 40)
+    full = boxed_crop(photo, u, v, 0.5, (255, 0, 0), mask=mask, dim=1.0)
+    assert full.getpixel((2, 2)) == (200, 100, 40)
+
+
+def test_an_instances_crops_are_darkened_outside_its_mask_when_its_plan_can_draw_one(
+    tmp_path: Path,
+):
+    path = tmp_path / "0.png"
+    Image.new("RGB", (100, 80), (200, 100, 40)).save(path)
+    # Two points 10 px apart with a radius of 2: the mask is two 5 px squares.
+    u, v = np.array([40, 50]), np.array([40, 40])
+    plans = {1: [PlannedView(0, u, v, np.array([2, 2]))]}
+    captioner = _RecordingCaptioner({1: SOFA})
+
+    caption_instances(
+        plans,
+        [path],
+        [_camera(100, 80)],
+        captioner,
+        CaptioningOptions(context_expand=1.0, background_dim=0.5),
+    )
+
+    # Columns 40..50 are 11 px, grown by 11 px per side: the crop starts at column 29. The
+    # single row grows by (16 - 1) / 2 = 7.5 px to the 16 px minimum: the crop starts at row
+    # 32. So the points are at (11, 8) and (21, 8) in the crop, their squares cover columns
+    # 9..13 and 19..23 of rows 6..10, and the box is drawn along rows 8..9.
+    [[crop]] = captioner.calls
+    assert crop.getpixel((10, 7)) == (200, 100, 40)  # inside the first point's square
+    assert crop.getpixel((16, 6)) == (100, 50, 20)  # between the two squares
+    assert crop.getpixel((1, 1)) == (100, 50, 20)
+
+
 class _RecordingCaptioner:
     def __init__(self, replies: dict[int, str]) -> None:
         self.replies = replies

@@ -150,14 +150,22 @@ class EmbeddingOptions:
     Attributes:
         views_per_instance: How many of the best Views to crop each Instance from.
         min_visible_pixels: A View must see at least this many of the Instance's points.
-        expansions: Context added around the tight crop, as fractions of its size.
+        expansions: Context added around the tight crop, as fractions of its size; one
+            crop per value.
         visibility_rtol: Relative depth tolerance of the occlusion test.
+        masked_weight: Share, in [0, 1], that the crops with everything outside the Instance
+            greyed out take in its embedding; the context crops take the rest (ADR 0011).
+            0 makes no masked crop. Not validated.
+        max_splat_radius: Largest square, in depth-map pixels on each side of a point,
+            that a point draws in its Instance's mask; reached by points close to the camera.
     """
 
     views_per_instance: int = 5
     min_visible_pixels: int = 30
     expansions: tuple[float, ...] = (0.1, 0.4)
     visibility_rtol: float = 0.05
+    masked_weight: float = 0.5
+    max_splat_radius: int = 12
 
 
 @dataclass(frozen=True)
@@ -191,11 +199,15 @@ class CaptioningOptions:
         max_pixels: Pixel budget per image in the model's processor.
         max_new_tokens: Longest reply generated per Instance; a reply cut off here gets
             no Caption.
+        background_dim: Brightness, in (0, 1], of everything outside the Instance's mask
+            in its crops, so the model can tell a floor from what stands on it (ADR 0011).
+            1 leaves the crops as they are. Not validated.
     """
 
     model_id: str = "Qwen/Qwen3-VL-8B-Instruct"
     views_per_instance: int = 3
     context_expand: float = 0.6
+    background_dim: float = 0.35
     max_pixels: int = 448 * 448
     max_new_tokens: int = 320
 
@@ -262,10 +274,12 @@ class Settings:
     Attributes:
         storage_root: Directory holding the SQLite database and all Scene data.
         token: Shared secret every request must present as a bearer token.
-        query_top_k: How many Matches a Query returns when it does not ask for a number
-            (ADR 0008).
+        query_top_k: The most Matches a Query returns when it does not ask for a number
+            (ADR 0011).
         query_max_top_k: The most Matches a Query may ask for.
-        rrf_k: The Reciprocal Rank Fusion constant used to rank Matches.
+        query_score_ratio: A Query without a Relation keeps an Instance as a Match only
+            when its score is at least this fraction of the best Match's (ADR 0011). 0
+            keeps every Instance that scores above the Scene's average. Not validated.
         pipeline: Which Pipeline to run: ``"fake"`` or ``"real"``.
         min_views: Fewest photos a Capture may upload.
         max_views: Most photos a Capture may upload.
@@ -289,7 +303,9 @@ class Settings:
 
     Raises:
         ValueError: If ``min_views`` is below 1 or above ``max_views``, ``query_max_top_k`` is
-            below ``query_top_k``, ``upload_max_side``
+            below ``query_top_k``, ``query_score_ratio`` or
+            ``embedding.masked_weight`` is outside [0, 1], ``embedding.max_splat_radius`` is
+            below 1, ``captioning.background_dim`` is outside (0, 1], ``upload_max_side``
             is below 1, ``upload_jpeg_quality`` is outside (0, 1], ``view_stride``,
             ``spatial.candidates_per_object`` or ``query_parser.max_new_tokens`` is below
             1, ``spatial.falloff`` is not positive, or ``spatial.caption_margin`` or
@@ -300,7 +316,7 @@ class Settings:
     token: str
     query_top_k: int = 5
     query_max_top_k: int = 20
-    rrf_k: int = 60
+    query_score_ratio: float = 0.5
     pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
     max_views: int = 2000
@@ -346,8 +362,21 @@ class Settings:
                 f"query_max_top_k ({self.query_max_top_k}) must not be below "
                 f"query_top_k ({self.query_top_k})"
             )
-        if self.rrf_k < 0:
-            raise ValueError(f"rrf_k must not be negative, got {self.rrf_k}")
+        if not 0 <= self.query_score_ratio <= 1:
+            raise ValueError(f"query_score_ratio must be in [0, 1], got {self.query_score_ratio}")
+        if not 0 <= self.embedding.masked_weight <= 1:
+            raise ValueError(
+                f"embedding.masked_weight must be in [0, 1], got {self.embedding.masked_weight}"
+            )
+        if self.embedding.max_splat_radius < 1:
+            raise ValueError(
+                "embedding.max_splat_radius must be at least 1, "
+                f"got {self.embedding.max_splat_radius}"
+            )
+        if not 0 < self.captioning.background_dim <= 1:
+            raise ValueError(
+                f"captioning.background_dim must be in (0, 1], got {self.captioning.background_dim}"
+            )
         if self.siglip.prompt_max_words < 0:
             raise ValueError(
                 f"siglip.prompt_max_words must not be negative, got {self.siglip.prompt_max_words}"

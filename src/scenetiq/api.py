@@ -24,6 +24,7 @@ from scenetiq.domain import (
     Capture,
     ParsedQuery,
     Pipeline,
+    QueryObject,
     QueryParseError,
     QueryParser,
     TextEncoder,
@@ -284,13 +285,14 @@ def create_app(
         # A Scene where no Instance got a Caption has no Caption ranking: skip encoding.
         captioned = any(inst.caption_embeddings for inst in instances)
 
-        def rank(phrase: str, top_k: int) -> list[Match]:
+        def rank(wanted: QueryObject, top_k: int, score_ratio: float | None) -> list[Match]:
             return run_query(
                 instances,
-                text_encoder.encode(phrase),
+                text_encoder.encode(wanted.phrase),
                 top_k,
-                settings.rrf_k,
-                caption_encoder.encode_query(phrase) if captioned else None,
+                score_ratio,
+                caption_encoder.encode_query(wanted.phrase) if captioned else None,
+                wanted.aspects,
             )
 
         # Only a parse failure the parser reports falls back; any other exception is a bug.
@@ -302,10 +304,12 @@ def create_app(
         try:
             matches = None
             if parsed is not None and parsed.constraints:
-                matches = run_spatial_query(instances, parsed, rank, top_k, settings.spatial)
+                matches = run_spatial_query(
+                    instances, parsed, lambda o, k: rank(o, k, None), top_k, settings.spatial
+                )
             relations_applied = matches is not None
             if matches is None:  # no Relation, no valid assignment or no parse: plain Query
-                matches = rank(text, top_k)
+                matches = rank(_plain_object(text, parsed), top_k, settings.query_score_ratio)
         except MissingEmbeddingsError as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
         return QueryOut(
@@ -427,7 +431,7 @@ class InstanceOut(BaseModel):
 
 
 class QueryIn(BaseModel):
-    """A free-text Query, and how many Matches it asks for (``query_top_k`` when null)."""
+    """A free-text Query, and the most Matches it asks for (``query_top_k`` when null)."""
 
     text: str = Field(max_length=500)
     top_k: int | None = None
@@ -443,8 +447,9 @@ class AnchorOut(BaseModel):
 class MatchOut(BaseModel):
     """One Match: an Instance id, its score, the per-channel similarities and its Anchors.
 
-    ``score`` is the normalised fused score, or the assignment score when Relations were
-    applied (ADR 0009); either way it is relative to one Query. ``caption_score`` is the
+    ``score`` is the fused value as a fraction of the best Match's, so the best scores 1,
+    or the assignment score when Relations were applied (ADR 0009); either way it is
+    relative to one Query. ``caption_score`` is the
     similarity of the best-matching Description and ``caption_aspect`` its Aspect; both are
     null for an Instance without a Caption. When Relations were applied, the similarities are
     those of the wanted object's phrase. ``anchors`` is empty when they were not.
@@ -459,7 +464,9 @@ class MatchOut(BaseModel):
 
 
 class QueryOut(BaseModel):
-    """The top-K Matches for a Query, best first, and what of the Query was taken into account.
+    """The Matches for a Query, best first, and what of the Query was taken into account.
+
+    At most ``top_k`` Matches, and at least one when the Scene has Instances (ADR 0011).
 
     ``relations_applied`` is true when the Query's Relations decided the Matches.
     ``relations_stated`` is true when the parsed Query had at least one Relation, so stated
@@ -475,6 +482,19 @@ class QueryOut(BaseModel):
     relations_stated: bool
     unsupported: list[str]
     parse_failed: bool
+
+
+def _plain_object(text: str, parsed: ParsedQuery | None) -> QueryObject:
+    """What a plain Query is ranked by (ADR 0011).
+
+    The wanted object of the parsed Query, with its English phrase and Aspects, when the
+    Query names one object or states Relations. A Query that could not be parsed, or that
+    lists several objects without relating them, is ranked by its original text on every
+    Aspect, since no single phrase stands for it.
+    """
+    if parsed is None or (len(parsed.objects) > 1 and not parsed.constraints):
+        return QueryObject("a", text)
+    return next(o for o in parsed.objects if o.object_id == parsed.target)
 
 
 def _ready_reconstruction_dir(store: SceneStore, scene_id: str) -> Path:

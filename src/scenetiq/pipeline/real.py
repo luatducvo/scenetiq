@@ -142,7 +142,10 @@ class RealPipeline:
 
         reporter.stage(Stage.EMBEDDING)
         with track_stage_memory(Stage.EMBEDDING):
-            plans = plan_views(points, instance_ids, view_data, opts.embedding)
+            # The fused points lie one TSDF voxel apart, which sizes the Instance masks.
+            plans = plan_views(
+                points, instance_ids, view_data, opts.embedding, opts.fusion.voxel_size
+            )
             embeddings = embed_instances(
                 plans,
                 view_data,

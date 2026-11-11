@@ -144,7 +144,13 @@ def test_photos_are_shrunk_to_2048_px_at_jpeg_quality_0_9_by_default():
 
 def test_query_ranking_defaults_and_the_removed_threshold():
     settings = Settings.from_overrides("tok", {})
-    assert (settings.query_top_k, settings.query_max_top_k, settings.rrf_k) == (5, 20, 60)
+    assert (settings.query_top_k, settings.query_max_top_k, settings.query_score_ratio) == (
+        5,
+        20,
+        0.5,
+    )
+    with pytest.raises(ValueError, match="rrf_k"):
+        Settings.from_overrides("tok", {"rrf_k": 60})
     with pytest.raises(ValueError, match="match_threshold"):
         Settings.from_overrides("tok", {"match_threshold": 0.5})
 
@@ -153,8 +159,12 @@ def test_query_ranking_defaults_and_the_removed_threshold():
     ("overrides", "named"),
     [
         ({"query_top_k": 0}, "query_top_k"),
-        ({"rrf_k": -1}, "rrf_k"),
+        ({"query_score_ratio": -0.1}, "query_score_ratio"),
+        ({"query_score_ratio": 1.5}, "query_score_ratio"),
         ({"query_top_k": 6, "query_max_top_k": 5}, "query_max_top_k"),
+        ({"embedding": {"masked_weight": 1.5}}, "embedding.masked_weight"),
+        ({"embedding": {"max_splat_radius": 0}}, "embedding.max_splat_radius"),
+        ({"captioning": {"background_dim": 0.0}}, "captioning.background_dim"),
     ],
 )
 def test_query_ranking_that_cannot_work_is_refused(overrides: dict, named: str):

@@ -26,15 +26,13 @@ export function heatmapGradient(): string {
 }
 
 /**
- * Each Match's heatmap position, stretched over the scores shown: the best Match is 1 and
- * the lowest 0. Scores of one Query are often close together, so a fixed 0-1 scale would
- * give them all one colour. When every score is equal, including a single Match, all are 1.
+ * Each Match's heatmap position: its score, on the fixed scale from 0 to 1. A score says how
+ * a Match compares with the best one of its Query (1), so the colours are never stretched
+ * over the Matches shown: Matches that fit about as well as the best share its colour, and
+ * a much weaker one looks weaker.
  */
 export function heatmapPositions(matches: MatchInfo[]): number[] {
-  const scores = matches.map((m) => m.score)
-  const lo = Math.min(...scores)
-  const hi = Math.max(...scores)
-  return scores.map((s) => (hi - lo > 1e-9 ? (s - lo) / (hi - lo) : 1))
+  return matches.map((m) => Math.min(1, Math.max(0, m.score)))
 }
 
 /** Stepping the hue by the golden ratio keeps consecutive Instance ids far apart. */

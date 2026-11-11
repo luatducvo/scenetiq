@@ -2,7 +2,14 @@ import json
 
 import pytest
 
-from scenetiq.domain import Constraint, ParsedQuery, QueryObject, QueryParseError, Relation
+from scenetiq.domain import (
+    Aspect,
+    Constraint,
+    ParsedQuery,
+    QueryObject,
+    QueryParseError,
+    Relation,
+)
 from scenetiq.query_parser import PARSE_SCHEMA, parse_prompt, read_parsed_query
 
 # The schema of the spec, written out by hand.
@@ -18,8 +25,14 @@ SPEC_SCHEMA = {
                 "properties": {
                     "id": {"enum": ["a", "b", "c", "d"]},
                     "phrase": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "aspects": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 4,
+                        "items": {"enum": ["identity", "appearance", "material", "use"]},
+                    },
                 },
-                "required": ["id", "phrase"],
+                "required": ["id", "phrase", "aspects"],
                 "additionalProperties": False,
             },
         },
@@ -136,6 +149,31 @@ def test_phrases_and_unsupported_parts_are_trimmed_and_empty_parts_dropped():
     assert parsed.unsupported == ("left of",)
 
 
+def test_the_aspects_a_phrase_speaks_about_are_read_in_aspect_order_without_repeats():
+    parsed = read_parsed_query(
+        reply(
+            objects=[
+                {"id": "a", "phrase": "red wooden chair", "aspects": ["material", "identity"]},
+                {"id": "b", "phrase": "shelf", "aspects": ["identity", "identity"]},
+            ]
+        )
+    )
+    assert parsed.objects[0].aspects == (Aspect.IDENTITY, Aspect.MATERIAL)
+    assert parsed.objects[1].aspects == (Aspect.IDENTITY,)
+
+
+def test_an_object_without_usable_aspects_speaks_about_every_aspect():
+    parsed = read_parsed_query(
+        reply(
+            objects=[
+                {"id": "a", "phrase": "cardboard box"},
+                {"id": "b", "phrase": "shelf", "aspects": ["smell", 3]},
+            ]
+        )
+    )
+    assert [o.aspects for o in parsed.objects] == [(), ()]
+
+
 def test_a_reply_in_code_fences_is_still_read():
     assert read_parsed_query(f"```json\n{reply()}\n```").target == "a"
 
@@ -182,6 +220,7 @@ def test_a_reply_in_code_fences_is_still_read():
         (reply(objects=[{"id": "a", "phrase": "  "}, {"id": "b", "phrase": "shelf"}]), "phrase"),
         (reply(objects=[{"id": "a"}, {"id": "b", "phrase": "shelf"}]), "phrase"),
         (reply(target=None), "target"),
+        (reply(objects=[{"id": "a", "phrase": "box", "aspects": "identity"}]), "aspects"),
         (reply(constraints="on the shelf"), "constraints"),
     ],
 )
@@ -228,6 +267,13 @@ def test_the_prompt_asks_for_the_wanted_object_and_phrases_of_each_object_alone(
     assert '"target": the id of the object the user wants to find' in prompt
     assert "names that object alone" in prompt
     assert "without any relation and without the other objects" in prompt
+
+
+def test_the_prompt_asks_which_aspects_each_phrase_speaks_about():
+    prompt = parse_prompt("something to sit on")
+    assert '"aspects"' in prompt
+    for aspect in ('"identity"', '"appearance"', '"material"', '"use"'):
+        assert aspect in prompt
 
 
 def test_the_prompt_asks_for_no_constraints_when_the_query_states_no_relation():

@@ -1,8 +1,10 @@
 """Captioning stage: a Caption per Instance from boxed crops of its best Views (ADR 0008).
 
 For every Instance, take the first Views of the Embedding stage's plan, crop the Instance
-from the original photos with some context and its tight box drawn on, and ask a
-vision-language model for its Name, Synonyms and one Description per Aspect, as JSON.
+from the original photos with some context, darken everything outside its mask, draw its
+tight box on, and ask a vision-language model for its Name, Synonyms and one Description
+per Aspect, as JSON. The box alone cannot single out a floor or a wall, whose box holds
+everything standing on or against it; the darkening does (ADR 0011).
 Replies are parsed tolerantly; an Instance whose reply has no usable Name gets no Caption,
 and the reason is logged.
 """
@@ -40,7 +42,11 @@ _ASPECT_PROMPTS = {
 
 CAPTION_PROMPT = (
     "The images show one object from different viewpoints; it is the object inside the red "
-    "box. Describe that object only, never what surrounds it. Reply with a single JSON "
+    "box. Where parts of an image are darkened, the object is only the part shown at full "
+    "brightness, and the darkened parts are other things, even inside the red box. If the "
+    "bright part is a surface such as a floor, a wall or a ceiling, the object is that "
+    "surface, not what stands on it or hangs on it. Describe that object only, never what "
+    "surrounds it. Reply with a single JSON "
     'object and nothing else, with the keys "name" (a short common name) and "synonyms" '
     "(up to three other names people use for it), and one key per aspect below, each holding "
     "one plain English sentence of at most 25 words about that aspect, or an empty string "
@@ -150,8 +156,13 @@ def boxed_crop(
     v: npt.NDArray[np.int64],
     expand: float,
     color: Sequence[int],
+    mask: Any = None,
+    dim: float = 1.0,
 ) -> Any:
     """Crop the pixels' box from ``photo`` with context, and draw the tight box on it.
+
+    With a ``mask``, everything outside the Instance is darkened first, so the box is
+    drawn over the darkened crop.
 
     Args:
         photo: PIL RGB image.
@@ -159,17 +170,23 @@ def boxed_crop(
         v: Rows of the Instance's pixels in ``photo``.
         expand: Context added on each side, as a fraction of the box size.
         color: RGB colour of the drawn box.
+        mask: The Instance's mask as a PIL ``L`` image of the photo's size, 255 inside the
+            Instance; ``None`` darkens nothing.
+        dim: Brightness, in (0, 1], of the pixels outside ``mask``; 1 darkens nothing.
 
     Returns:
         A new PIL image; ``photo`` is not modified.
     """
-    from PIL import ImageDraw
+    from PIL import Image, ImageDraw
 
     left, top, right, bottom = crop_box(u, v, 0.0, photo.width, photo.height)
     c_left, c_top, c_right, c_bottom = crop_box(
         u, v, expand, photo.width, photo.height, min_size=16
     )
     crop = photo.crop((c_left, c_top, c_right, c_bottom))
+    if mask is not None and dim < 1:
+        dark = crop.point(lambda value: round(value * dim))
+        crop = Image.composite(crop, dark, mask.crop((c_left, c_top, c_right, c_bottom)))
     width = max(2, round(max(crop.size) / 150))
     ImageDraw.Draw(crop).rectangle(
         (left - c_left, top - c_top, right - 1 - c_left, bottom - 1 - c_top),
@@ -206,7 +223,15 @@ def caption_instances(
     chosen = {iid: plan[: opts.views_per_instance] for iid, plan in plans.items() if plan}
     crops: dict[int, list[tuple[int, Any]]] = {iid: [] for iid in chosen}
     for seen in photo_pixels(chosen, image_paths, cameras):
-        crop = boxed_crop(seen.photo, seen.u, seen.v, opts.context_expand, BOX_COLOR)
+        crop = boxed_crop(
+            seen.photo,
+            seen.u,
+            seen.v,
+            opts.context_expand,
+            BOX_COLOR,
+            seen.mask,
+            opts.background_dim,
+        )
         crops[seen.instance_id].append((seen.rank, crop))
 
     captions: dict[int, Caption] = {}

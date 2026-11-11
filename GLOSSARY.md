@@ -58,7 +58,7 @@ A free-text description from the user (e.g. "red chair") asked against one Recon
 _Avoid_: Search, prompt, question
 
 **Match**:
-One of the top-K Instances for a Query, ranked by fusing image similarity with the similarity of its best-matching Description; carries a normalised fused score. For a Query with a Relation it is ranked instead by how well its combination with the Anchors satisfies the Relations, and carries those Anchors. A Query on a Reconstruction with Instances always has at least one Match.
+One of the Instances returned for a Query, at most K: those whose fused value, the image similarity and the similarity of the best-matching Description standardized within the Scene and averaged, is close enough to the best one's. It carries that value as a fraction of the best Match's. For a Query with a Relation it is ranked instead by how well its combination with the Anchors satisfies the Relations, and carries those Anchors. A Query on a Reconstruction with Instances always has at least one Match.
 _Avoid_: Hit, result, detection, low-confidence match
 
 **Relation**:

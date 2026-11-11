@@ -282,12 +282,12 @@ export interface AnchorInfo {
   phrase: string
 }
 
-/** One of the top-K Instances for a Query (ADR 0008, ADR 0009). */
+/** One of the Instances returned for a Query, at most K (ADR 0009, ADR 0011). */
 export interface MatchInfo {
   instance_id: number
   /**
-   * Fused rank score in [0, 1], or the assignment score when Relations were applied;
-   * relative to this Query only.
+   * Fused value as a fraction of the best Match's, so the best Match scores 1, or the
+   * assignment score when Relations were applied; relative to this Query only.
    */
   score: number
   image_score: number
