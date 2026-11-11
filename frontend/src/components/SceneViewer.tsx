@@ -11,7 +11,7 @@ import {
   type InstanceInfo,
   type QueryResult,
 } from '../api'
-import { ANCHOR_COLOR, anchorIds, highlightColors, instanceColors, matchColor } from '../highlight'
+import { highlightColors, matchColor, namesColors } from '../highlight'
 import { PointCloudCanvas } from './PointCloudCanvas'
 
 interface Props {
@@ -27,6 +27,28 @@ interface LoadedScene {
   instances: Map<number, InstanceInfo>
 }
 
+const POINT_SCALE_KEY = 'scenetiq.pointScale'
+const POINT_SCALE_MIN = 0.25
+const POINT_SCALE_MAX = 4
+
+/** The remembered point size; storage can be missing or throw, so fall back to 1. */
+function readPointScale(): number {
+  try {
+    const value = Number(window.localStorage.getItem(POINT_SCALE_KEY))
+    return value >= POINT_SCALE_MIN && value <= POINT_SCALE_MAX ? value : 1
+  } catch {
+    return 1
+  }
+}
+
+function writePointScale(value: number): void {
+  try {
+    window.localStorage.setItem(POINT_SCALE_KEY, String(value))
+  } catch {
+    /* not remembered, which is fine */
+  }
+}
+
 /** One line saying what of a Query was not taken into account, or null when it all was. */
 function queryNotice(result: QueryResult): string | null {
   if (result.parse_failed) {
@@ -39,6 +61,10 @@ function queryNotice(result: QueryResult): string | null {
   return parts.length ? `Not taken into account: ${parts.join('; ')}.` : null
 }
 
+function cssColor([r, g, b]: [number, number, number]): string {
+  return `rgb(${[r, g, b].map((c) => Math.round(c * 255)).join(',')})`
+}
+
 /** Load a Scene, fill the window with its point cloud, and highlight the Matches of a Query. */
 export function SceneViewer({ config, sceneId, onBack }: Props) {
   const viewerRef = useRef<HTMLDivElement>(null)
@@ -49,14 +75,15 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
   const [result, setResult] = useState<QueryResult | null>(null)
   const [querying, setQuerying] = useState(false)
   const [queryError, setQueryError] = useState<string | null>(null)
-  const [showInstances, setShowInstances] = useState(false)
+  const [showNames, setShowNames] = useState(false)
+  const [pointScale, setPointScale] = useState(readPointScale)
 
   useEffect(() => {
     let cancelled = false
     setScene(null)
     setError(null)
     setResult(null)
-    setShowInstances(false)
+    setShowNames(false)
     Promise.all([
       getPointCloud(config, sceneId),
       getInstanceIds(config, sceneId),
@@ -93,54 +120,42 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
 
+  const named = useMemo(
+    () =>
+      new Set(
+        [...(scene?.instances.values() ?? [])].filter((i) => i.name).map((i) => i.instance_id),
+      ),
+    [scene],
+  )
+
   // Recolour points whenever the Query result or the view mode changes; a Query result wins.
   useEffect(() => {
     if (!scene) return
     const colors =
-      showInstances && !result
-        ? instanceColors(scene.instanceIds)
+      showNames && !result
+        ? namesColors(scene.instanceIds, named)
         : highlightColors(scene.baseColors, scene.instanceIds, result?.matches ?? [])
     scene.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-  }, [scene, result, showInstances])
+  }, [scene, result, showNames, named])
 
-  const boxes = useMemo(() => {
-    if (!scene || !result) return []
-    const boxOf = (instanceId: number, color: [number, number, number], label: string | null) => {
-      const inst = scene.instances.get(instanceId)
-      if (!inst) return []
-      const box = new THREE.Box3(
-        new THREE.Vector3(...inst.bbox_min),
-        new THREE.Vector3(...inst.bbox_max),
-      )
-      // Up is -Y (ADR 0007), so the top of the box is at its minimum y.
-      const top = new THREE.Vector3(
-        (inst.bbox_min[0] + inst.bbox_max[0]) / 2,
-        inst.bbox_min[1],
-        (inst.bbox_min[2] + inst.bbox_max[2]) / 2,
-      )
-      return [{ helper: new THREE.Box3Helper(box, new THREE.Color(...color)), label, top }]
-    }
-    const matchBoxes = result.matches.flatMap((m, rank) =>
-      boxOf(m.instance_id, matchColor(rank), scene.instances.get(m.instance_id)?.name ?? null),
-    )
-    // An Anchor is labelled with the phrase it stood for, so a misread Anchor shows.
-    const anchors = anchorIds(result.matches)
-    const phrases = new Map<number, Set<string>>()
-    for (const a of result.matches.flatMap((m) => m.anchors)) {
-      if (!anchors.has(a.instance_id)) continue
-      phrases.set(a.instance_id, (phrases.get(a.instance_id) ?? new Set()).add(a.phrase))
-    }
-    const anchorBoxes = [...phrases].flatMap(([id, ps]) =>
-      boxOf(id, ANCHOR_COLOR, `Anchor: ${[...ps].join(', ')}`),
-    )
-    return [...matchBoxes, ...anchorBoxes]
-  }, [scene, result])
+  // The Names view labels every named Instance at its centroid.
+  const labels = useMemo(() => {
+    if (!scene || !showNames || result) return []
+    return [...scene.instances.values()]
+      .filter((i) => i.name)
+      .map((i) => ({ id: i.instance_id, name: i.name, at: new THREE.Vector3(...i.centroid) }))
+  }, [scene, showNames, result])
 
   function toggleFullscreen() {
     const change = fullscreen
       ? document.exitFullscreen()
       : viewerRef.current?.requestFullscreen()
     change?.catch((err) => setError(String(err)))
+  }
+
+  function changePointScale(value: number) {
+    setPointScale(value)
+    writePointScale(value)
   }
 
   async function submit(e: React.FormEvent) {
@@ -163,16 +178,11 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
     <div className="viewer" ref={viewerRef}>
       {scene && (
         <div className="canvas-wrap">
-          <PointCloudCanvas geometry={scene.geometry}>
-            {boxes.map((b, i) => (
-              <group key={i}>
-                <primitive object={b.helper} />
-                {b.label && (
-                  <Html position={b.top} center>
-                    <span className="box-label">{b.label}</span>
-                  </Html>
-                )}
-              </group>
+          <PointCloudCanvas geometry={scene.geometry} pointScale={pointScale}>
+            {labels.map((l) => (
+              <Html key={l.id} position={l.at} center>
+                <span className="instance-label">{l.name}</span>
+              </Html>
             ))}
           </PointCloudCanvas>
         </div>
@@ -200,13 +210,24 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
           </form>
           <button
             type="button"
-            aria-pressed={showInstances}
+            aria-pressed={showNames}
             disabled={!scene || result !== null}
-            title={result ? 'Clear the Query to view Instances' : undefined}
-            onClick={() => setShowInstances((shown) => !shown)}
+            title={result ? 'Clear the Query to view Names' : undefined}
+            onClick={() => setShowNames((shown) => !shown)}
           >
-            {showInstances ? 'Original colours' : 'Instances'}
+            {showNames ? 'Original colours' : 'Names'}
           </button>
+          <label className="slider" title="Point size">
+            Points
+            <input
+              type="range"
+              min={POINT_SCALE_MIN}
+              max={POINT_SCALE_MAX}
+              step={0.25}
+              value={pointScale}
+              onChange={(e) => changePointScale(Number(e.target.value))}
+            />
+          </label>
           {document.fullscreenEnabled && (
             <button type="button" onClick={toggleFullscreen}>
               {fullscreen ? 'Exit full screen' : 'Full screen'}
@@ -227,16 +248,8 @@ export function SceneViewer({ config, sceneId, onBack }: Props) {
                 <ol>
                   {result.matches.map((m, rank) => (
                     <li key={m.instance_id}>
-                      <span className="swatch" style={{ background: `rgb(${matchColor(rank).map((c) => c * 255).join(',')})` }} />
-                      {scene?.instances.get(m.instance_id)?.name ?? `Instance ${m.instance_id}`} — score{' '}
-                      {m.score.toFixed(3)}
-                      {m.anchors.map((a) => (
-                        <span key={a.instance_id} className="anchor">
-                          {' · '}
-                          <span className="swatch" style={{ background: `rgb(${ANCHOR_COLOR.map((c) => c * 255).join(',')})` }} />
-                          {a.phrase}: {scene?.instances.get(a.instance_id)?.name ?? `Instance ${a.instance_id}`}
-                        </span>
-                      ))}
+                      <span className="swatch" style={{ background: cssColor(matchColor(rank)) }} />
+                      {scene?.instances.get(m.instance_id)?.name ?? `Instance ${m.instance_id}`}
                     </li>
                   ))}
                 </ol>

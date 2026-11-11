@@ -5,18 +5,20 @@ import * as THREE from 'three'
 
 interface Props {
   geometry: THREE.BufferGeometry
+  /** Multiplies the automatic point size, which follows the Scene's extent. */
+  pointScale?: number
   children?: ReactNode
 }
 
 /** Render a coloured point cloud with orbit/pan/zoom controls, framed to fit. */
-export function PointCloudCanvas({ geometry, children }: Props) {
+export function PointCloudCanvas({ geometry, pointScale = 1, children }: Props) {
   const { center, radius } = useMemo(() => {
     geometry.computeBoundingSphere()
     const sphere = geometry.boundingSphere ?? new THREE.Sphere(new THREE.Vector3(), 1)
     return { center: sphere.center.clone(), radius: Math.max(sphere.radius, 0.1) }
   }, [geometry])
 
-  const pointSize = Math.max(radius / 400, 0.004)
+  const pointSize = Math.max(radius / 400, 0.004) * pointScale
 
   return (
     <Canvas

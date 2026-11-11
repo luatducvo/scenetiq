@@ -18,14 +18,14 @@ Until ticket 04, Match points keep their current rank colours. Every other point
 
 **Status:** ready-for-agent
 
-- [ ] No Box3 helpers, floating labels or Anchor colour, label or list entry remain in the viewer.
-- [ ] Points outside the Matches keep their original colour, undimmed, while a result is shown.
-- [ ] The Match list shows a colour swatch and the Name, or "Instance <id>", with no score. The Query notice line still appears when relevant.
-- [ ] A point size slider (about 0.25× to 4× of the automatic size) changes the rendered size live. Its value persists in local storage, and reading or writing storage is wrapped so a throwing storage does not break the viewer.
-- [ ] The Names view colours named Instances by Instance colour, draws their Names at their centroids, colours unnamed Instances black and leaves no-Instance points grey.
-- [ ] The Names view is disabled while a result is shown.
-- [ ] The README usage section no longer mentions boxes or Anchor colours, and describes the point size slider and the Names view.
-- [ ] The frontend passes lint, typecheck and build.
+- [x] No Box3 helpers, floating labels or Anchor colour, label or list entry remain in the viewer.
+- [x] Points outside the Matches keep their original colour, undimmed, while a result is shown.
+- [x] The Match list shows a colour swatch and the Name, or "Instance <id>", with no score. The Query notice line still appears when relevant.
+- [x] A point size slider (about 0.25× to 4× of the automatic size) changes the rendered size live. Its value persists in local storage, and reading or writing storage is wrapped so a throwing storage does not break the viewer.
+- [x] The Names view colours named Instances by Instance colour, draws their Names at their centroids, colours unnamed Instances black and leaves no-Instance points grey.
+- [x] The Names view is disabled while a result is shown.
+- [x] The README usage section no longer mentions boxes or Anchor colours, and describes the point size slider and the Names view.
+- [x] The frontend passes lint, typecheck and build.
 - [ ] Manual check against the local fake backend:
   - `red chair` highlights the chair with no box;
   - the Names view shows "chair" and "table" and a black lamp, which has no Caption;

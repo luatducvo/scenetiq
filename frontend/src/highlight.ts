@@ -14,17 +14,6 @@ export function matchColor(rank: number): [number, number, number] {
   return MATCH_COLORS[rank % MATCH_COLORS.length]
 }
 
-/** The colour of every Anchor, unlike any Match colour (RGB 0-1). */
-export const ANCHOR_COLOR: [number, number, number] = [0.55, 0.4, 1.0]
-
-/** The Instance ids of the Matches' Anchors that are not Matches themselves. */
-export function anchorIds(matches: MatchInfo[]): Set<number> {
-  const matched = new Set(matches.map((m) => m.instance_id))
-  return new Set(
-    matches.flatMap((m) => m.anchors.map((a) => a.instance_id)).filter((id) => !matched.has(id)),
-  )
-}
-
 /** Stepping the hue by the golden ratio keeps consecutive Instance ids far apart. */
 const HUE_STEP = 0.618034
 const INSTANCE_LIGHTNESS = [0.5, 0.65, 0.38]
@@ -49,15 +38,21 @@ export function instanceColor(instanceId: number): [number, number, number] {
   return [color.r, color.g, color.b]
 }
 
-/** Colour every point by its Instance, to inspect how the Scene was split into Instances. */
-export function instanceColors(instanceIds: Int32Array): Float32Array {
+/** The colour of an Instance without a Caption in the Names view. */
+const UNNAMED_COLOR: [number, number, number] = [0, 0, 0]
+
+/**
+ * Colour every point for the Names view: a named Instance by its Instance colour, an
+ * Instance without a Caption black, and a point of no Instance grey.
+ */
+export function namesColors(instanceIds: Int32Array, named: Set<number>): Float32Array {
   const out = new Float32Array(instanceIds.length * 3)
   const cache = new Map<number, [number, number, number]>()
   for (let p = 0; p < instanceIds.length; p++) {
     const id = instanceIds[p]
     let color = cache.get(id)
     if (!color) {
-      color = instanceColor(id)
+      color = id >= 0 && !named.has(id) ? UNNAMED_COLOR : instanceColor(id)
       cache.set(id, color)
     }
     out[3 * p] = color[0]
@@ -67,10 +62,7 @@ export function instanceColors(instanceIds: Int32Array): Float32Array {
   return out
 }
 
-/**
- * Colour points for display: Matched Instances get their rank's colour, their Anchors the
- * Anchor colour, and everything else is the original colour, dimmed while any Match is shown.
- */
+/** Colour points for display: Matched Instances get their rank's colour; every other point keeps its original colour. */
 export function highlightColors(
   base: Float32Array,
   instanceIds: Int32Array,
@@ -78,24 +70,14 @@ export function highlightColors(
 ): Float32Array {
   if (matches.length === 0) return base.slice()
   const rankOf = new Map(matches.map((m, i) => [m.instance_id, i]))
-  const anchors = anchorIds(matches)
-  const out = new Float32Array(base.length)
+  const out = base.slice()
   for (let p = 0; p < instanceIds.length; p++) {
     const rank = rankOf.get(instanceIds[p])
-    if (anchors.has(instanceIds[p])) {
-      out[3 * p] = ANCHOR_COLOR[0]
-      out[3 * p + 1] = ANCHOR_COLOR[1]
-      out[3 * p + 2] = ANCHOR_COLOR[2]
-    } else if (rank === undefined) {
-      out[3 * p] = base[3 * p] * 0.35
-      out[3 * p + 1] = base[3 * p + 1] * 0.35
-      out[3 * p + 2] = base[3 * p + 2] * 0.35
-    } else {
-      const [r, g, b] = matchColor(rank)
-      out[3 * p] = r
-      out[3 * p + 1] = g
-      out[3 * p + 2] = b
-    }
+    if (rank === undefined) continue
+    const [r, g, b] = matchColor(rank)
+    out[3 * p] = r
+    out[3 * p + 1] = g
+    out[3 * p + 2] = b
   }
   return out
 }
