@@ -4,80 +4,86 @@ Upload photos of a static scene to get a metric 3D point cloud of it. Then find 
 
 > The GPU pipeline has not been run end to end yet. Expect to fix issues on the first Colab run.
 
-## 1. One-time setup
+## Before you start
 
-1. **Push this repo to GitHub.** The notebook clones `luatducvo/scenetiq@main`, so the repo must be public or the clone step adapted to use a token.
-2. **Create a Cloudflare named tunnel:** in Zero Trust, open **Networks → Tunnels → Create → Cloudflared**, add a public hostname (for example `scenetiq.example.com`) pointing to `http://localhost:8001`, and copy the tunnel token.
-3. **Add two Colab secrets** (🔑 sidebar), and give the notebook access to both:
+1. Push this repo to GitHub. The notebook clones `luatducvo/scenetiq@main`, so the repo must be public.
+2. In Cloudflare Zero Trust, open **Networks → Tunnels → Create → Cloudflared**, add a public hostname (for example `scenetiq.example.com`) pointing to `http://localhost:8001`, and copy the tunnel token.
+3. In Colab, add two secrets (🔑 sidebar) and give the notebook access to both:
    - `SCENETIQ_TOKEN`: any long random string.
    - `CLOUDFLARE_TUNNEL_TOKEN`: the token from step 2.
 
-## 2. Start the backend on Colab
+## 1. Start the backend
 
-1. Open the notebook in Colab and pick an **A100 80 GB** GPU runtime:
+1. Open the notebook in Colab and pick an GPU runtime:
 
    [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/luatducvo/scenetiq/blob/main/notebooks/colab_server.ipynb)
 
-   This link always loads the latest `notebooks/colab_server.ipynb` from `main`, so a push needs no manual copy. Edits made in Colab are not saved back; change parameters in the repo instead. Do not use a "Save a copy in Drive" version: it stops following the repo.
-2. Edit `CONFIG` in the first code cell. Use `"pipeline": "fake"` on your first run to check the tunnel and the frontend without models, and `"real"` for real reconstruction. `view_stride` reconstructs only every Nth photo, in upload order. `CONFIG` overrides `src/scenetiq/config.py`. See [Configuration](docs/configuration.md) for every setting.
-3. Run all cells. The last cell keeps running and shows the API log, with a progress bar for the photo upload and the job being processed. Stop it if you need to run another cell; the backend keeps going, and running the cell again resumes the display.
+   The link always loads the latest notebook from `main`. Edits made in Colab are not saved back, so change parameters in the repo instead. Do not use "Save a copy in Drive": that copy stops following the repo.
+2. In the first code cell, edit `CONFIG`. Use `"pipeline": "fake"` for a first run to check the tunnel and the frontend without models, and `"real"` for real reconstruction. `view_stride` reconstructs only every Nth photo, in upload order. See [Configuration](docs/configuration.md) for every setting.
+3. Run all cells. The last cell keeps running and shows the API log, with progress for the photo upload and the current job. Stopping it does not stop the backend, and running the cell again resumes the display.
 
-Model weights download automatically the first time each session uses them (about 15 GB), so the first job stays on `reconstructing` for several minutes. Scenes are saved on the runtime's local disk (`/content/scenetiq-data`), and logs are not saved anywhere. **When the runtime disconnects or is deleted, all Scenes are lost:** run the notebook again and upload them again.
+Model weights download the first time each session uses them (about 15 GB), so the first job stays on `reconstructing` for several minutes.
 
-## 3. Open the frontend
+**Scenes are stored on the runtime's local disk, and logs are not saved anywhere. When the runtime disconnects or is deleted, all Scenes are lost:** run the notebook again and upload them again.
 
-1. Copy `frontend/.env.example` to `frontend/.env`, then set `VITE_BACKEND_URL` to `https://<your tunnel hostname>` and `VITE_BACKEND_TOKEN` to your `SCENETIQ_TOKEN`.
-2. Start the frontend. Restart it after any change to `.env`.
+## 2. Open the frontend
+
+1. Copy `frontend/.env.example` to `frontend/.env`, then set:
+   - `VITE_BACKEND_URL` to `https://<your tunnel hostname>`
+   - `VITE_BACKEND_TOKEN` to your `SCENETIQ_TOKEN`
+2. Start the frontend, and restart it after any change to `.env`:
 
    ```bash
    npm --prefix frontend install
    npm --prefix frontend run dev
    ```
+
 3. Open http://localhost:3000.
 
 Vite compiles these values into the JavaScript bundle, so anyone who can load a build can read the token. Do not host a build publicly.
 
-## 4. Use it
+The header shows the backend's status from when the page loaded. Click **Ping** to check again. **Offline** usually means the Colab runtime or the tunnel has stopped.
 
-The header shows the backend's status from when the page loaded; click **Ping** to check again. **Offline** usually means the Colab runtime or the tunnel has stopped.
+## 3. Create a Scene
 
-1. **New Scene:** name the Scene and select JPG/PNG photos, between `min_views` and `max_views` of `CONFIG`. Before anything is sent, the browser turns each photo upright, shrinks it to at most `upload_max_side` px (2048 by default), and re-encodes it without metadata (GPS, camera details). The preview shows every photo with its size before and after; remove any photo with ×.
-2. **Processing:** watch the progress through each stage, with the time each stage took and the total. Notes below the stages say how many Views were reconstructed, how many objects were found and named, and whether the Scene could not be levelled (then "above", "on" and the like may be wrong). Only one Scene is processed at a time. **Cancel job** stops it at the next checkpoint (the end of the current stage, photo or object; a model call already running is not interrupted) and deletes its photos; the Scene stays in the list as cancelled until you delete it. Running Scenes can also be cancelled from the Scene list.
-3. **Viewer:**
-   - The Scene fills the browser window. **Full screen** expands it to the whole display (Esc to leave), and **← Scenes** goes back.
-   - Drag to orbit, right-drag to pan, scroll to zoom.
-   - Type a Query to colour the matching objects with a heatmap: the best Match is red, and a Match is cooler the further its score is below the best one's; the rest of the Scene keeps its own colours. A score compares a Match with the best one of the same Query; it says nothing absolute. Only objects that score close enough to the best are returned (`query_score_ratio` of `CONFIG`), so a Query can return fewer than asked. **Results to show** in Display sets the most that are returned (`query_top_k` of `CONFIG`, 5 by default, at most `query_max_top_k`) and re-runs the shown Query. A key in the bottom-right corner shows the colour scale. Hover over a coloured object (tap on a touch screen) to see its name, read from the photos by a vision-language model. A Query always returns a Match when the Scene has objects, even if none fits; judge it by the name. A Query in English or Vietnamese can also pick an object by where it is, such as "the box on the shelf", "the chair nearest the window" or "the largest table". Each Query first waits for the vision-language model to read it, and the first Query after the backend starts also waits for that model to load.
-   - **Instance labels** gives each object its own colour, to check how the Scene was split and named; hover over an object (tap on a touch screen) to see its name beside the pointer. Black objects got no name; grey points belong to no object. Clear a Query first; its colours take priority.
-   - **Points** makes the points larger or smaller; the browser remembers the setting.
-4. **Scenes:** reopen or delete processed Scenes. Each finished Scene shows how many objects (Instances) it has and how long it took to process.
+1. Click **New Scene**, name the Scene, and select JPG/PNG photos. The number of photos must be between `min_views` and `max_views` in `CONFIG`.
+2. Check the preview. Each photo is shown with its size before and after processing. The browser turns each photo upright, shrinks it to at most `upload_max_side` px (2048 by default), and removes metadata such as GPS. Remove any photo with ×.
+3. Click **Build 3D scene**. Only one Scene is processed at a time.
 
 **Photo tips:**
 - Nothing in the scene should move between photos.
 - Walk around the space instead of turning on the spot.
 - Keep plenty of overlap between photos, use even light, and avoid blur.
 
-## Try it locally without a GPU
+## 4. Follow the processing
 
-The fake pipeline returns a small fixed scene. It ignores the uploaded photos and answers `red chair`, `table`, `lamp` and `chair`.
+The Processing page shows each stage, the time it took, and the total. Notes below the stages report how many Views were reconstructed, how many objects were found and named, and whether the Scene could not be levelled. If it could not, "above", "on" and similar Queries may be wrong.
 
-```bash
-SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001
-```
+To stop a job, click **Cancel job** (on the Processing page; you can also cancel from the Scene list). It stops at the next checkpoint (the end of the current stage, photo or object). A model call already running is not interrupted. The job's photos are then deleted, and the Scene stays in the list as cancelled until you delete it.
 
-Run the frontend as in step 3, using `VITE_BACKEND_URL=http://localhost:8001` and `VITE_BACKEND_TOKEN=dev`.
+## 5. View and search a Scene
 
-## Measure Query quality
+- The Scene fills the browser window. Click **Full screen** to use the whole display (Esc to leave), and **← Scenes** to go back.
+- Navigate with the mouse: drag to orbit, right-drag to pan, scroll to zoom.
+- **Points** sets the point size. The browser remembers the setting.
 
-The Query settings are starting guesses. To check them, write down by hand which objects a few Queries should return, then score a running backend against that list:
+### Search with a Query
 
-```bash
-export SCENETIQ_TOKEN=<token>
-uv run python -m scenetiq.evaluation --url <backend URL> --instances <scene id>   # ids and names to label from
-uv run python -m scenetiq.evaluation --url <backend URL> --labels labels.json
-```
+Type a Query to colour the matching objects with a heatmap:
 
-`labels.json` is a list such as `[{"scene_id": "<scene id>", "query": "cái ghế", "instance_ids": [3, 7]}]`. The tool prints, per Query and on average, the share of returned objects that were right (precision), the share of wanted objects that were found (recall), and whether the best one was right.
+- The best Match is red. A Match is cooler the further its score is below the best one's. The rest of the Scene keeps its own colours.
+- A score compares a Match with the best one for the same Query. It says nothing absolute.
+- Only objects that score close enough to the best are returned, so a Query can return fewer objects than you asked for. A Query whose object is not in the Scene (a negative Query) returns nothing.
+- **Results to show** (in Display) sets the most Matches returned, and re-runs the Query.
+- The key in the bottom-right corner shows the colour scale.
+- Hover over a coloured object (tap on a touch screen) to see its name. The names are read from the photos by a vision-language model.
+- A Query in English or Vietnamese can also refer to an object by position, such as "the box on the shelf", "the chair nearest the window" or "the largest table".
+- Each Query waits for the vision-language model to read it. The first Query after the backend starts also waits for that model to load.
 
-## License note
+### Check the object split with Instance labels
 
-The Depth Anything 3 weights used here are licensed CC BY-NC 4.0, so the real pipeline is for **non-commercial use only**.
+Turn on **Instance labels** to give each object its own colour and check how the Scene was split and named. Hover over an object (tap on a touch screen) to see its name beside the pointer. Black objects have no name, and grey points belong to no object. Clear any Query first, because its colours take priority.
+
+## 6. Manage Scenes
+
+In the **Scenes** list, open a processed Scene to view it. To delete one, use **Delete scene** in its card's menu; this cannot be undone. Each finished Scene shows its number of objects (Instances) and how long it took to process.
