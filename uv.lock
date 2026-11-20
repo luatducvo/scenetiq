@@ -1029,6 +1029,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "gradio" },
+    { name = "huggingface-hub" },
 ]
 
 [package.dev-dependencies]
@@ -1044,6 +1045,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.165.0" },
     { name = "gradio", specifier = ">=6.32.0" },
+    { name = "huggingface-hub", specifier = ">=2.4.0" },
 ]
 
 [package.metadata.requires-dev]
