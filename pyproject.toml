@@ -18,20 +18,20 @@ dependencies = [
 
 [project.optional-dependencies]
 # GPU model stack of the real Pipeline. `uv sync` does not select it; Colab installs it from the
-# exported lock (see docs/agents/gpu-stack.md). torch and torchvision come from Colab, not from here.
+# exported lock (see CLAUDE.md, GPU stack). torch and torchvision come from Colab, not from here.
 gpu = [
     "open3d==0.20.0",
-    # Depth Anything 3 from our fork, which fixes its packaging (ADR 0013); the fork declares its
+    # Depth Anything 3 from our fork, which fixes its packaging (ADR 0001); the fork declares its
     # dependencies. Code Apache-2.0; DA3NESTED-GIANT-LARGE-1.1 weights CC BY-NC 4.0, see ADR 0001.
     "depth-anything-3 @ git+https://github.com/luatducvo/Depth-Anything-3.git@879fcab51a72518a9249989e6dd352a9aac32f7d",
     # SAM2 from Meta's official repo (the PyPI "sam2" package is a third-party upload; do not use it)
     "sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4",
-    # GeoCalib for the Aligning stage (ADR 0007; code Apache-2.0, weights CC BY 4.0, fetched at run time)
+    # GeoCalib for the Aligning stage (ADR 0005; code Apache-2.0, weights CC BY 4.0, fetched at run time)
     "geocalib @ git+https://github.com/cvg/GeoCalib.git@1dedb29f94fc11b896c5f572005978aeebccd67f",
     # Vendored MV3DIS
     "tqdm>=4.66",
     # SigLIP2, Qwen3-VL-8B-Instruct and Qwen3-Embedding-0.6B (all Apache-2.0) via transformers;
-    # Qwen3-VL needs transformers >= 4.57 (ADR 0008)
+    # Qwen3-VL needs transformers >= 4.57 (ADR 0006)
     "transformers==5.22.2",
     # JSON-schema constrained decoding for the Captioning stage (Apache-2.0).
     "xgrammar==0.2.8",

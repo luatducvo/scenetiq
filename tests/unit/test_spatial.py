@@ -79,7 +79,7 @@ def test_far_from_grows_with_the_gap_between_boxes():
     assert far_from(_UNIT, apart, extent=10.0, falloff=0.1) == pytest.approx(0.864665, abs=1e-6)
 
 
-# Vertical Relations. Up is -Y (ADR 0007): a smaller y is higher, a box's top is its minimum
+# Vertical Relations. Up is -Y (ADR 0005): a smaller y is higher, a box's top is its minimum
 # y and its bottom its maximum y. Extent 10 and falloff 0.1 give a scale of 1: exp(-d).
 
 _DESK = _box(0, [0, 0, 0], [2, 1, 1])  # top at y = 0, footprint x 0-2, z 0-1
@@ -441,7 +441,7 @@ def test_tied_heights_share_the_tallest_score():
     assert [tallest(c, candidates) for c in candidates] == [1.0, 1.0, 0.0]
 
 
-# lowest: the height of the box's bottom. Up is -Y (ADR 0007), so a bottom (maximum y) at
+# lowest: the height of the box's bottom. Up is -Y (ADR 0005), so a bottom (maximum y) at
 # y = 3 is lower than one at y = 1.
 def _shelf(iid: int, bottom_y: float) -> Instance:
     return _box(iid, [0, bottom_y - 0.2, 0], [1, bottom_y, 1])

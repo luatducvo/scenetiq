@@ -116,7 +116,7 @@ export async function pingBackend(cfg: BackendConfig): Promise<BackendHealth> {
 export interface BackendOptions {
   min_views: number
   max_views: number
-  /** Photos are shrunk so that their long side is at most this many pixels (ADR 0010). */
+  /** Photos are shrunk so that their long side is at most this many pixels (ADR 0004). */
   upload_max_side: number
   /** JPEG quality in (0, 1] that photos are re-encoded at. */
   upload_jpeg_quality: number
@@ -186,7 +186,7 @@ async function sendView(
  * Send a whole Capture, one request per View, and start its Scene's job.
  *
  * Views go separately because Cloudflare refuses large request bodies (see
- * docs/adr/0006). The first View that fails for good cancels the rest.
+ * docs/adr/0003). The first View that fails for good cancels the rest.
  */
 export async function createScene(
   cfg: BackendConfig,
@@ -272,7 +272,7 @@ export interface InstanceInfo {
   centroid: [number, number, number]
   bbox_min: [number, number, number]
   bbox_max: [number, number, number]
-  /** The Name of the Instance's Caption, or null when it has none (ADR 0008). */
+  /** The Name of the Instance's Caption, or null when it has none (ADR 0006). */
   name: string | null
 }
 
@@ -282,7 +282,7 @@ export interface AnchorInfo {
   phrase: string
 }
 
-/** One of the Instances returned for a Query, at most K (ADR 0009, ADR 0011). */
+/** One of the Instances returned for a Query, at most K (ADR 0006, ADR 0007). */
 export interface MatchInfo {
   instance_id: number
   /**

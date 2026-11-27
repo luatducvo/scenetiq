@@ -1,5 +1,5 @@
 /**
- * Prepare photos in the browser before upload (ADR 0010): apply the EXIF orientation,
+ * Prepare photos in the browser before upload (ADR 0004): apply the EXIF orientation,
  * shrink to a maximum long side, and re-encode as JPEG, which drops every metadata field.
  */
 
