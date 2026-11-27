@@ -5,6 +5,7 @@ Python 3.13 with **uv** (never `uv sync` on Colab, see [GPU stack](docs/agents/g
 ## Commands
 
 ```bash
+uv run pre-commit install         # once per clone: lint + ty on commit, pytest + frontend build on push
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
 uv run pytest                      # CPU suite; `-m gpu` = GPU smoke tests (Colab only)
