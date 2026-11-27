@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Constraint, Instance, Relation
+from scenetiq.domain.query import Constraint, Relation
+from scenetiq.domain.scene import Instance
 from scenetiq.query.spatial import (
     RELATION_SCORES,
     RelationContext,

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from scenetiq.runtime_log import JobProgress, UploadProgress
+from scenetiq.api.progress import JobProgress, UploadProgress
 
 
 def progress_bar(fraction: float, width: int) -> str:

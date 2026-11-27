@@ -15,22 +15,13 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
 from scenetiq.api.jobs import JobBusyError, JobRunner
+from scenetiq.api.progress import UploadProgress, report_progress
 from scenetiq.config import Settings
-from scenetiq.domain import (
-    Aspect,
-    CaptionEncoder,
-    Capture,
-    ParsedQuery,
-    Pipeline,
-    QueryObject,
-    QueryParseError,
-    QueryParser,
-    TextEncoder,
-    View,
-)
+from scenetiq.domain.ports import CaptionEncoder, Pipeline, QueryParser, TextEncoder
+from scenetiq.domain.query import ParsedQuery, QueryObject, QueryParseError
+from scenetiq.domain.scene import Aspect, Capture, View
 from scenetiq.query.ranking import QUERY_LOGGER, Match, MissingEmbeddingsError, run_query
 from scenetiq.query.spatial import run_spatial_query
-from scenetiq.runtime_log import UploadProgress, report_progress
 from scenetiq.storage.artifacts import INSTANCE_IDS_FILE, POINTS_FILE, load_instances
 from scenetiq.storage.scene_store import (
     JobEvent,

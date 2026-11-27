@@ -4,8 +4,9 @@ import logging
 import threading
 from dataclasses import replace
 
-from scenetiq.domain import Capture, JobCancelledError, Pipeline, Stage
-from scenetiq.runtime_log import JobProgress, report_progress
+from scenetiq.api.progress import JobProgress, report_progress
+from scenetiq.domain.ports import JobCancelledError, Pipeline
+from scenetiq.domain.scene import Capture, Stage
 from scenetiq.storage.scene_store import JobStatus, SceneRecord, SceneStore
 
 logger = logging.getLogger(__name__)

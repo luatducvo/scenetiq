@@ -4,8 +4,8 @@ from collections.abc import Callable
 import numpy as np
 from fastapi.testclient import TestClient
 
-from scenetiq.fakes import FakePipeline
 from scenetiq.storage.artifacts import decode_ply
+from tests.stubs.components import StubPipeline
 
 from .helpers import AUTH, upload, wait_for_job
 
@@ -20,7 +20,7 @@ def test_point_cloud_of_succeeded_scene_is_binary_ply_with_every_point(client: T
     assert resp.headers["content-type"] == "application/octet-stream"
     assert resp.content.startswith(b"ply\nformat binary_little_endian 1.0\n")
     points, colors = decode_ply(resp.content)
-    # Known values of the fake Reconstruction.
+    # Known values of the stub Reconstruction.
     assert points.shape == (12, 3)
     np.testing.assert_allclose(points[3], [0.5, 1.0, 1.0])
     np.testing.assert_allclose(points[11], [9.0, 9.0, 0.0])
@@ -33,7 +33,7 @@ def test_point_cloud_of_unknown_scene_is_404(client: TestClient):
 
 def test_point_cloud_before_job_succeeds_is_409(make_client: Callable[..., TestClient]):
     gate = threading.Event()
-    client = make_client(pipeline=FakePipeline(gate=gate))
+    client = make_client(pipeline=StubPipeline(gate=gate))
     body = upload(client)
 
     resp = client.get(f"/scenes/{body['scene_id']}/points", headers=AUTH)
@@ -45,7 +45,7 @@ def test_point_cloud_before_job_succeeds_is_409(make_client: Callable[..., TestC
 
 
 def test_point_cloud_of_failed_scene_is_409(make_client: Callable[..., TestClient]):
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("boom")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("boom")))
     body = upload(client)
     wait_for_job(client, body["job_id"])
     assert client.get(f"/scenes/{body['scene_id']}/points", headers=AUTH).status_code == 409

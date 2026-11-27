@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import SuperpointOptions
-from scenetiq.domain import FloatArray
+from scenetiq.domain.scene import FloatArray
 from scenetiq.vendor.segmentator.segmentator import segment
 
 

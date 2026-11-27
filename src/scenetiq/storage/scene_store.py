@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
-from scenetiq.domain import Reconstruction
+from scenetiq.domain.scene import Reconstruction
 from scenetiq.storage.artifacts import save_reconstruction
 
 INTERRUPTED_REASON = "interrupted by restart"

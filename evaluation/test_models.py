@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Capture
+from scenetiq.domain.scene import Capture
 
 
 def test_siglip2_encodes_query_text_to_a_unit_vector(encoder):
@@ -38,7 +38,7 @@ def test_qwen3_embedding_ranks_the_description_a_query_describes_first(caption_e
 def test_geocalib_up_points_up_in_upright_photos(smoke_capture: Capture):
     from PIL import Image
 
-    from scenetiq.pipeline.alignment import GeoCalibUpEstimator
+    from scenetiq.pipeline.stages.alignment import GeoCalibUpEstimator
 
     with Image.open(smoke_capture.views[0].path) as photo:
         image = np.asarray(photo.convert("RGB").resize((504, 378)), dtype=np.uint8)

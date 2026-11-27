@@ -8,8 +8,8 @@ import pytest
 
 from scenetiq.config import AlignmentOptions
 from scenetiq.deployment.processes import LOG_CONFIG_PATH
-from scenetiq.domain import Camera
-from scenetiq.pipeline.alignment import (
+from scenetiq.domain.scene import Camera
+from scenetiq.pipeline.stages.alignment import (
     ALIGNMENT_LOGGER,
     PlaneCandidate,
     apply_rotation,
@@ -19,7 +19,7 @@ from scenetiq.pipeline.alignment import (
     rotation_between,
     select_plane,
 )
-from scenetiq.pipeline.embedding import visible_pixels
+from scenetiq.pipeline.stages.embedding import visible_pixels
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 QUARTER_TURN_ABOUT_X = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])

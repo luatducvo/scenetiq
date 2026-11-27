@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scenetiq.domain import Aspect, Caption, FloatArray, Instance, Reconstruction
+from scenetiq.domain.scene import Aspect, Caption, FloatArray, Instance, Reconstruction
 
 POINTS_FILE = "points.ply"
 INSTANCE_IDS_FILE = "instance_ids.bin"

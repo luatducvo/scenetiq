@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from scenetiq.domain import Aspect, Caption, Instance, Reconstruction
+from scenetiq.domain.scene import Aspect, Caption, Instance, Reconstruction
 from scenetiq.storage.artifacts import CAPTION_EMBEDDINGS_FILE, load_instances, save_reconstruction
 
 

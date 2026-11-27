@@ -5,19 +5,18 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from scenetiq.domain import (
+from scenetiq.domain.geometry import build_instances, l2_normalize
+from scenetiq.domain.ports import JobReporter
+from scenetiq.domain.query import ParsedQuery, QueryParseError
+from scenetiq.domain.scene import (
     Aspect,
     Caption,
     Capture,
     EmbeddedCaption,
     FloatArray,
-    JobReporter,
-    ParsedQuery,
-    QueryParseError,
     Reconstruction,
     Stage,
 )
-from scenetiq.geometry import build_instances, l2_normalize
 
 EMBEDDING_DIM = 8
 CAPTION_EMBEDDING_DIM = 7
@@ -29,9 +28,9 @@ def _basis(i: int, dim: int = EMBEDDING_DIM) -> FloatArray:
     return v
 
 
-FAKE_INSTANCE_EMBEDDINGS: dict[int, FloatArray] = {0: _basis(0), 1: _basis(1), 2: _basis(2)}
+STUB_INSTANCE_EMBEDDINGS: dict[int, FloatArray] = {0: _basis(0), 1: _basis(1), 2: _basis(2)}
 
-FAKE_TEXT_EMBEDDINGS: dict[str, FloatArray] = {
+STUB_TEXT_EMBEDDINGS: dict[str, FloatArray] = {
     "red chair": _basis(0),
     "table": _basis(1),
     "lamp": _basis(2),
@@ -52,7 +51,7 @@ def _caption_basis(i: int) -> FloatArray:
     return _basis(i, CAPTION_EMBEDDING_DIM)
 
 
-FAKE_CAPTIONS: dict[int, EmbeddedCaption] = {
+STUB_CAPTIONS: dict[int, EmbeddedCaption] = {
     0: EmbeddedCaption(
         Caption(
             "chair",
@@ -80,7 +79,7 @@ FAKE_CAPTIONS: dict[int, EmbeddedCaption] = {
     ),
 }
 
-FAKE_CAPTION_QUERY_EMBEDDINGS: dict[str, FloatArray] = {
+STUB_CAPTION_QUERY_EMBEDDINGS: dict[str, FloatArray] = {
     "red chair": _caption_basis(0),
     "chair": _caption_basis(0),
     "table": _caption_basis(1),
@@ -95,7 +94,7 @@ FAKE_CAPTION_QUERY_EMBEDDINGS: dict[str, FloatArray] = {
 UNKNOWN_CAPTION_QUERY_EMBEDDING = _caption_basis(6)
 
 
-def fake_reconstruction(with_captions: bool = True) -> Reconstruction:
+def stub_reconstruction(with_captions: bool = True) -> Reconstruction:
     points = np.array(
         [
             [0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [0.0, 1.0, 0.0], [0.5, 1.0, 1.0],
@@ -114,16 +113,16 @@ def fake_reconstruction(with_captions: bool = True) -> Reconstruction:
         instances=build_instances(
             points,
             instance_ids,
-            FAKE_INSTANCE_EMBEDDINGS,
-            FAKE_CAPTIONS if with_captions else None,
+            STUB_INSTANCE_EMBEDDINGS,
+            STUB_CAPTIONS if with_captions else None,
         ),
     )
 
 
-FAKE_NOTE = "Reconstructed the fake Scene."
+STUB_NOTE = "Reconstructed the stub Scene."
 
 
-class FakePipeline:
+class StubPipeline:
     def __init__(
         self,
         reconstruction: Reconstruction | None = None,
@@ -140,30 +139,30 @@ class FakePipeline:
         for i, stage in enumerate(Stage):
             reporter.stage(stage)
             if i == 0:
-                reporter.note(FAKE_NOTE)
+                reporter.note(STUB_NOTE)
             if i == 0 and self.gate is not None:
                 self.gate.wait(timeout=10)
             if i == 0 and self.error is not None:
                 raise self.error
-        return self.reconstruction or fake_reconstruction()
+        return self.reconstruction or stub_reconstruction()
 
 
-class FakeTextEncoder:
+class StubTextEncoder:
     def encode(self, text: str) -> FloatArray:
-        return FAKE_TEXT_EMBEDDINGS.get(text.strip().lower(), UNKNOWN_TEXT_EMBEDDING)
+        return STUB_TEXT_EMBEDDINGS.get(text.strip().lower(), UNKNOWN_TEXT_EMBEDDING)
 
 
-class FakeCaptionEncoder:
+class StubCaptionEncoder:
     def encode_documents(self, texts: list[str]) -> FloatArray:
         return np.stack([self.encode_query(t) for t in texts]).astype(np.float32)
 
     def encode_query(self, text: str) -> FloatArray:
-        return FAKE_CAPTION_QUERY_EMBEDDINGS.get(
+        return STUB_CAPTION_QUERY_EMBEDDINGS.get(
             text.strip().lower(), UNKNOWN_CAPTION_QUERY_EMBEDDING
         )
 
 
-class FakeQueryParser:
+class StubQueryParser:
     def __init__(self, prepared: Mapping[str, ParsedQuery | QueryParseError] | None = None) -> None:
         self.prepared = {t.strip().lower(): p for t, p in (prepared or {}).items()}
 

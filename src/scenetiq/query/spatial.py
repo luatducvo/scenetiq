@@ -8,14 +8,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from scenetiq.config import SpatialOptions
-from scenetiq.domain import (
-    Aspect,
-    Constraint,
-    Instance,
-    ParsedQuery,
-    QueryObject,
-    Relation,
-)
+from scenetiq.domain.query import Constraint, ParsedQuery, QueryObject, Relation
+from scenetiq.domain.scene import Aspect, Instance
 from scenetiq.query.ranking import Anchor, Match
 
 

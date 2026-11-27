@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from fastapi.testclient import TestClient
 
-from scenetiq.fakes import FakePipeline
+from tests.stubs.components import StubPipeline
 
 from .helpers import AUTH, upload
 
@@ -20,7 +20,7 @@ def test_health_needs_the_token(client: TestClient):
 
 def test_health_reports_a_running_job_until_it_ends(make_client: Callable[..., TestClient]):
     gate = threading.Event()
-    client = make_client(pipeline=FakePipeline(gate=gate))
+    client = make_client(pipeline=StubPipeline(gate=gate))
     upload(client)
 
     assert client.get("/health", headers=AUTH).json()["job_running"] is True

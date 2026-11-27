@@ -2,8 +2,8 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import MergingOptions
-from scenetiq.domain import FloatArray
-from scenetiq.pipeline.masking import ViewMasks
+from scenetiq.domain.scene import FloatArray
+from scenetiq.pipeline.stages.masking import ViewMasks
 from scenetiq.pipeline.view_data import ViewData
 
 MIN_MERGE_POINTS = 8

@@ -9,9 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from scenetiq.api.progress import PROGRESS_LOGGER, JobProgress, UploadProgress, parse_progress
 from scenetiq.config import Settings
-from scenetiq.fakes import FakePipeline
-from scenetiq.runtime_log import PROGRESS_LOGGER, JobProgress, UploadProgress, parse_progress
+from tests.stubs.components import StubPipeline
 
 from .helpers import AUTH, TOKEN, post_view, staged_capture, start_capture, upload, wait_for_job
 
@@ -46,7 +46,7 @@ def test_configured_view_limits_apply_to_the_uploaded_photos(
 
 
 def test_view_stride_gives_the_pipeline_every_nth_view_from_the_first(
-    make_client: Callable[..., TestClient], pipeline: FakePipeline, tmp_path: Path
+    make_client: Callable[..., TestClient], pipeline: StubPipeline, tmp_path: Path
 ):
     client = make_client(settings=Settings(tmp_path / "s", token=TOKEN, view_stride=3))
     body = upload(client, 10)
@@ -63,9 +63,11 @@ def test_non_image_file_is_rejected_with_its_name(client: TestClient):
 def test_file_whose_content_does_not_match_its_extension_is_rejected(client: TestClient):
     buf = io.BytesIO()
     Image.new("RGB", (4, 4)).save(buf, format="BMP")
-    resp = post_view(client, start_capture(client), 0, filename="fake.jpg", data=buf.getvalue())
+    resp = post_view(
+        client, start_capture(client), 0, filename="not_a_photo.jpg", data=buf.getvalue()
+    )
     assert resp.status_code == 415
-    assert "fake.jpg" in resp.json()["detail"]
+    assert "not_a_photo.jpg" in resp.json()["detail"]
 
 
 def test_multi_picture_jpeg_from_a_phone_is_accepted(client: TestClient):
@@ -105,7 +107,7 @@ def test_capture_missing_a_view_creates_no_scene(client: TestClient):
 
 
 def test_retried_view_is_counted_once_even_with_another_extension(
-    client: TestClient, pipeline: FakePipeline
+    client: TestClient, pipeline: StubPipeline
 ):
     capture_id = start_capture(client, 10)
     buf = io.BytesIO()
@@ -125,7 +127,7 @@ def test_retried_view_is_counted_once_even_with_another_extension(
 
 
 def test_views_sent_concurrently_and_out_of_order_all_reach_the_pipeline(
-    client: TestClient, pipeline: FakePipeline
+    client: TestClient, pipeline: StubPipeline
 ):
     capture_id = start_capture(client, 30)
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -209,7 +211,7 @@ def test_failed_job_reports_the_stage_it_failed_at(
     make_client: Callable[..., TestClient], caplog: pytest.LogCaptureFixture
 ):
     caplog.set_level(logging.INFO, logger=PROGRESS_LOGGER)
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("boom")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("boom")))
 
     wait_for_job(client, upload(client)["job_id"])
     client.app.state.runner.join(5)  # type: ignore[attr-defined]
@@ -257,7 +259,7 @@ def test_job_succeeds_after_reporting_every_stage(
 ):
     seen: list[str] = []
     gate = threading.Event()
-    pipeline = FakePipeline(gate=gate)
+    pipeline = StubPipeline(gate=gate)
     client = make_client(pipeline=pipeline)
 
     body = upload(client)
@@ -274,7 +276,7 @@ def test_job_succeeds_after_reporting_every_stage(
     assert seen[0] in ("queued", "running")
 
 
-def test_pipeline_receives_every_uploaded_view(client: TestClient, pipeline: FakePipeline):
+def test_pipeline_receives_every_uploaded_view(client: TestClient, pipeline: StubPipeline):
     body = upload(client, 12)
     wait_for_job(client, body["job_id"])
     (capture,) = pipeline.captures
@@ -285,7 +287,7 @@ def test_pipeline_receives_every_uploaded_view(client: TestClient, pipeline: Fak
 def test_failing_pipeline_marks_job_failed_with_reason(
     make_client: Callable[..., TestClient],
 ):
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("DA3 ran out of memory")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("DA3 ran out of memory")))
     body = upload(client)
     done = wait_for_job(client, body["job_id"])
     assert done["status"] == "failed"
@@ -297,7 +299,7 @@ def test_capture_is_refused_before_any_view_is_sent_while_a_job_runs(
     make_client: Callable[..., TestClient],
 ):
     gate = threading.Event()
-    client = make_client(pipeline=FakePipeline(gate=gate))
+    client = make_client(pipeline=StubPipeline(gate=gate))
     first = upload(client)
 
     resp = client.post("/captures", json={"view_count": 10}, headers=AUTH)

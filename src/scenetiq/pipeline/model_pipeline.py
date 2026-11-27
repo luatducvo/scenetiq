@@ -10,31 +10,26 @@ from scenetiq.config import (
     MergingOptions,
     SuperpointOptions,
 )
-from scenetiq.domain import (
-    CaptionEncoder,
-    Capture,
-    JobReporter,
-    Reconstruction,
-    Stage,
-)
-from scenetiq.geometry import build_instances
-from scenetiq.pipeline.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
-from scenetiq.pipeline.captioning import Captioner, caption_instances, embed_descriptions
-from scenetiq.pipeline.embedding import ImageEncoder, embed_instances, plan_views
-from scenetiq.pipeline.fusion import fuse
+from scenetiq.domain.geometry import build_instances
+from scenetiq.domain.ports import CaptionEncoder, JobReporter
+from scenetiq.domain.scene import Capture, Reconstruction, Stage
 from scenetiq.pipeline.gpu_memory import free_gpu_memory, report_merge_input, track_stage_memory
-from scenetiq.pipeline.masking import SAM2Masker
-from scenetiq.pipeline.merging import merge_instances
 from scenetiq.pipeline.models.qwen3_embedding import Qwen3TextEmbedder
 from scenetiq.pipeline.models.qwen3_vl import QwenVLCaptioner
 from scenetiq.pipeline.models.siglip2 import SigLIP2Encoder
-from scenetiq.pipeline.primitives import voxel_primitives
-from scenetiq.pipeline.reconstructing import DA3Reconstructor, Reconstructor
-from scenetiq.pipeline.superpoints import mesh_superpoints
+from scenetiq.pipeline.stages.alignment import GeoCalibUpEstimator, UpEstimator, gravity_align
+from scenetiq.pipeline.stages.captioning import Captioner, caption_instances, embed_descriptions
+from scenetiq.pipeline.stages.embedding import ImageEncoder, embed_instances, plan_views
+from scenetiq.pipeline.stages.fusion import fuse
+from scenetiq.pipeline.stages.masking import SAM2Masker
+from scenetiq.pipeline.stages.merging import merge_instances
+from scenetiq.pipeline.stages.primitives import voxel_primitives
+from scenetiq.pipeline.stages.reconstructing import DA3Reconstructor, Reconstructor
+from scenetiq.pipeline.stages.superpoints import mesh_superpoints
 
 
 @dataclass
-class RealPipelineOptions:
+class ModelPipelineOptions:
     fusion: FusionOptions = field(default_factory=FusionOptions)
     alignment: AlignmentOptions = field(default_factory=AlignmentOptions)
     superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
@@ -43,13 +38,13 @@ class RealPipelineOptions:
     captioning: CaptioningOptions = field(default_factory=CaptioningOptions)
 
 
-class RealPipeline:
+class ModelPipeline:
     def __init__(
         self,
         reconstructor: Reconstructor | None = None,
         masker: SAM2Masker | None = None,
         image_encoder: ImageEncoder | None = None,
-        options: RealPipelineOptions | None = None,
+        options: ModelPipelineOptions | None = None,
         up_estimator: UpEstimator | None = None,
         captioner: Captioner | None = None,
         caption_encoder: CaptionEncoder | None = None,
@@ -57,7 +52,7 @@ class RealPipeline:
         self.reconstructor = reconstructor or DA3Reconstructor()
         self.masker = masker or SAM2Masker()
         self.image_encoder = image_encoder or SigLIP2Encoder()
-        self.options = options or RealPipelineOptions()
+        self.options = options or ModelPipelineOptions()
         self.up_estimator = up_estimator or GeoCalibUpEstimator()
         self.captioner = captioner or QwenVLCaptioner(self.options.captioning)
         self.caption_encoder = caption_encoder or Qwen3TextEmbedder()

@@ -14,7 +14,7 @@ def test_labelled_queries_are_scored_against_the_query_endpoint(client: TestClie
     body = upload(client)
     assert wait_for_job(client, body["job_id"])["status"] == "succeeded"
     scene = body["scene_id"]
-    # The fake Scene: 0 is a chair, 1 a table, 2 a lamp. "wooden thing" returns the lamp
+    # The stub Scene: 0 is a chair, 1 a table, 2 a lamp. "wooden thing" returns the lamp
     # and then the table (worked out in test_query.py); only the table is wooden.
     labels = load_labels(
         json.dumps(

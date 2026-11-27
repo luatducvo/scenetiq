@@ -8,8 +8,8 @@ from PIL import Image
 
 from scenetiq.config import CaptioningOptions
 from scenetiq.deployment.processes import LOG_CONFIG_PATH
-from scenetiq.domain import Aspect, Camera, Caption
-from scenetiq.pipeline.captioning import (
+from scenetiq.domain.scene import Aspect, Camera, Caption
+from scenetiq.pipeline.stages.captioning import (
     CAPTION_SCHEMA,
     CAPTIONING_LOGGER,
     MAX_SYNONYMS,
@@ -19,7 +19,7 @@ from scenetiq.pipeline.captioning import (
     embed_descriptions,
     parse_caption,
 )
-from scenetiq.pipeline.embedding import PlannedView
+from scenetiq.pipeline.stages.embedding import PlannedView
 
 SOFA_REPLY = {
     "name": "sofa",

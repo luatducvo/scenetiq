@@ -1,6 +1,6 @@
 import numpy as np
 
-from scenetiq.pipeline.superpoints import mesh_superpoints
+from scenetiq.pipeline.stages.superpoints import mesh_superpoints
 
 
 def _grid(n: int, to_xyz) -> tuple[np.ndarray, np.ndarray]:

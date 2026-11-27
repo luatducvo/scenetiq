@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GPU model stack of the real Pipeline. `uv sync` does not select it; the GPU runtime installs it
+# GPU model stack of the Model Pipeline. `uv sync` does not select it; the GPU runtime installs it
 # from the exported lock (see CLAUDE.md, GPU stack). torch and torchvision come from the runtime.
 gpu = [
     "open3d==0.20.0",

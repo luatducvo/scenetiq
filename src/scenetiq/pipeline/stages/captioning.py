@@ -8,8 +8,9 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import CaptioningOptions
-from scenetiq.domain import Aspect, Camera, Caption, CaptionEncoder, EmbeddedCaption, FloatArray
-from scenetiq.pipeline.embedding import ViewPlans, crop_box, photo_pixels
+from scenetiq.domain.ports import CaptionEncoder
+from scenetiq.domain.scene import Aspect, Camera, Caption, EmbeddedCaption, FloatArray
+from scenetiq.pipeline.stages.embedding import ViewPlans, crop_box, photo_pixels
 
 CAPTIONING_LOGGER = "scenetiq.captioning"
 

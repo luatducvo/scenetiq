@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 
 from scenetiq.config import FusionOptions
-from scenetiq.domain import Camera
-from scenetiq.pipeline.fusion import fuse
+from scenetiq.domain.scene import Camera
+from scenetiq.pipeline.stages.fusion import fuse
 from scenetiq.pipeline.view_data import ViewData
 
 pytest.importorskip("open3d")

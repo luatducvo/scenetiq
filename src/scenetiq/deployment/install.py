@@ -54,28 +54,16 @@ def export_command(repo: Path, output: Path, excluded: list[str]) -> list[str]:
     return cmd
 
 
-def install_command(
-    repo: Path,
-    pipeline: str,
-    requirements: Path | None = None,
-    constraints: Path | None = None,
-) -> list[str]:
-    cmd = ["uv", "pip", "install", "--system", "-e", str(repo)]
-    if pipeline == "real":
-        if requirements is None or constraints is None:
-            raise ValueError("the real Pipeline needs the exported lock and the held constraints")
-        cmd += [
-            "--no-build-isolation-package", "sam-2",
-            "-r", str(requirements), "-c", str(constraints),
-        ]  # fmt: skip
-    return cmd
+def install_command(repo: Path, requirements: Path, constraints: Path) -> list[str]:
+    return [
+        "uv", "pip", "install", "--system", "-e", str(repo),
+        "--no-build-isolation-package", "sam-2",
+        "-r", str(requirements), "-c", str(constraints),
+    ]  # fmt: skip
 
 
-def install_environment(pipeline: str, base: Mapping[str, str] | None = None) -> dict[str, str]:
-    env = dict(os.environ if base is None else base, UV_NO_PROGRESS="1")
-    if pipeline == "real":
-        env["SAM2_BUILD_CUDA"] = "0"
-    return env
+def install_environment(base: Mapping[str, str] | None = None) -> dict[str, str]:
+    return dict(os.environ if base is None else base, UV_NO_PROGRESS="1", SAM2_BUILD_CUDA="0")
 
 
 class InstallProgress:
@@ -157,7 +145,6 @@ def _run_uv(
 
 def install_packages(
     repo: Path,
-    pipeline: str,
     show: Callable[[str], None] = print,
     tail_lines: int = 40,
 ) -> None:
@@ -169,10 +156,7 @@ def install_packages(
     progress.begin_resolve()
     show(progress.render(time.monotonic() - start))
 
-    env = install_environment(pipeline)
-    if pipeline != "real":
-        _run_uv(install_command(repo, pipeline), progress, start, show, tail_lines, env)
-        return
+    env = install_environment()
     with tempfile.TemporaryDirectory() as scratch:
         requirements = Path(scratch) / "requirements.txt"
         constraints = Path(scratch) / "held.txt"
@@ -181,9 +165,10 @@ def install_packages(
         _run_uv(
             export_command(repo, requirements, excluded), progress, start, show, tail_lines, env
         )
-        command = install_command(repo, pipeline, requirements, constraints)
+        command = install_command(repo, requirements, constraints)
         _run_uv(command, progress, start, show, tail_lines, env)
 
 
-def configured_pipeline(config: Mapping[str, Any]) -> str:
-    return Settings.from_overrides("", config).pipeline
+# Run before installing anything, so a mistake in the notebook's CONFIG costs no install time.
+def validate_config(config: Mapping[str, Any]) -> None:
+    Settings.from_overrides("", config)

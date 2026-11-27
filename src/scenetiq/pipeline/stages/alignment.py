@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import AlignmentOptions
-from scenetiq.domain import FloatArray
+from scenetiq.domain.scene import FloatArray
 from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 

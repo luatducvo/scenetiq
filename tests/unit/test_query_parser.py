@@ -2,14 +2,8 @@ import json
 
 import pytest
 
-from scenetiq.domain import (
-    Aspect,
-    Constraint,
-    ParsedQuery,
-    QueryObject,
-    QueryParseError,
-    Relation,
-)
+from scenetiq.domain.query import Constraint, ParsedQuery, QueryObject, QueryParseError, Relation
+from scenetiq.domain.scene import Aspect
 from scenetiq.query.parser import PARSE_SCHEMA, parse_prompt, read_parsed_query
 
 # The schema of the spec, written out by hand.

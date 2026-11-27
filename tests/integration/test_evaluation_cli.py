@@ -47,7 +47,7 @@ def _labels(tmp_path: Path, scene_id: str) -> Path:
 def test_the_cli_prints_each_query_score_and_the_summary(
     scene_id: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ):
-    # The fake Scene: 0 is a chair, 1 a table, 2 a lamp. "wooden thing" returns the lamp and
+    # The stub Scene: 0 is a chair, 1 a table, 2 a lamp. "wooden thing" returns the lamp and
     # then the table (worked out in test_query.py); only the table is wooden.
     code = cli.main(["--url", f"{BASE}/", "--labels", str(_labels(tmp_path, scene_id))])
     assert code == 0
@@ -73,7 +73,7 @@ def test_the_cli_lists_a_scenes_instances_with_name_and_centroid(
     scene_id: str, capsys: pytest.CaptureFixture[str]
 ):
     assert cli.main(["--url", BASE, "--instances", scene_id]) == 0
-    # Centroids are the means of the fake points; the lamp has no Caption.
+    # Centroids are the means of the stub points; the lamp has no Caption.
     pad = " " * 2
     assert capsys.readouterr().out.splitlines() == [
         "   0" + pad + "chair" + " " * 25 + pad + "(0.25, 0.50, 0.25)",

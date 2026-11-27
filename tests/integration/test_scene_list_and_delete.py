@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from fastapi.testclient import TestClient
 
-from scenetiq.fakes import FakePipeline
+from tests.stubs.components import StubPipeline
 
 from .helpers import AUTH, upload, wait_for_job
 
@@ -39,7 +39,7 @@ def test_deleting_unknown_scene_is_404(client: TestClient):
 
 def test_scene_whose_job_is_running_cannot_be_deleted(make_client: Callable[..., TestClient]):
     gate = threading.Event()
-    client = make_client(pipeline=FakePipeline(gate=gate))
+    client = make_client(pipeline=StubPipeline(gate=gate))
     body = upload(client)
 
     resp = client.delete(f"/scenes/{body['scene_id']}", headers=AUTH)
@@ -51,7 +51,7 @@ def test_scene_whose_job_is_running_cannot_be_deleted(make_client: Callable[...,
 
 
 def test_failed_scene_can_be_deleted(make_client: Callable[..., TestClient]):
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("boom")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("boom")))
     body = upload(client)
     wait_for_job(client, body["job_id"])
     assert client.delete(f"/scenes/{body['scene_id']}", headers=AUTH).status_code == 204
@@ -62,13 +62,13 @@ def test_a_finished_scene_lists_its_instance_count_and_when_it_ran(client: TestC
 
     [scene] = client.get("/scenes", headers=AUTH).json()
 
-    # The fake Reconstruction has three Instances: a chair, a table and a lamp.
+    # The stub Reconstruction has three Instances: a chair, a table and a lamp.
     assert scene["instance_count"] == 3
     assert (scene["started_at"], scene["finished_at"]) == (job["started_at"], job["finished_at"])
 
 
 def test_a_failed_scene_lists_no_instance_count(make_client: Callable[..., TestClient]):
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("out of memory")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("out of memory")))
     wait_for_job(client, upload(client)["job_id"])
 
     [scene] = client.get("/scenes", headers=AUTH).json()

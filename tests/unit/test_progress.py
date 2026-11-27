@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from scenetiq.runtime_log import (
+from scenetiq.api.progress import (
     HidePolling,
     JobProgress,
     UploadProgress,

@@ -7,25 +7,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scenetiq.config import Settings, SpatialOptions
-from scenetiq.domain import (
-    Aspect,
-    Caption,
-    Constraint,
-    EmbeddedCaption,
-    FloatArray,
-    ParsedQuery,
-    QueryObject,
-    QueryParseError,
-    Reconstruction,
-    Relation,
-)
-from scenetiq.fakes import FakePipeline, FakeQueryParser
-from scenetiq.geometry import build_instances, l2_normalize
+from scenetiq.domain.geometry import build_instances, l2_normalize
+from scenetiq.domain.query import Constraint, ParsedQuery, QueryObject, QueryParseError, Relation
+from scenetiq.domain.scene import Aspect, Caption, EmbeddedCaption, FloatArray, Reconstruction
 from scenetiq.query.ranking import QUERY_LOGGER
+from tests.stubs.components import StubPipeline, StubQueryParser
 
 from .helpers import AUTH, TOKEN, upload, wait_for_job
 
-# Image embeddings against the fake encoder's "chair" (0.8, 0, 0, 0.6, ...) and "lamp" (basis 2).
+# Image embeddings against the stub encoder's "chair" (0.8, 0, 0, 0.6, ...) and "lamp" (basis 2).
 CHAIR_FIRST = l2_normalize([1, 0, 0, 0, 0, 0, 0, 0])  # chair 0.8, lamp 0
 CHAIR_SECOND = l2_normalize([0.6, 0, 0, 0, 0.8, 0, 0, 0])  # chair 0.6 * 0.8 = 0.48, lamp 0
 LAMP_FIRST = l2_normalize([0, 0, 1, 0, 0, 0, 0, 0])  # lamp 1.0, chair 0
@@ -87,7 +77,7 @@ BEHIND_PARSE = ParsedQuery(
     unsupported=("behind the lamp",),
 )
 FAILED_QUERY = "the chair the parser cannot read"
-PARSER = FakeQueryParser(
+PARSER = StubQueryParser(
     {
         NEAR_LEFT_QUERY: NEAR_LEFT_PARSE,
         BEHIND_QUERY: BEHIND_PARSE,
@@ -157,7 +147,7 @@ def _client(
     reconstruction = scene if isinstance(scene, Reconstruction) else _flat_scene(scene)
     client = make_client(
         settings=settings,
-        pipeline=FakePipeline(reconstruction=reconstruction),
+        pipeline=StubPipeline(reconstruction=reconstruction),
         query_parser=PARSER,
     )
     body = upload(client)
@@ -338,7 +328,7 @@ def test_unsupported_parts_without_a_relation_leave_the_plain_query_and_are_repo
 ):
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=1)
     # Nothing but "behind the lamp", which no Relation expresses, and two objects that no
-    # single phrase stands for: the original text is ranked, unknown to the fake encoder,
+    # single phrase stands for: the original text is ranked, unknown to the stub encoder,
     # so chair 0 (0.3) is the best and scores 1.
     assert _query(client, scene, BEHIND_QUERY) == {
         "matches": [
@@ -363,7 +353,7 @@ def test_a_parse_failure_answers_the_plain_query_and_says_the_parse_failed(
 ):
     client, scene = _client(make_client, tmp_path, LAMP_SCENE, candidates=2, top_k=2)
     caplog.set_level(logging.WARNING, logger=QUERY_LOGGER)
-    # The original text is unknown to the fake encoder and resembles chair 0 (0.3), chair 1
+    # The original text is unknown to the stub encoder and resembles chair 0 (0.3), chair 1
     # (0.3 * 0.6 = 0.18) and the lamp (0): mean 0.16, so chair 0 is 0.14 above it and
     # chair 1 only 0.02. Chair 1 scores 0.02 / 0.14 = 0.142857, below the ratio of 0.5.
     assert _query(client, scene, FAILED_QUERY) == {
@@ -421,10 +411,10 @@ def test_a_spatial_match_carries_the_similarities_of_the_wanted_objects_phrase(
         target="a",
         constraints=(Constraint(Relation.NEAR, "a", ("b",)),),
     )
-    client = make_client(query_parser=FakeQueryParser({"the chair near the table": parse}))
+    client = make_client(query_parser=StubQueryParser({"the chair near the table": parse}))
     body = upload(client)
     assert wait_for_job(client, body["job_id"])["status"] == "succeeded"
-    # The fake Reconstruction: chair (0) 0-0.5 x 0-1 x 0-1, table (1) 2-3 x 0-0.5 x 0-0.8, lamp
+    # The stub Reconstruction: chair (0) 0-0.5 x 0-1 x 0-1, table (1) 2-3 x 0-0.5 x 0-0.8, lamp
     # (2) at (5, 5, 1.5-1.9). Extent sqrt(5^2 + 5^2 + 1.9^2) = 7.321885, scale 0.732189.
     # Chair and table are 1.5 m apart: exp(-1.5 / 0.732189) = exp(-2.048653) = 0.128908.
     # The candidate margin leaves one candidate per object: for "chair" the table and the
@@ -586,7 +576,7 @@ def test_a_chair_standing_in_for_the_anchor_still_competes_for_nearest(
     assert match["anchors"] == [{"instance_id": 2, "phrase": "lamp"}]
 
 
-# Image embeddings against the fake encoder's "chair" (0.8, 0, 0, 0.6, ...): 0.8 times the
+# Image embeddings against the stub encoder's "chair" (0.8, 0, 0, 0.6, ...): 0.8 times the
 # first component.
 CHAIR_IMAGE_078 = l2_normalize([0.975, 0, 0, 0, 0.222205, 0, 0, 0])  # 0.78
 CHAIR_IMAGE_06 = l2_normalize([0.75, 0, 0, 0, 0.661438, 0, 0, 0])  # 0.6

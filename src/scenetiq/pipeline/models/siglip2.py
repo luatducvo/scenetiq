@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 
 from scenetiq.config import SigLIP2Options
-from scenetiq.domain import FloatArray
+from scenetiq.domain.scene import FloatArray
 from scenetiq.query.ranking import QUERY_LOGGER
 
 MAX_TEXT_TOKENS = 64

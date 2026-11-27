@@ -2,16 +2,16 @@ import json
 from typing import Any, Protocol
 
 from scenetiq.config import QueryParserOptions
-from scenetiq.domain import (
+from scenetiq.domain.query import (
     MAX_CONSTRAINTS,
     MAX_QUERY_OBJECTS,
-    Aspect,
     Constraint,
     ParsedQuery,
     QueryObject,
     QueryParseError,
     Relation,
 )
+from scenetiq.domain.scene import Aspect
 
 OBJECT_IDS = tuple("abcdefghijklmnopqrstuvwxyz"[:MAX_QUERY_OBJECTS])
 

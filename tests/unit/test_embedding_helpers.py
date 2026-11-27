@@ -5,8 +5,8 @@ import pytest
 from PIL import Image
 
 from scenetiq.config import EmbeddingOptions
-from scenetiq.domain import Camera
-from scenetiq.pipeline.embedding import (
+from scenetiq.domain.scene import Camera
+from scenetiq.pipeline.stages.embedding import (
     PlannedView,
     crop_box,
     embed_instances,

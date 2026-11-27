@@ -4,14 +4,14 @@ from collections.abc import Callable
 from fastapi.testclient import TestClient
 
 from scenetiq.config import Settings
-from scenetiq.fakes import FakePipeline
+from tests.stubs.components import StubPipeline
 
 from .helpers import AUTH, start_capture, upload, wait_for_job
 
 
 def _held_job(make_client: Callable[..., TestClient]) -> tuple[TestClient, threading.Event, dict]:
     gate = threading.Event()
-    client = make_client(pipeline=FakePipeline(gate=gate))
+    client = make_client(pipeline=StubPipeline(gate=gate))
     return client, gate, upload(client)
 
 

@@ -127,7 +127,6 @@ class Settings:
     query_max_top_k: int = 20
     query_score_ratio: float = 0.5
     negative_query_threshold: float = 0.35
-    pipeline: Literal["fake", "real"] = "fake"
     min_views: int = 1
     max_views: int = 2000
     upload_max_side: int = 2048

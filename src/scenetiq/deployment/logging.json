@@ -2,7 +2,7 @@
   "version": 1,
   "disable_existing_loggers": false,
   "filters": {
-    "hide_polling": { "()": "scenetiq.runtime_log.HidePolling" }
+    "hide_polling": { "()": "scenetiq.api.progress.HidePolling" }
   },
   "formatters": {
     "default": {

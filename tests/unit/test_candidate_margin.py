@@ -1,4 +1,4 @@
-from scenetiq.domain import Aspect
+from scenetiq.domain.scene import Aspect
 from scenetiq.query.ranking import Match
 from scenetiq.query.spatial import apply_candidate_margin
 

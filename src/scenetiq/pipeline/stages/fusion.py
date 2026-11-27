@@ -1,7 +1,7 @@
 import numpy as np
 
 from scenetiq.config import FusionOptions
-from scenetiq.pipeline.da3_adapters import c2w_to_w2c
+from scenetiq.pipeline.stages.da3_adapters import c2w_to_w2c
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 

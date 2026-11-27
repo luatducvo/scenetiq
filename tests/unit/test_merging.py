@@ -1,9 +1,9 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Camera
-from scenetiq.pipeline.masking import ViewMasks
-from scenetiq.pipeline.merging import merge_instances
+from scenetiq.domain.scene import Camera
+from scenetiq.pipeline.stages.masking import ViewMasks
+from scenetiq.pipeline.stages.merging import merge_instances
 from scenetiq.pipeline.view_data import ViewData
 
 HEIGHT, WIDTH = 4, 4

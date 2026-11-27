@@ -1,7 +1,7 @@
 import sqlite3
 
-from scenetiq.domain import Stage
-from scenetiq.fakes import FAKE_NOTE, FakePipeline
+from scenetiq.domain.scene import Stage
+from tests.stubs.components import STUB_NOTE, StubPipeline
 
 from .helpers import AUTH, upload, wait_for_job
 
@@ -22,11 +22,11 @@ def test_a_finished_job_lists_every_stage_in_order_back_to_back(client):
 def test_a_note_is_listed_under_the_stage_that_recorded_it(client):
     job = wait_for_job(client, upload(client)["job_id"])
 
-    assert [(n["stage"], n["message"]) for n in job["notes"]] == [("reconstructing", FAKE_NOTE)]
+    assert [(n["stage"], n["message"]) for n in job["notes"]] == [("reconstructing", STUB_NOTE)]
 
 
 def test_a_failed_job_records_when_it_ended(make_client):
-    client = make_client(pipeline=FakePipeline(error=RuntimeError("out of memory")))
+    client = make_client(pipeline=StubPipeline(error=RuntimeError("out of memory")))
     job = wait_for_job(client, upload(client)["job_id"])
 
     assert job["status"] == "failed"

@@ -14,8 +14,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from scenetiq.api.progress import JobProgress, UploadProgress, parse_progress
 from scenetiq.deployment.display import live_display, render_job_bar, render_upload_bar
-from scenetiq.runtime_log import JobProgress, UploadProgress, parse_progress
 
 SERVER_APP = "scenetiq.server:build_app"
 LOG_CONFIG_PATH = Path(__file__).with_name("logging.json")

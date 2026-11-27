@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import numpy.typing as npt
 
-from scenetiq.domain import EmbeddedCaption, FloatArray, Instance
+from scenetiq.domain.scene import EmbeddedCaption, FloatArray, Instance
 
 
 def build_instances(

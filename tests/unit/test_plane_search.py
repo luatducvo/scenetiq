@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from scenetiq.config import AlignmentOptions
-from scenetiq.pipeline.alignment import find_planes
+from scenetiq.pipeline.stages.alignment import find_planes
 
 pytest.importorskip("open3d")
 

@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 
-from scenetiq.domain import Camera, FloatArray
+from scenetiq.domain.scene import Camera, FloatArray
 
 
 def w2c_to_c2w(w2c: npt.ArrayLike) -> FloatArray:

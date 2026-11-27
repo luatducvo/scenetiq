@@ -1,6 +1,6 @@
 import pytest
 
-from scenetiq.domain import Constraint, ParsedQuery, QueryObject, Relation
+from scenetiq.domain.query import Constraint, ParsedQuery, QueryObject, Relation
 
 
 def test_every_relation_takes_a_fixed_number_of_anchors():

@@ -1,6 +1,6 @@
 # Evaluation
 
-Checks the real Pipeline on a GPU runtime. `uv run pytest` does not collect this directory, and without CUDA every test here is skipped (ADR 0008).
+Checks the Model Pipeline on a GPU runtime. `uv run pytest` does not collect this directory, and without CUDA every test here is skipped (ADR 0008).
 
 ## The suite
 

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from scenetiq.pipeline.da3_adapters import (
+from scenetiq.pipeline.stages.da3_adapters import (
     c2w_to_w2c,
     camera_from_da3,
     confident_depth,

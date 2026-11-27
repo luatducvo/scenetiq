@@ -71,3 +71,21 @@ _Avoid_: Reference object, landmark, context object
 
 **Spatial reasoning**:
 Answering Queries about Relations between Instances. The first slice covers Relations that do not depend on where the user stands: above, below, on, under, near, far from, between, nearest to, farthest from, largest, smallest, tallest and lowest. Left, right, in front of, behind, negation, counting and ordinals are not covered.
+
+## Architecture
+
+**Pipeline**:
+The stages that turn a Capture into a Reconstruction, in order: Reconstructing, Fusing, Aligning, Superpoints, Masking, Merging, Embedding, Captioning. Also the Port the API runs a job through.
+_Avoid_: Workflow, process
+
+**Port**:
+One of the interfaces in `scenetiq.domain.ports` that the API depends on without knowing what is behind it: Pipeline, TextEncoder, CaptionEncoder, QueryParser and JobReporter.
+_Avoid_: Backend, provider, service
+
+**Model Pipeline**:
+The Pipeline that runs the models (DA3, SAM2, MV3DIS, SigLIP2, Qwen3-VL, Qwen3-Embedding); `ModelPipeline` in code. The only Pipeline the product runs.
+_Avoid_: Real pipeline, GPU pipeline, production pipeline
+
+**Stub**:
+A stand-in for a Port that gives prepared answers without any model, in `tests/stubs/`: `StubPipeline` returns the stub Scene (a chair, a table and a lamp with hand-picked points and embeddings). Used by integration tests and the local backend, never by the product.
+_Avoid_: Fake, mock, dummy, demo

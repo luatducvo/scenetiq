@@ -1,8 +1,8 @@
 import numpy as np
 
-from scenetiq.pipeline.masking import select_masks
-from scenetiq.pipeline.merging import labels_to_instance_ids
-from scenetiq.pipeline.primitives import voxel_primitives
+from scenetiq.pipeline.stages.masking import select_masks
+from scenetiq.pipeline.stages.merging import labels_to_instance_ids
+from scenetiq.pipeline.stages.primitives import voxel_primitives
 
 
 def test_points_in_the_same_voxel_share_a_primitive():

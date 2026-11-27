@@ -9,7 +9,6 @@ def test_settings_without_overrides_use_the_defaults():
     settings = Settings.from_overrides("tok", {})
     assert settings.token == "tok"
     assert settings.storage_root == Path("./data")
-    assert settings.pipeline == "fake"
     assert (settings.min_views, settings.max_views, settings.view_stride) == (1, 2000, 1)
     assert settings.da3.process_res == 504
 
@@ -96,7 +95,6 @@ def test_token_stays_out_of_the_overrides():
         ({"min_views": 0}, "min_views"),
         ({"min_views": 11, "max_views": 10}, "min_views"),
         ({"superpoints": {"primitives": "superpoint"}}, "superpoints.primitives"),
-        ({"pipeline": "reel"}, "pipeline"),
         ({"siglip": {"prompt_max_words": -1}}, "siglip.prompt_max_words"),
         ({"upload_max_side": 0}, "upload_max_side"),
         ({"upload_jpeg_quality": 0}, "upload_jpeg_quality"),

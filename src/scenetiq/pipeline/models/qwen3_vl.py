@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scenetiq.config import CaptioningOptions
-from scenetiq.pipeline.captioning import CAPTION_PROMPT, CAPTION_SCHEMA
 from scenetiq.pipeline.models.resident_model import ResidentModel
+from scenetiq.pipeline.stages.captioning import CAPTION_PROMPT, CAPTION_SCHEMA
 
 
 def fit_pixels(width: int, height: int, max_pixels: int) -> tuple[int, int]:

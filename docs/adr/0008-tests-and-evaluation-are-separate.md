@@ -1,6 +1,6 @@
 # Tests are unit and integration; evaluation is separate
 
-The checks split by what they need. `tests/unit/` holds pure, model-free functions; `tests/integration/` drives the HTTP API through TestClient with the fakes of `scenetiq.fakes`. Both run on CPU, on every push. `evaluation/` at the root runs the real Pipeline and its models on a GPU runtime and is not in `testpaths`, so `uv run pytest` never collects it; `uv run pytest evaluation` runs it, and without CUDA it skips as a whole. Scoring Queries against hand-labelled Instances is product code, `scenetiq.evaluation` (`python -m scenetiq.evaluation` against a running backend), and is itself tested at both CPU layers.
+The checks split by what they need. `tests/unit/` holds pure, model-free functions; `tests/integration/` drives the HTTP API through TestClient with the Stubs of `tests/stubs/` (ADR 0009). Both run on CPU, on every push. `evaluation/` at the root runs the Model Pipeline and its models on a GPU runtime and is not in `testpaths`, so `uv run pytest` never collects it; `uv run pytest evaluation` runs it, and without CUDA it skips as a whole. Scoring Queries against hand-labelled Instances is product code, `scenetiq.evaluation` (`python -m scenetiq.evaluation` against a running backend), and is itself tested at both CPU layers.
 
 ## Considered Options
 

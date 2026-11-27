@@ -9,9 +9,9 @@ uv run pre-commit install         # once per clone: lint + ty on commit, pytest 
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
 uv run pytest                      # unit + integration, on CPU
-uv run pytest evaluation           # evaluation suite: the real Pipeline (GPU runtime only)
+uv run pytest evaluation           # evaluation suite: the Model Pipeline (GPU runtime only)
 npm --prefix frontend run lint && npm --prefix frontend run typecheck && npm --prefix frontend run build
-SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001   # local backend, fake Pipeline
+SCENETIQ_TOKEN=dev uv run uvicorn --factory tests.stubs.server:build_app --port 8001   # local backend on Stubs, no GPU
 ```
 
 ## Every task
@@ -41,8 +41,9 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/doma
 
 ### Tests
 
-- Three layers (ADR 0008). **Unit**, `tests/unit/`: pure, model-free functions. **Integration**, `tests/integration/`: the HTTP API through TestClient, with the fakes of `scenetiq.fakes` on a temp storage root; most behaviour is tested here. **Evaluation**, `evaluation/` at the root, outside `testpaths`: the real Pipeline on a GPU, skipped as a whole without CUDA.
-- Model-loading code (DA3, SAM2, SigLIP2, Qwen3-VL, Qwen3-Embedding, MV3DIS, `RealPipeline.run`) is covered by the evaluation suite alone. Elsewhere stand it in only with `scenetiq.fakes`, at the integration layer. Constructing those classes is fine anywhere: models load on first use.
+- Three layers (ADR 0008). **Unit**, `tests/unit/`: pure, model-free functions. **Integration**, `tests/integration/`: the HTTP API through TestClient, with the Stubs of `tests/stubs/` on a temp storage root; most behaviour is tested here. **Evaluation**, `evaluation/` at the root, outside `testpaths`: the Model Pipeline on a GPU, skipped as a whole without CUDA.
+- Model-loading code (DA3, SAM2, SigLIP2, Qwen3-VL, Qwen3-Embedding, MV3DIS, `ModelPipeline.run`) is covered by the evaluation suite alone. Elsewhere stand it in only with the Stubs of `tests/stubs/`, at the integration layer. Constructing those classes is fine anywhere: models load on first use.
+- `src/scenetiq/` never imports `tests`, and `scenetiq.server` always builds the models (ADR 0009): Stubs run only through `tests.stubs.server` or a test. A new Port gets its Stub in `tests/stubs/components.py`.
 - Shared test helpers live in a `helpers.py` or `support.py` next to the tests; a `conftest.py` holds fixtures only and is never imported.
 - Derive every expectation from hand-worked values, so a test checks the formula instead of restating it.
 - `tests/unit/test_fusion.py` and `test_plane_search.py` need open3d: `uv run --with open3d==0.20.0 pytest tests/unit/test_fusion.py tests/unit/test_plane_search.py`.
@@ -77,7 +78,7 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/doma
 
 ### Deployment and configuration
 
-- Deployment is the notebook in `notebooks/` only; its logic belongs in `scenetiq.deployment`. That package, `scenetiq.config` and `scenetiq.runtime_log` use only the standard library: the notebook imports them before installing anything.
+- Deployment is the notebook in `notebooks/` only; its logic belongs in `scenetiq.deployment`. That package, `scenetiq.config` and `scenetiq.api.progress` use only the standard library: the notebook imports them before installing anything, so `scenetiq/__init__.py` and `scenetiq/api/__init__.py` stay empty.
 - Logs never go to files. `src/scenetiq/deployment/logging.json` decides what reaches stdout, so anything the owner must see goes through a logger it lets through.
 - Every default lives in `scenetiq.config`; pass a new setting to its stage in `server.build_components`. The notebook overrides them through `SCENETIQ_CONFIG`; only the token travels separately.
 

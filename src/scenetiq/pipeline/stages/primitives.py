@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 
-from scenetiq.domain import FloatArray
+from scenetiq.domain.scene import FloatArray
 
 
 def voxel_primitives(points: FloatArray, voxel_size: float) -> npt.NDArray[np.int64]:

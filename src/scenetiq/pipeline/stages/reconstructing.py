@@ -3,9 +3,9 @@ from typing import Any, Protocol
 import numpy as np
 
 from scenetiq.config import DA3Options
-from scenetiq.domain import View
-from scenetiq.pipeline.da3_adapters import camera_from_da3, confident_depth
+from scenetiq.domain.scene import View
 from scenetiq.pipeline.gpu_memory import free_gpu_memory
+from scenetiq.pipeline.stages.da3_adapters import camera_from_da3, confident_depth
 from scenetiq.pipeline.view_data import ViewData
 
 

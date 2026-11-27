@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Aspect, Caption, EmbeddedCaption, Instance
-from scenetiq.geometry import build_instances, l2_normalize
+from scenetiq.domain.geometry import build_instances, l2_normalize
+from scenetiq.domain.scene import Aspect, Caption, EmbeddedCaption, Instance
 
 
 def test_instance_centroid_and_bounding_box_from_its_points():

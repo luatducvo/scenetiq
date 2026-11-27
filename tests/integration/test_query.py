@@ -6,9 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from scenetiq.config import Settings
-from scenetiq.domain import Reconstruction
-from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, fake_reconstruction
+from scenetiq.domain.scene import Reconstruction
 from scenetiq.storage.artifacts import decode_ply
+from tests.stubs.components import StubCaptionEncoder, StubPipeline, stub_reconstruction
 
 from .helpers import AUTH, TOKEN, upload, wait_for_job
 
@@ -32,8 +32,8 @@ def _settings(tmp_path: Path, query_top_k: int = 1, query_score_ratio: float = 0
 
 
 def _uncaptioned_client(make_client: Callable[..., TestClient], settings: Settings) -> TestClient:
-    rec = fake_reconstruction(with_captions=False)
-    return make_client(settings=settings, pipeline=FakePipeline(reconstruction=rec))
+    rec = stub_reconstruction(with_captions=False)
+    return make_client(settings=settings, pipeline=StubPipeline(reconstruction=rec))
 
 
 def test_query_returns_the_best_instance_with_a_full_score(
@@ -42,7 +42,7 @@ def test_query_returns_the_best_instance_with_a_full_score(
     client = make_client(settings=_settings(tmp_path, query_top_k=1))
     scene = _ready_scene(client)
     result = _query(client, scene, "red chair")
-    # The fake parser reads no Relation, so the Query is plain and has no Anchors.
+    # The stub parser reads no Relation, so the Query is plain and has no Anchors.
     # The chair is the best on both channels, and the best Match always scores 1.
     assert result == {
         "matches": [
@@ -156,7 +156,7 @@ def test_a_negative_query_resembling_nothing_returns_no_matches(
     assert result["matches"] == []
 
 
-def test_query_text_is_case_and_whitespace_insensitive_in_fake_encoder(
+def test_query_text_is_case_and_whitespace_insensitive_in_stub_encoder(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     client = make_client(settings=_settings(tmp_path, query_top_k=1))
@@ -165,13 +165,13 @@ def test_query_text_is_case_and_whitespace_insensitive_in_fake_encoder(
 
 
 def test_scene_without_instances_returns_no_matches(make_client: Callable[..., TestClient]):
-    base = fake_reconstruction()
+    base = stub_reconstruction()
     empty = Reconstruction(
         points=base.points,
         colors=base.colors,
         instance_ids=np.full(len(base.points), -1, dtype=np.int32),
     )
-    client = make_client(pipeline=FakePipeline(reconstruction=empty))
+    client = make_client(pipeline=StubPipeline(reconstruction=empty))
     scene = _ready_scene(client)
     assert _query(client, scene, "red chair") == {
         "matches": [],
@@ -185,10 +185,10 @@ def test_scene_without_instances_returns_no_matches(make_client: Callable[..., T
 def test_scene_whose_instances_lack_embeddings_cannot_be_queried(
     make_client: Callable[..., TestClient],
 ):
-    rec = fake_reconstruction()
+    rec = stub_reconstruction()
     for inst in rec.instances:
         inst.embedding = None
-    client = make_client(pipeline=FakePipeline(reconstruction=rec))
+    client = make_client(pipeline=StubPipeline(reconstruction=rec))
     scene = _ready_scene(client)
     resp = client.post(f"/scenes/{scene}/query", json={"text": "lamp"}, headers=AUTH)
     assert resp.status_code == 409
@@ -250,7 +250,7 @@ def test_instances_of_a_scene_without_captions_have_no_name(
     assert [i["name"] for i in instances] == [None, None, None]
 
 
-class _CountingCaptionEncoder(FakeCaptionEncoder):
+class _CountingCaptionEncoder(StubCaptionEncoder):
     def __init__(self) -> None:
         self.queries: list[str] = []
 
@@ -263,10 +263,10 @@ def test_a_scene_without_captions_never_uses_the_caption_encoder(
     make_client: Callable[..., TestClient], tmp_path: Path
 ):
     counting = _CountingCaptionEncoder()
-    rec = fake_reconstruction(with_captions=False)
+    rec = stub_reconstruction(with_captions=False)
     client = make_client(
         settings=_settings(tmp_path),
-        pipeline=FakePipeline(reconstruction=rec),
+        pipeline=StubPipeline(reconstruction=rec),
         caption_encoder=counting,
     )
     scene = _ready_scene(client)

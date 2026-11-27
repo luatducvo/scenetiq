@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from scenetiq.domain import Capture, Stage
+from scenetiq.domain.scene import Capture, Stage
 
 from .support import configured_settings
 
@@ -26,7 +26,7 @@ def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, fl
 
 
 def _box_overlap(points, camera, box, photo_size) -> tuple[float, float]:
-    from scenetiq.pipeline.da3_adapters import c2w_to_w2c
+    from scenetiq.pipeline.stages.da3_adapters import c2w_to_w2c
 
     w2c = c2w_to_w2c(camera.cam_to_world)
     cam = points @ w2c[:3, :3].T + w2c[:3, 3]
@@ -48,12 +48,12 @@ def _box_overlap(points, camera, box, photo_size) -> tuple[float, float]:
 
 
 def test_a_query_returns_at_most_the_configured_number_of_matches(
-    real_result, encoder, caption_encoder
+    reconstruction_result, encoder, caption_encoder
 ):
     # Runs without the Query environment variables, so the cut of Matches is always checked.
     from scenetiq.query.ranking import run_query
 
-    rec, _ = real_result
+    rec, _ = reconstruction_result
     settings = configured_settings()
     matches = run_query(
         rec.instances,
@@ -80,7 +80,7 @@ def test_a_query_returns_at_most_the_configured_number_of_matches(
 
 
 def test_query_for_a_present_object_matches_that_object(
-    real_result, smoke_capture: Capture, encoder, caption_encoder
+    reconstruction_result, smoke_capture: Capture, encoder, caption_encoder
 ):
     from PIL import Image
 
@@ -90,7 +90,7 @@ def test_query_for_a_present_object_matches_that_object(
     if not text:
         pytest.skip(f"set {SMOKE_QUERY_ENV} to an object visible in the smoke Capture")
     view, box = _annotated_box(smoke_capture)
-    rec, stages = real_result
+    rec, stages = reconstruction_result
     assert stages[-1] == Stage.CAPTIONING
     assert all(inst.embedding is not None for inst in rec.instances)
 
@@ -126,7 +126,7 @@ DEFAULT_SPATIAL_QUERY = "the object nearest to the chair"
 def _answer(text, rec, query_parser, encoder, caption_encoder):
     import time
 
-    from scenetiq.domain import QueryObject
+    from scenetiq.domain.query import QueryObject
     from scenetiq.query.ranking import run_query
     from scenetiq.query.spatial import run_spatial_query
 
@@ -158,9 +158,9 @@ def _answer(text, rec, query_parser, encoder, caption_encoder):
 
 
 def test_a_query_with_a_relation_returns_matches_with_anchors(
-    real_result, query_parser, encoder, caption_encoder
+    reconstruction_result, query_parser, encoder, caption_encoder
 ):
-    rec, _ = real_result
+    rec, _ = reconstruction_result
     assert len(rec.instances) >= 2, "a Query with an Anchor needs two Instances"
     text = os.environ.get(SMOKE_SPATIAL_QUERY_ENV, DEFAULT_SPATIAL_QUERY)
     parsed, matches = _answer(text, rec, query_parser, encoder, caption_encoder)
@@ -171,9 +171,9 @@ def test_a_query_with_a_relation_returns_matches_with_anchors(
 
 
 def test_a_query_without_a_relation_returns_no_anchors(
-    real_result, query_parser, encoder, caption_encoder
+    reconstruction_result, query_parser, encoder, caption_encoder
 ):
-    rec, _ = real_result
+    rec, _ = reconstruction_result
     parsed, matches = _answer("a chair", rec, query_parser, encoder, caption_encoder)
     assert parsed.constraints == ()
     assert matches

@@ -6,7 +6,12 @@ from fastapi.testclient import TestClient
 
 from scenetiq.api.app import create_app
 from scenetiq.config import Settings
-from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, FakeTextEncoder
+from tests.stubs.components import (
+    StubCaptionEncoder,
+    StubPipeline,
+    StubQueryParser,
+    StubTextEncoder,
+)
 
 from .helpers import TOKEN
 
@@ -17,21 +22,21 @@ def settings(tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def pipeline() -> FakePipeline:
-    return FakePipeline()
+def pipeline() -> StubPipeline:
+    return StubPipeline()
 
 
 @pytest.fixture
-def make_client(settings: Settings, pipeline: FakePipeline) -> Iterator[Callable[..., TestClient]]:
+def make_client(settings: Settings, pipeline: StubPipeline) -> Iterator[Callable[..., TestClient]]:
     clients: list[TestClient] = []
 
     def _make(**overrides: object) -> TestClient:
         kwargs: dict[str, object] = {
             "settings": settings,
             "pipeline": pipeline,
-            "text_encoder": FakeTextEncoder(),
-            "caption_encoder": FakeCaptionEncoder(),
-            "query_parser": FakeQueryParser(),
+            "text_encoder": StubTextEncoder(),
+            "caption_encoder": StubCaptionEncoder(),
+            "query_parser": StubQueryParser(),
         }
         kwargs.update(overrides)
         client = TestClient(create_app(**kwargs))  # type: ignore[arg-type]

@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from scenetiq.config import CaptionEmbeddingOptions
-from scenetiq.domain import FloatArray
+from scenetiq.domain.scene import FloatArray
 
 
 class Qwen3TextEmbedder:

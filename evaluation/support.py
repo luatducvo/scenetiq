@@ -1,7 +1,7 @@
 import os
 
 from scenetiq.config import Settings, overrides_from_json
-from scenetiq.domain import Stage
+from scenetiq.domain.scene import Stage
 
 
 def configured_settings() -> Settings:

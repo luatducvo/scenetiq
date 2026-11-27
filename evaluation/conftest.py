@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from scenetiq.domain import Capture, Stage, View
-from scenetiq.pipeline.real_pipeline import RealPipeline
+from scenetiq.domain.scene import Capture, Stage, View
+from scenetiq.pipeline.model_pipeline import ModelPipeline
 
 from .support import StageRecorder, configured_settings
 
@@ -56,9 +56,9 @@ def captioner():
 
 
 @pytest.fixture(scope="session")
-def real_result(smoke_capture: Capture, encoder, caption_encoder, captioner):
+def reconstruction_result(smoke_capture: Capture, encoder, caption_encoder, captioner):
     stages: list[Stage] = []
-    pipeline = RealPipeline(
+    pipeline = ModelPipeline(
         image_encoder=encoder, caption_encoder=caption_encoder, captioner=captioner
     )
     reconstruction = pipeline.run(smoke_capture, StageRecorder(stages))

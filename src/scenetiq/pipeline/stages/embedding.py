@@ -7,9 +7,9 @@ import numpy as np
 import numpy.typing as npt
 
 from scenetiq.config import EmbeddingOptions
-from scenetiq.domain import Camera, FloatArray
-from scenetiq.geometry import l2_normalize
-from scenetiq.pipeline.da3_adapters import c2w_to_w2c
+from scenetiq.domain.geometry import l2_normalize
+from scenetiq.domain.scene import Camera, FloatArray
+from scenetiq.pipeline.stages.da3_adapters import c2w_to_w2c
 from scenetiq.pipeline.view_data import ViewData
 
 

@@ -3,7 +3,7 @@ import logging
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from scenetiq.domain import Stage
+from scenetiq.domain.scene import Stage
 
 GPU_LOGGER = "scenetiq.gpu"
 

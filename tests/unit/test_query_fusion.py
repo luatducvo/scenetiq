@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from scenetiq.domain import Aspect, Caption, Instance
+from scenetiq.domain.scene import Aspect, Caption, Instance
 from scenetiq.query.ranking import best_description, is_semantic_match, run_query, standardize
 
 
