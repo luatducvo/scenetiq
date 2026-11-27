@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "filters": {
+    "hide_polling": { "()": "scenetiq.runtime_log.HidePolling" }
+  },
+  "formatters": {
+    "default": {
+      "()": "uvicorn.logging.DefaultFormatter",
+      "fmt": "%(asctime)s %(levelprefix)s %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S",
+      "use_colors": false
+    },
+    "access": {
+      "()": "uvicorn.logging.AccessFormatter",
+      "fmt": "%(asctime)s %(levelprefix)s %(client_addr)s - \"%(request_line)s\" %(status_code)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S",
+      "use_colors": false
+    },
+    "progress": { "format": "%(message)s" }
+  },
+  "handlers": {
+    "default": {
+      "formatter": "default",
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout"
+    },
+    "access": {
+      "formatter": "access",
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout",
+      "filters": ["hide_polling"]
+    },
+    "progress": {
+      "formatter": "progress",
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout"
+    }
+  },
+  "root": { "handlers": ["default"], "level": "ERROR" },
+  "loggers": {
+    "uvicorn": { "handlers": ["default"], "level": "ERROR", "propagate": false },
+    "uvicorn.error": { "level": "ERROR" },
+    "uvicorn.access": { "handlers": ["access"], "level": "INFO", "propagate": false },
+    "scenetiq.progress": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.gpu": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.alignment": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.captioning": { "handlers": ["progress"], "level": "INFO", "propagate": false },
+    "scenetiq.query": { "handlers": ["progress"], "level": "INFO", "propagate": false }
+  }
+}

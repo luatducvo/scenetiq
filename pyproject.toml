@@ -1,0 +1,115 @@
+[project]
+name = "scenetiq"
+version = "0.1.0"
+description = "Reconstruct a static Scene from 2D photos and find its Instances with open-vocabulary Queries."
+readme = "README.md"
+authors = [
+    { name = "luatducvo", email = "lvo017205@gmail.com" }
+]
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.162.0",
+    "numpy>=1.26",
+    "pillow>=13.0.0",
+    "python-multipart>=0.0.33",
+    "scipy>=1.11",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+# GPU model stack of the real Pipeline. `uv sync` does not select it; Colab installs it from the
+# exported lock (see docs/agents/gpu-stack.md). torch and torchvision come from Colab, not from here.
+gpu = [
+    "open3d==0.20.0",
+    # Depth Anything 3 from our fork, which fixes its packaging (ADR 0013); the fork declares its
+    # dependencies. Code Apache-2.0; DA3NESTED-GIANT-LARGE-1.1 weights CC BY-NC 4.0, see ADR 0001.
+    "depth-anything-3 @ git+https://github.com/luatducvo/Depth-Anything-3.git@879fcab51a72518a9249989e6dd352a9aac32f7d",
+    # SAM2 from Meta's official repo (the PyPI "sam2" package is a third-party upload; do not use it)
+    "sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4",
+    # GeoCalib for the Aligning stage (ADR 0007; code Apache-2.0, weights CC BY 4.0, fetched at run time)
+    "geocalib @ git+https://github.com/cvg/GeoCalib.git@1dedb29f94fc11b896c5f572005978aeebccd67f",
+    # Vendored MV3DIS
+    "tqdm>=4.66",
+    # SigLIP2, Qwen3-VL-8B-Instruct and Qwen3-Embedding-0.6B (all Apache-2.0) via transformers;
+    # Qwen3-VL needs transformers >= 4.57 (ADR 0008)
+    "transformers==5.22.2",
+    # JSON-schema constrained decoding for the Captioning stage (Apache-2.0).
+    "xgrammar==0.2.8",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=8.3",
+    "ruff>=0.12",
+    "ty>=0.0.1a20",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+# SAM2 has no wheel and its setup.py imports torch, so uv could not lock it without building it.
+# Keep this in step with the SAM2 pin in the gpu extra: setup.py's NAME, VERSION and REQUIRED_PACKAGES.
+[[tool.uv.dependency-metadata]]
+name = "sam-2"
+version = "1.0"
+requires-dist = [
+    "torch>=2.5.1",
+    "torchvision>=0.20.1",
+    "numpy>=1.24.4",
+    "tqdm>=4.66.1",
+    "hydra-core>=1.3.2",
+    "iopath>=0.1.10",
+    "pillow>=9.4.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "C4",  # flake8-comprehensions
+    "RUF", # ruff-specific
+    "PT",  # flake8-pytest-style
+    "PTH", # flake8-use-pathlib
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ty.src]
+exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gpu: needs a CUDA GPU and the real model stack (run on Colab)"]
+addopts = "-m 'not gpu'"
+
+[tool.ty.analysis]
+# GPU-only model stack from the gpu extra, imported lazily inside pipeline stages.
+allowed-unresolved-imports = [
+    "open3d.**",
+    "torch.**",
+    "sam2.**",
+    "transformers.**",
+    "geocalib.**",
+    "depth_anything_3.**",
+    "xgrammar.**",
+    # Preinstalled in the Colab kernel; scenetiq.colab imports it lazily for live output.
+    "IPython.**",
+]
