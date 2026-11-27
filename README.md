@@ -1,6 +1,6 @@
 # SceneTIQ
 
-Turns uncalibrated photos of a static scene into a metric 3D point cloud split into objects (Instances) that free-text Queries can find, such as "red chair" or "the box on the shelf". The GPU backend runs on a remote GPU runtime; the React viewer runs locally.
+Turns uncalibrated photos of a static scene into a metric 3D point cloud split into objects (Instances) that free-text Queries can find, such as "red chair" or "the box on the shelf". The GPU backend runs on a GPU runtime; the React viewer runs locally.
 
 > The GPU Pipeline has not been run end to end yet.
 

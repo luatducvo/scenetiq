@@ -1,4 +1,4 @@
-SceneTIQ turns uncalibrated photos into a 3D Reconstruction split into Instances that free-text Queries can find; the GPU backend runs on a remote GPU runtime, the React viewer runs in the browser.
+SceneTIQ turns uncalibrated photos into a 3D Reconstruction split into Instances that free-text Queries can find; the GPU backend runs on a GPU runtime, the React viewer runs in the browser.
 
 Python 3.13 with **uv** (never `uv sync` on the GPU runtime, see [GPU stack](#gpu-stack)); React + Vite + TS in `frontend/`.
 

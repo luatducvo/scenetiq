@@ -1,6 +1,6 @@
-# Backend on a remote GPU runtime behind a Cloudflare named tunnel, one View per upload request
+# Backend on a GPU runtime behind a Cloudflare named tunnel, one View per upload request
 
-The Pipeline needs a large GPU, so the FastAPI backend runs on a remote GPU runtime, started by the notebook in `notebooks/`. The React frontend runs on the developer's machine and reaches it through a Cloudflare named tunnel, whose hostname stays the same across runtime restarts. Every request carries a shared token (`SCENETIQ_TOKEN`); there are no accounts.
+The Pipeline needs a large GPU, so the FastAPI backend runs on a GPU runtime, started by the notebook in `notebooks/`. The React frontend runs on the developer's machine and reaches it through a Cloudflare named tunnel, whose hostname stays the same across runtime restarts. Every request carries a shared token (`SCENETIQ_TOKEN`); there are no accounts.
 
 Cloudflare refuses large request bodies (a 105 MB POST got a 413 at the edge), so a Capture is uploaded in three steps: `POST /captures` with its View count, `POST /captures/{id}/views` once per View, in parallel, then `POST /scenes` to commit it and start the job.
 
