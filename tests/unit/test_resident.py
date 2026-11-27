@@ -6,8 +6,6 @@ from scenetiq.pipeline.resident import ResidentModel
 
 
 class _CountingLoader:
-    """Stands in for a model's load: returns a new object and counts its calls."""
-
     def __init__(self, gate: threading.Event | None = None) -> None:
         self.calls = 0
         self.gate = gate

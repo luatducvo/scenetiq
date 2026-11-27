@@ -1,13 +1,3 @@
-"""Open-vocabulary Query over the Instances of a Reconstruction (ADR 0011, ADR 0012).
-
-A Query is compared with every Instance's image embedding and, for every Instance with a
-Caption, with its best-matching Description. Semantic Labels (Caption Name, Synonyms, and
-Descriptions) filter out unrelated Instances, and a negative Query with no semantic matches
-returns an empty list (ADR 0012). Each channel's similarities are standardized over the
-Reconstruction's Instances and averaged into one fused value. The Matches are the Instances
-whose fused value is close enough to the best one among semantic matches.
-"""
-
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -17,42 +7,19 @@ import numpy as np
 from scenetiq.domain import Aspect, FloatArray, Instance
 
 QUERY_LOGGER = "scenetiq.query"
-"""Logger of Query-time notes; ``colab_logging.json`` lets it through."""
 
 
-class MissingEmbeddingsError(ValueError):
-    """Raised when a Query targets Instances that have no embeddings yet."""
+class MissingEmbeddingsError(ValueError): ...
 
 
 @dataclass(frozen=True)
 class Anchor:
-    """An Instance a Match was measured against, for a Query with a Relation.
-
-    Attributes:
-        instance_id: The Instance standing for the Anchor object.
-        phrase: The phrase of the object it stands for.
-    """
-
     instance_id: int
     phrase: str
 
 
 @dataclass(frozen=True)
 class Match:
-    """An Instance returned for a Query.
-
-    Attributes:
-        instance_id: The Matched Instance.
-        score: Fused value as a fraction of the best Instance's, so the best Match scores
-            1, or for a Query with a Relation the score of its assignment (ADR 0009);
-            relative to this Query only.
-        image_score: Cosine similarity of the Query to the Instance's image embedding.
-        caption_score: Cosine similarity of the Query to the Instance's best-matching
-            Description, or ``None`` when it has no Caption.
-        caption_aspect: The Aspect of that Description, or ``None`` without a Caption.
-        anchors: The Anchors of its assignment, empty for a Query without a Relation.
-    """
-
     instance_id: int
     score: float
     image_score: float
@@ -66,18 +33,6 @@ def best_description(
     query: FloatArray,
     aspects: Sequence[Aspect] = (),
 ) -> tuple[float, Aspect] | None:
-    """The Description most similar to a Query, among the Aspects the Query speaks about.
-
-    Args:
-        embeddings: L2-normalised embedding of each Description an Instance has, by Aspect.
-        query: L2-normalised Query embedding in the Caption space.
-        aspects: The Aspects the Query speaks about; empty means every Aspect. When the
-            Instance has no Description of any of them, all its Descriptions are compared.
-
-    Returns:
-        The best cosine similarity and its Aspect, ties going to the earlier Aspect, or
-        ``None`` when there are no Descriptions.
-    """
     asked = [a for a in Aspect if a in aspects and a in embeddings]
     best: tuple[float, Aspect] | None = None
     for aspect in asked or [a for a in Aspect if a in embeddings]:
@@ -88,11 +43,6 @@ def best_description(
 
 
 def standardize(values: Sequence[float]) -> list[float]:
-    """Each value as its distance from the mean, in population standard deviations.
-
-    Returns:
-        One standardized value per input, all ``0.0`` when the values do not differ.
-    """
     if not len(values):
         return []
     array = np.asarray(values, dtype=np.float64)
@@ -103,7 +53,6 @@ def standardize(values: Sequence[float]) -> list[float]:
 
 
 def _tokenize_label(text: str) -> set[str]:
-    """Extract lowercase significant words and stems from a label or query phrase."""
     tokens = set(re.findall(r"[a-z0-9]+", text.lower()))
     stopwords = {
         "a",
@@ -146,23 +95,6 @@ def is_semantic_match(
     min_confidence: float = 0.35,
     image_score: float | None = None,
 ) -> bool:
-    """Whether an Instance matches a query phrase semantically (ADR 0012).
-
-    An Instance is a semantic match when its Caption's Name, Synonyms, or relevant Aspect
-    Descriptions share key words with ``phrase``, or when its Caption similarity or image
-    similarity is high enough.
-
-    Args:
-        phrase: Short English phrase naming or describing the wanted object.
-        instance: The Instance with its Caption and embeddings.
-        caption_score: Cosine similarity of the query to the Instance's best Description.
-        aspects: The Aspects the Query speaks about.
-        min_confidence: Minimum similarity required when no lexical match exists.
-        image_score: Cosine similarity of the query to the Instance's image embedding.
-
-    Returns:
-        ``True`` if the Instance is semantically relevant to the query phrase.
-    """
     words = _tokenize_label(phrase)
     if not words:
         return True
@@ -194,41 +126,6 @@ def run_query(
     phrase: str | None = None,
     negative_query_threshold: float = 0.35,
 ) -> list[Match]:
-    """Rank every Instance against a Query and return its Matches (ADR 0012).
-
-    Each channel's similarities are standardized over the Instances that have it, so the
-    two channels are on one scale and keep how far an Instance stands out. An Instance's
-    fused value is the mean of its image value and its Caption value; one without a Caption
-    takes 0 on the Caption channel, the average of the captioned ones. A Match's score is
-    its fused value divided by the best one among semantic matches.
-
-    When ``phrase`` is given, Instances are filtered by Semantic Label matching: unrelated
-    Instances are excluded, and if no Instance matches, the query is treated as a negative
-    Query and returns an empty list.
-
-    Args:
-        instances: Instances with L2-normalised image embeddings.
-        image_query: L2-normalised embedding of the Query text in the image space.
-        top_k: How many Matches to return at most; ``None`` returns all Matches passing
-            the score ratio.
-        score_ratio: An Instance is a Match only when its score is at least this fraction
-            of the best one's, which is 1; ``None`` keeps every Instance, for a ranking.
-        caption_query: L2-normalised embedding of the Query text in the Caption space;
-            the Caption channel, by each Instance's best Description, is skipped when
-            omitted.
-        aspects: The Aspects the Query speaks about (see :func:`best_description`).
-        phrase: English phrase of the wanted object; when supplied, enables Semantic Label
-            filtering and negative Query detection (ADR 0012).
-        negative_query_threshold: Minimum confidence required for semantic matching when no
-            lexical overlap exists.
-
-    Returns:
-        Matches, best first, ties broken by image similarity then Instance id. Empty when
-        the Reconstruction has no Instances or when no Instance matches a negative Query.
-
-    Raises:
-        MissingEmbeddingsError: If any Instance has no image embedding.
-    """
     if not instances:
         return []
     embeddings = [inst.embedding for inst in instances]

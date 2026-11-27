@@ -9,7 +9,6 @@ from .conftest import AUTH, upload, wait_for_job
 
 
 def _leave_job_running(settings: Settings) -> str:
-    """Simulate a process that died mid-job: the store says running, nothing runs it."""
     store = SceneStore(settings.storage_root)
     record = store.create_scene("Interrupted")
     store.update_job(record.job_id, status=JobStatus.RUNNING, stage="masking")

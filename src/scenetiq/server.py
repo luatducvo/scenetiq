@@ -1,8 +1,3 @@
-"""Process entry point: build the API from environment configuration.
-
-Run with ``uvicorn --factory scenetiq.server:build_app``.
-"""
-
 from typing import NamedTuple
 
 from fastapi import FastAPI
@@ -14,15 +9,6 @@ from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, Fa
 
 
 class Components(NamedTuple):
-    """The shared components the API is built from, in :func:`create_app`'s order.
-
-    Attributes:
-        pipeline: Turns a Capture into a Reconstruction.
-        text_encoder: Encodes Query text against Instance image embeddings.
-        caption_encoder: Encodes Query text against Descriptions.
-        query_parser: Splits every Query into objects and Relations.
-    """
-
     pipeline: Pipeline
     text_encoder: TextEncoder
     caption_encoder: CaptionEncoder
@@ -30,13 +16,6 @@ class Components(NamedTuple):
 
 
 def build_components(settings: Settings) -> Components:
-    """Return the shared components selected by ``settings.pipeline``.
-
-    ``"real"`` needs the GPU stack from the ``gpu`` extra; models load on first use.
-
-    Raises:
-        ValueError: If ``settings.pipeline`` names no known implementation.
-    """
     if settings.pipeline == "fake":
         return Components(
             FakePipeline(), FakeTextEncoder(), FakeCaptionEncoder(), FakeQueryParser()
@@ -75,6 +54,5 @@ def build_components(settings: Settings) -> Components:
 
 
 def build_app() -> FastAPI:
-    """Create the API configured by ``SCENETIQ_TOKEN`` and ``SCENETIQ_CONFIG``."""
     settings = Settings.from_env()
     return create_app(settings, *build_components(settings))

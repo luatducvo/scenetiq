@@ -1,17 +1,3 @@
-"""On-disk format of a Reconstruction inside a Scene directory.
-
-Files:
-    ``points.ply``: binary little-endian PLY with float x/y/z and uchar r/g/b.
-    ``instance_ids.bin``: little-endian int32 per point, same order as the PLY.
-    ``instances.json``: id, centroid, bbox_min, bbox_max and Caption (or null) of every
-        Instance.
-    ``embeddings.npy``: ``(K, D)`` float32 image embeddings, row ``i`` belongs to
-        ``instances.json[i]``.
-    ``caption_embeddings.npy``: ``(K, A, D)`` float32 Description embeddings aligned the
-        same way, one row per Aspect in Aspect order; a zero row where a Description is
-        empty or the Instance has no Caption. Absent when no Instance has a Caption.
-"""
-
 from __future__ import annotations
 
 import json
@@ -33,7 +19,6 @@ _VERTEX_DTYPE = np.dtype(
 
 
 def encode_ply(points: FloatArray, colors: np.ndarray) -> bytes:
-    """Encode points and colours as a binary little-endian PLY."""
     vertices = np.empty(len(points), dtype=_VERTEX_DTYPE)
     vertices["x"], vertices["y"], vertices["z"] = points[:, 0], points[:, 1], points[:, 2]
     vertices["red"], vertices["green"], vertices["blue"] = colors[:, 0], colors[:, 1], colors[:, 2]
@@ -48,7 +33,6 @@ def encode_ply(points: FloatArray, colors: np.ndarray) -> bytes:
 
 
 def decode_ply(data: bytes) -> tuple[FloatArray, np.ndarray]:
-    """Decode a PLY written by :func:`encode_ply` into ``(points, colors)``."""
     marker = b"end_header\n"
     end = data.index(marker) + len(marker)
     vertices = np.frombuffer(data[end:], dtype=_VERTEX_DTYPE)
@@ -58,7 +42,6 @@ def decode_ply(data: bytes) -> tuple[FloatArray, np.ndarray]:
 
 
 def save_reconstruction(directory: Path, reconstruction: Reconstruction) -> None:
-    """Write ``reconstruction`` into ``directory`` (created if missing)."""
     directory.mkdir(parents=True, exist_ok=True)
     (directory / POINTS_FILE).write_bytes(encode_ply(reconstruction.points, reconstruction.colors))
     (directory / INSTANCE_IDS_FILE).write_bytes(reconstruction.instance_ids.astype("<i4").tobytes())
@@ -91,7 +74,6 @@ def save_reconstruction(directory: Path, reconstruction: Reconstruction) -> None
 
 
 def load_instances(directory: Path) -> list[Instance]:
-    """Load the Instances (with embeddings and Captions, if stored) from ``directory``."""
     rows = json.loads((directory / INSTANCES_FILE).read_text())
     emb_path = directory / EMBEDDINGS_FILE
     embeddings = np.load(emb_path) if emb_path.exists() else None
@@ -119,7 +101,6 @@ def load_instances(directory: Path) -> list[Instance]:
 
 
 def _description_embeddings(rows: np.ndarray) -> dict[Aspect, FloatArray]:
-    """The non-zero rows of one Instance's stored ``(A, D)`` block, by Aspect."""
     return {aspect: rows[slot] for slot, aspect in enumerate(Aspect) if np.any(rows[slot])}
 
 

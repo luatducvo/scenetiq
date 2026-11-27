@@ -1,8 +1,3 @@
-"""Plane search on Open3D itself; skipped where the GPU stack (open3d) is not installed.
-
-Run it on a CPU machine with: uv run --with open3d==0.20.0 pytest tests/unit/test_plane_search.py
-"""
-
 import numpy as np
 import pytest
 
@@ -13,7 +8,6 @@ pytest.importorskip("open3d")
 
 
 def _floor_and_wall() -> np.ndarray:
-    """A 2 x 2 m floor at y = 0 with 900 points, and a wall at x = 0 with 2500 points."""
     a = np.linspace(0.1, 2.0, 30)
     floor = np.array([[x, 0.0, z] for x in a for z in a])
     b = np.linspace(0.1, 2.0, 50)

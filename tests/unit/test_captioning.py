@@ -277,8 +277,6 @@ def test_every_reply_the_schema_allows_becomes_a_caption():
 
 
 class _ListingEncoder:
-    """Embeds the n-th document it is given as the basis vector e_n."""
-
     def __init__(self) -> None:
         self.documents: list[str] = []
 

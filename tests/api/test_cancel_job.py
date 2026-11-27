@@ -1,5 +1,3 @@
-"""Cancelling a running job through POST /jobs/{job_id}/cancel."""
-
 import threading
 from collections.abc import Callable
 
@@ -12,7 +10,6 @@ from .conftest import AUTH, start_capture, upload, wait_for_job
 
 
 def _held_job(make_client: Callable[..., TestClient]) -> tuple[TestClient, threading.Event, dict]:
-    """A client whose job stays in its first Stage until the gate is set."""
     gate = threading.Event()
     client = make_client(pipeline=FakePipeline(gate=gate))
     return client, gate, upload(client)

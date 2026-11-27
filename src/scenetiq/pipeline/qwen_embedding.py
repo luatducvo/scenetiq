@@ -1,10 +1,3 @@
-"""Qwen3-Embedding: embeds Descriptions (Captioning stage) and Query text (ADR 0008).
-
-The same instance serves the Pipeline and the API, so the model is loaded once per process
-and stays on the GPU for Queries. Queries and the job run on different threads, so loading
-takes a lock.
-"""
-
 import threading
 from typing import Any
 
@@ -15,12 +8,9 @@ from scenetiq.domain import FloatArray
 
 
 class Qwen3TextEmbedder:
-    """Qwen3-Embedding behind the ``CaptionEncoder`` interface; the model loads on first use."""
-
     def __init__(
         self, options: CaptionEmbeddingOptions | None = None, device: str = "cuda"
     ) -> None:
-        """Configure the encoder; nothing is loaded until first used."""
         self.options = options or CaptionEmbeddingOptions()
         self.device = device
         self._model: Any = None
@@ -62,10 +52,8 @@ class Qwen3TextEmbedder:
         return np.concatenate(out).astype(np.float32)
 
     def encode_documents(self, texts: list[str]) -> FloatArray:
-        """Return ``(len(texts), D)`` L2-normalised embeddings of Descriptions."""
         return self._encode(texts)
 
     def encode_query(self, text: str) -> FloatArray:
-        """Return the L2-normalised embedding of Query ``text``, with the query instruction."""
         prompt = f"Instruct: {self.options.query_instruction}\nQuery:{text.strip()}"
         return self._encode([prompt])[0]

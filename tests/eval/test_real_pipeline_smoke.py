@@ -10,8 +10,6 @@ pytestmark = pytest.mark.gpu
 
 
 class StageRecorder:
-    """A job reporter that records the stages and notes of one run."""
-
     def __init__(self, stages: list[Stage]) -> None:
         self.stages = stages
         self.notes: list[str] = []
@@ -28,7 +26,6 @@ class StageRecorder:
 
 @pytest.fixture(scope="module")
 def encoder():
-    """One SigLIP2 model shared by the Pipeline and the Query tests, as on the server."""
     from scenetiq.pipeline.siglip import SigLIP2Encoder
 
     return SigLIP2Encoder()
@@ -36,7 +33,6 @@ def encoder():
 
 @pytest.fixture(scope="module")
 def caption_encoder():
-    """One Qwen3-Embedding model shared by the Pipeline and the Query tests, as on the server."""
     from scenetiq.pipeline.qwen_embedding import Qwen3TextEmbedder
 
     return Qwen3TextEmbedder()
@@ -44,7 +40,6 @@ def caption_encoder():
 
 @pytest.fixture(scope="module")
 def captioner():
-    """One Qwen3-VL model shared by the Pipeline and the Query parser, as on the server."""
     from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
 
     return QwenVLCaptioner()
@@ -99,10 +94,6 @@ def test_some_instances_get_a_caption_with_description_embeddings(real_result):
 
 
 def test_cameras_of_upright_photos_end_up_with_up_near_minus_y(real_result):
-    """An inverted sign from the up estimator would put this near 180 degrees.
-
-    The smoke Capture's photos must be held roughly upright.
-    """
     rec, _ = real_result
     camera_ups = np.stack([-cam.cam_to_world[:3, 1] for cam in rec.cameras]).astype(np.float64)
     mean_up = camera_ups.mean(axis=0)
@@ -112,7 +103,6 @@ def test_cameras_of_upright_photos_end_up_with_up_near_minus_y(real_result):
 
 
 def test_geocalib_up_points_up_in_upright_photos(smoke_capture: Capture):
-    """Checks the sign directly, in case the Scene was left unrotated for lack of consensus."""
     from PIL import Image
 
     from scenetiq.pipeline.alignment import GeoCalibUpEstimator
@@ -251,7 +241,6 @@ def _configured_settings():
 
 
 def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, float]]:
-    """The View index and its box (left, top, right, bottom; original-photo pixels)."""
     raw = os.environ.get(SMOKE_QUERY_BOX_ENV)
     if not raw:
         pytest.fail(
@@ -264,7 +253,6 @@ def _annotated_box(capture: Capture) -> tuple[int, tuple[float, float, float, fl
 
 
 def _box_overlap(points, camera, box, photo_size) -> tuple[float, float]:
-    """``(share of points projecting into the photo, share of those inside box)``."""
     from scenetiq.pipeline.adapters import c2w_to_w2c
 
     w2c = c2w_to_w2c(camera.cam_to_world)
@@ -289,11 +277,6 @@ def _box_overlap(points, camera, box, photo_size) -> tuple[float, float]:
 def test_query_for_a_present_object_matches_that_object(
     real_result, smoke_capture: Capture, encoder, caption_encoder
 ):
-    """A clearly visible object must be the best Match.
-
-    Set SCENETIQ_SMOKE_QUERY to the object's name and SCENETIQ_SMOKE_QUERY_BOX to its
-    box in one photo of the smoke Capture.
-    """
     from PIL import Image
 
     from scenetiq.query import run_query
@@ -337,14 +320,12 @@ DEFAULT_SPATIAL_QUERY = "the object nearest to the chair"
 
 @pytest.fixture(scope="module")
 def query_parser(captioner):
-    """The real Query parser on the Pipeline's Qwen3-VL, as on the server."""
     from scenetiq.query_parser import VLMQueryParser
 
     return VLMQueryParser(captioner, _configured_settings().query_parser)
 
 
 def _answer(text, rec, query_parser, encoder, caption_encoder):
-    """The parsed Query and Matches of ``text``, routed as the Query endpoint routes them."""
     import time
 
     from scenetiq.domain import QueryObject
@@ -381,7 +362,6 @@ def _answer(text, rec, query_parser, encoder, caption_encoder):
 def test_a_query_with_a_relation_returns_matches_with_anchors(
     real_result, query_parser, encoder, caption_encoder
 ):
-    """Shape only. Set SCENETIQ_SMOKE_SPATIAL_QUERY to a Relation between objects in the Scene."""
     rec, _ = real_result
     assert len(rec.instances) >= 2, "a Query with an Anchor needs two Instances"
     text = os.environ.get(SMOKE_SPATIAL_QUERY_ENV, DEFAULT_SPATIAL_QUERY)

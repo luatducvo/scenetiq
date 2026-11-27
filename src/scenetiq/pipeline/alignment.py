@@ -1,9 +1,3 @@
-"""Aligning stage: Gravity alignment of the fused geometry and the cameras (ADR 0007).
-
-Physical up becomes -Y. Weak evidence leaves the Scene as it is and the job goes on; a
-technical failure propagates and fails the job like any other stage's.
-"""
-
 import logging
 import math
 from collections.abc import Callable, Sequence
@@ -19,46 +13,27 @@ from scenetiq.pipeline.gpu_memory import free_gpu_memory
 from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 Float64Array = npt.NDArray[np.float64]
-"""Rotations and directions, which are computed in double precision."""
 
 CONVENTIONAL_UP = (0.0, -1.0, 0.0)
-"""The direction physical up has in a Reconstruction once it is Gravity-aligned."""
 
 ALIGNMENT_LOGGER = "scenetiq.alignment"
-"""Logger of the per-job line; ``colab_logging.json`` sends it to stdout unformatted."""
 
 _logger = logging.getLogger(ALIGNMENT_LOGGER)
 
 
 class UpEstimator(Protocol):
-    """Estimates which way is up in single photos."""
-
     def estimate(
         self, images: npt.NDArray[np.uint8], focals: npt.NDArray[np.float32] | None
-    ) -> npt.ArrayLike:
-        """Return one up vector per View, each in its camera's frame (OpenCV convention).
-
-        Args:
-            images: ``(K, H, W, 3)`` uint8 RGB.
-            focals: ``(K,)`` focal lengths in pixels of ``images``, if known.
-        """
-        ...
+    ) -> npt.ArrayLike: ...
 
 
 class GeoCalibUpEstimator:
-    """GeoCalib behind the :class:`UpEstimator` interface.
-
-    The model loads for each :meth:`estimate` call and leaves the GPU when it ends.
-    """
-
     def __init__(self, device: str = "cuda") -> None:
-        """Configure the estimator; nothing is loaded until :meth:`estimate`."""
         self.device = device
 
     def estimate(
         self, images: npt.NDArray[np.uint8], focals: npt.NDArray[np.float32] | None
     ) -> npt.NDArray[np.float32]:
-        """Run GeoCalib on each image independently; see :class:`UpEstimator`."""
         try:
             return self._estimate(images, focals)
         finally:
@@ -83,30 +58,15 @@ class GeoCalibUpEstimator:
 
 @dataclass(frozen=True)
 class PlaneCandidate:
-    """A plane found in the fused geometry.
-
-    Attributes:
-        normal: Unit normal of the plane.
-        fraction: Share of the searched points that lie on the plane.
-    """
-
     normal: Float64Array
     fraction: float
 
 
 PlaneSearch = Callable[[FloatArray, AlignmentOptions], list[PlaneCandidate]]
-"""Finds candidate planes in ``(N, 3)`` points."""
 
 
 @dataclass(frozen=True)
 class UpConsensus:
-    """What the per-View up estimates agree on.
-
-    Attributes:
-        direction: Unit up direction in the world frame, or ``None`` without a consensus.
-        fraction: Share of the estimates in the largest group that agrees.
-    """
-
     direction: Float64Array | None
     fraction: float
 
@@ -114,19 +74,6 @@ class UpConsensus:
 def find_up_consensus(
     world_ups: npt.ArrayLike, max_angle_deg: float, min_fraction: float
 ) -> UpConsensus:
-    """Find the direction most per-View up estimates agree on.
-
-    The group around each estimate holds every estimate within ``max_angle_deg`` of it,
-    itself included. The largest group wins, with ties going to the earlier View.
-
-    Args:
-        world_ups: ``(K, 3)`` up estimates in the world frame, in View order.
-        max_angle_deg: Largest angle between an estimate and its group's centre.
-        min_fraction: The group must hold more than this share of the estimates.
-
-    Returns:
-        The group's normalised mean as the direction, if the group is large enough.
-    """
     ups = np.asarray(world_ups, dtype=np.float64)
     if len(ups) == 0:
         return UpConsensus(direction=None, fraction=0.0)
@@ -143,18 +90,6 @@ def find_up_consensus(
 def apply_rotation(
     geometry: FusedGeometry, view_data: ViewData, rotation: npt.ArrayLike
 ) -> tuple[FusedGeometry, ViewData]:
-    """Rotate the points and every camera about the origin, keeping the point order.
-
-    Depth is measured in each camera's frame, so it stays valid and is not touched.
-
-    Args:
-        geometry: The fused geometry.
-        view_data: The Views whose cameras move with the geometry.
-        rotation: 3x3 rotation.
-
-    Returns:
-        New geometry and View data; the inputs are unchanged.
-    """
     rot = np.asarray(rotation, dtype=np.float64)
     vertices = (geometry.vertices.astype(np.float64) @ rot.T).astype(np.float32)
     transform = np.eye(4)
@@ -167,24 +102,12 @@ def apply_rotation(
 
 
 def evenly_spaced_views(view_count: int, max_views: int) -> list[int]:
-    """Return at most ``max_views`` View indices spread evenly from first to last."""
     if view_count <= max_views:
         return list(range(view_count))
     return [int(i) for i in np.linspace(0, view_count - 1, max_views).round()]
 
 
 def find_planes(points: FloatArray, options: AlignmentOptions) -> list[PlaneCandidate]:
-    """Find the largest planes in ``points`` with RANSAC, removing each one's points in turn.
-
-    Works on a copy, subsampled to ``options.plane_max_points``, so ``points`` is not changed.
-
-    Args:
-        points: ``(N, 3)`` positions in metres.
-        options: Stage settings.
-
-    Returns:
-        The planes found, in the order they were found. Normals have an arbitrary sign.
-    """
     import open3d as o3d
 
     remaining = np.asarray(points, dtype=np.float64)
@@ -217,19 +140,6 @@ def select_plane(
     max_angle_deg: float,
     min_fraction: float,
 ) -> PlaneCandidate | None:
-    """Pick the largest plane level enough to refine ``up``.
-
-    Floor, tabletop and ceiling all qualify: only the plane's direction matters.
-
-    Args:
-        candidates: The planes to choose from.
-        up: Current estimate of up.
-        max_angle_deg: Largest angle between a normal and ``up``, ignoring the normal's sign.
-        min_fraction: Smallest share of the points a plane may hold.
-
-    Returns:
-        The chosen plane with its normal flipped to agree with ``up``, or ``None``.
-    """
     up_unit = _unit(up)
     cos_limit = np.cos(np.deg2rad(max_angle_deg))
     best: PlaneCandidate | None = None
@@ -252,7 +162,6 @@ def format_alignment_line(
     consensus: float,
     plane_fraction: float | None = None,
 ) -> str:
-    """Return the log line of one job's Aligning stage."""
     line = (
         f"gravity-alignment method={method} angle={angle_deg:.1f}deg "
         f"views={views} consensus={consensus:.2f}"
@@ -267,22 +176,6 @@ def gravity_align(
     options: AlignmentOptions | None = None,
     plane_search: PlaneSearch = find_planes,
 ) -> tuple[FusedGeometry, ViewData, bool]:
-    """Rotate the geometry and cameras so that physical up is -Y, if the Views agree on up.
-
-    A qualifying plane refines the direction the Views agree on, but never replaces a
-    missing consensus. Logs one line saying what was done. The point order never changes.
-
-    Args:
-        geometry: The fused geometry.
-        view_data: Every View, with its camera.
-        estimator: The source of per-View up vectors.
-        options: Stage settings.
-        plane_search: The source of candidate planes.
-
-    Returns:
-        The aligned geometry and View data, or the inputs when the Views do not agree, and
-        whether the Scene was aligned.
-    """
     opts = options or AlignmentOptions()
     chosen = evenly_spaced_views(len(view_data), opts.max_views)
     cameras = [view_data.cameras[i] for i in chosen]
@@ -323,11 +216,6 @@ def gravity_align(
 
 
 def rotation_between(source: npt.ArrayLike, target: npt.ArrayLike) -> Float64Array:
-    """Return the smallest 3x3 rotation taking direction ``source`` to direction ``target``.
-
-    Opposite directions have no unique smallest rotation, so any half turn about an
-    axis perpendicular to them is returned.
-    """
     src = _unit(source)
     dst = _unit(target)
     cos_angle = float(src @ dst)

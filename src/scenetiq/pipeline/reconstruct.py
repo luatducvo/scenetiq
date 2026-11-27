@@ -1,9 +1,3 @@
-"""Reconstructing stage: metric depth and cameras for every View with Depth Anything 3.
-
-ADR 0001: ``DA3NESTED-GIANT-LARGE-1.1`` gives depth directly in metres (CC BY-NC weights).
-The model sits behind :class:`Reconstructor` so it can be swapped.
-"""
-
 from typing import Any, Protocol
 
 import numpy as np
@@ -16,22 +10,11 @@ from scenetiq.pipeline.view_data import ViewData
 
 
 class Reconstructor(Protocol):
-    """Estimates depth and cameras for a set of Views."""
-
-    def reconstruct(self, views: list[View]) -> ViewData:
-        """Return depth, cameras and resized images for ``views``, in order."""
-        ...
+    def reconstruct(self, views: list[View]) -> ViewData: ...
 
 
 class DA3Reconstructor:
-    """Depth Anything 3 behind the :class:`Reconstructor` interface.
-
-    The model loads for each :meth:`reconstruct` call and leaves the GPU when it ends,
-    so later stages have that memory.
-    """
-
     def __init__(self, options: DA3Options | None = None, device: str = "cuda") -> None:
-        """Configure the stage; nothing is loaded until :meth:`reconstruct`."""
         self.options = options or DA3Options()
         self.device = device
         self._model: Any = None
@@ -57,7 +40,6 @@ class DA3Reconstructor:
             )
 
     def reconstruct(self, views: list[View]) -> ViewData:
-        """Run DA3 on every View and return metric depth, cameras and resized images."""
         try:
             pred = self._predict(views)
         finally:

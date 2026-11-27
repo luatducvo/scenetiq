@@ -1,9 +1,3 @@
-"""Merging stage: MV3DIS 3D-guided mask matching turns Masks into Instances.
-
-The vendored MV3DIS core (``scenetiq.vendor.mv3dis``) runs unchanged on arrays.
-This module adapts SceneTIQ's ViewData and Masks to it and its labels back.
-"""
-
 import numpy as np
 import numpy.typing as npt
 
@@ -13,22 +7,11 @@ from scenetiq.pipeline.masking import ViewMasks
 from scenetiq.pipeline.view_data import ViewData
 
 MIN_MERGE_POINTS = 8
-"""MV3DIS links each point to its 8 nearest neighbours (``k_graph``) and cannot run on fewer."""
 
 MIN_MERGE_PRIMITIVES = 2
-"""MV3DIS compares neighbouring primitives, so one alone gives it nothing to compare."""
 
 
 def labels_to_instance_ids(labels: npt.ArrayLike, min_points: int) -> npt.NDArray[np.int32]:
-    """Turn MV3DIS point labels into Instance ids.
-
-    Args:
-        labels: ``(N,)`` MV3DIS labels; 0 means no instance.
-        min_points: Regions with fewer points get no Instance.
-
-    Returns:
-        ``(N,)`` int32 ids, consecutive from 0 by descending size; -1 for none.
-    """
     lab = np.asarray(labels)
     out = np.full(lab.shape, -1, dtype=np.int32)
     values, counts = np.unique(lab[lab != 0], return_counts=True)
@@ -46,13 +29,6 @@ def merge_instances(
     view_masks: list[ViewMasks],
     options: MergingOptions | None = None,
 ) -> npt.NDArray[np.int32]:
-    """Run MV3DIS and return the Instance id of every point (-1 for none).
-
-    Views without any Mask are left out, as upstream does.
-
-    Raises:
-        RuntimeError: If no View has a Mask, or the Scene is too small for MV3DIS.
-    """
     point_count = len(points)
     if point_count < MIN_MERGE_POINTS:
         raise RuntimeError(

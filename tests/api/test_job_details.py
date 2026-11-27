@@ -1,5 +1,3 @@
-"""Stage timings and job notes reported by GET /jobs/{job_id}."""
-
 import sqlite3
 
 from scenetiq.domain import Stage

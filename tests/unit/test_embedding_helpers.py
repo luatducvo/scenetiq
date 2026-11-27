@@ -161,8 +161,6 @@ BLUE = (0, 0, 255)
 
 
 class _CropEncoder:
-    """Encodes a crop with a grey corner (a masked one) as (0, 1), any other as (1, 0)."""
-
     def __init__(self) -> None:
         self.crops: list[Image.Image] = []
 

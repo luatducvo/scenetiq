@@ -1,14 +1,3 @@
-"""Captioning stage: a Caption per Instance from boxed crops of its best Views (ADR 0008).
-
-For every Instance, take the first Views of the Embedding stage's plan, crop the Instance
-from the original photos with some context, darken everything outside its mask, draw its
-tight box on, and ask a vision-language model for its Name, Synonyms and one Description
-per Aspect, as JSON. The box alone cannot single out a floor or a wall, whose box holds
-everything standing on or against it; the darkening does (ADR 0011).
-Replies are parsed tolerantly; an Instance whose reply has no usable Name gets no Caption,
-and the reason is logged.
-"""
-
 import json
 import logging
 from collections.abc import Callable, Sequence
@@ -23,15 +12,12 @@ from scenetiq.domain import Aspect, Camera, Caption, CaptionEncoder, EmbeddedCap
 from scenetiq.pipeline.embedding import ViewPlans, crop_box, photo_pixels
 
 CAPTIONING_LOGGER = "scenetiq.captioning"
-"""Logger of the per-job Captioning summary; ``colab_logging.json`` lets it through."""
 
 _logger = logging.getLogger(CAPTIONING_LOGGER)
 
 MAX_SYNONYMS = 3
-"""Most Synonyms a Caption keeps; any beyond are dropped."""
 
 BOX_COLOR = (255, 0, 0)
-"""RGB colour of the box drawn around the Instance; :data:`CAPTION_PROMPT` calls it red."""
 
 _ASPECT_PROMPTS = {
     Aspect.IDENTITY: "what the object is and what else people call it",
@@ -54,14 +40,11 @@ CAPTION_PROMPT = (
     + "; ".join(f'"{a.value}" ({text})' for a, text in _ASPECT_PROMPTS.items())
     + "."
 )
-"""The instruction sent with every Instance's images."""
 
 
 MAX_NAME_LENGTH = 40
-"""Longest Name or Synonym, in characters, the reply schema allows."""
 
 MAX_DESCRIPTION_LENGTH = 200
-"""Longest Description, in characters, the reply schema allows."""
 
 CAPTION_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -77,38 +60,16 @@ CAPTION_SCHEMA: dict[str, Any] = {
     "required": ["name", "synonyms", *(a.value for a in Aspect)],
     "additionalProperties": False,
 }
-"""JSON schema the vision-language model's reply is forced to follow, token by token.
-
-A Description may be empty, so the model is never pushed to invent an Aspect it cannot see.
-:func:`parse_caption` still checks every reply, because one can be cut off at the token
-limit.
-"""
 
 
-class UnusableReplyError(ValueError):
-    """Raised when a model reply holds no usable Caption; the message says why."""
+class UnusableReplyError(ValueError): ...
 
 
 class Captioner(Protocol):
-    """A vision-language model that describes the boxed Instance in some images."""
-
-    def describe(self, images: list[Any]) -> str:
-        """Return the model's raw reply for PIL ``images`` of one Instance."""
-        ...
+    def describe(self, images: list[Any]) -> str: ...
 
 
 def parse_caption(reply: str) -> Caption:
-    """Read a Caption from a model reply.
-
-    Accepts the JSON object bare, in code fences or surrounded by other text. Synonyms
-    beyond three are dropped, a single string where a list belongs counts as one item,
-    non-text values and unknown keys are ignored, and text is trimmed. An empty Identity
-    is written from the Name and Synonyms, so every Caption has at least one Description.
-
-    Raises:
-        UnusableReplyError: When the reply holds no complete JSON object (for example,
-            cut off by the token limit) or no non-empty text ``name``.
-    """
     start, end = reply.find("{"), reply.rfind("}")
     if start < 0 or end < start:
         raise UnusableReplyError("no JSON object (the reply may be cut off)")
@@ -129,7 +90,6 @@ def parse_caption(reply: str) -> Caption:
 
 
 def _identity(name: str, synonyms: tuple[str, ...]) -> str:
-    """An Identity Description written from ``name`` and ``synonyms``."""
     text = f"{_article(name).capitalize()} {name}"
     if synonyms:
         others = ", ".join(synonyms[:-1]) + " or " if len(synonyms) > 1 else ""
@@ -159,24 +119,6 @@ def boxed_crop(
     mask: Any = None,
     dim: float = 1.0,
 ) -> Any:
-    """Crop the pixels' box from ``photo`` with context, and draw the tight box on it.
-
-    With a ``mask``, everything outside the Instance is darkened first, so the box is
-    drawn over the darkened crop.
-
-    Args:
-        photo: PIL RGB image.
-        u: Columns of the Instance's pixels in ``photo``.
-        v: Rows of the Instance's pixels in ``photo``.
-        expand: Context added on each side, as a fraction of the box size.
-        color: RGB colour of the drawn box.
-        mask: The Instance's mask as a PIL ``L`` image of the photo's size, 255 inside the
-            Instance; ``None`` darkens nothing.
-        dim: Brightness, in (0, 1], of the pixels outside ``mask``; 1 darkens nothing.
-
-    Returns:
-        A new PIL image; ``photo`` is not modified.
-    """
     from PIL import Image, ImageDraw
 
     left, top, right, bottom = crop_box(u, v, 0.0, photo.width, photo.height)
@@ -204,21 +146,6 @@ def caption_instances(
     options: CaptioningOptions | None = None,
     checkpoint: Callable[[], None] | None = None,
 ) -> dict[int, Caption]:
-    """Caption every Instance from the first Views of its plan.
-
-    Args:
-        plans: The Views chosen for every Instance, best first, with pixels at the
-            depth-map resolution (:func:`scenetiq.pipeline.embedding.plan_views`).
-        image_paths: Original photo of every View, in View order.
-        cameras: Camera of every View; its size is the depth-map resolution.
-        captioner: The vision-language model.
-        options: Stage settings.
-        checkpoint: Called before each Instance's generation; it raises to stop the stage.
-
-    Returns:
-        Instance id -> Caption, for the Instances whose reply had a usable Name. Every
-        other Instance is logged with the reason and the start of its reply.
-    """
     opts = options or CaptioningOptions()
     chosen = {iid: plan[: opts.views_per_instance] for iid, plan in plans.items() if plan}
     crops: dict[int, list[tuple[int, Any]]] = {iid: [] for iid in chosen}
@@ -253,15 +180,6 @@ def caption_instances(
 def embed_descriptions(
     captions: dict[int, Caption], encoder: CaptionEncoder
 ) -> dict[int, EmbeddedCaption]:
-    """Embed every non-empty Description of every Caption, one encoder document each.
-
-    Args:
-        captions: Caption per Instance id.
-        encoder: The Caption encoder; called once with every Description.
-
-    Returns:
-        Instance id -> its Caption with one embedding per non-empty Description.
-    """
     owners = [(iid, aspect) for iid, c in captions.items() for aspect in c.descriptions()]
     embeddings = encoder.encode_documents([captions[iid].description(a) for iid, a in owners])
     by_aspect: dict[int, dict[Aspect, FloatArray]] = {iid: {} for iid in captions}

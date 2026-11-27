@@ -1,5 +1,3 @@
-"""HTTP API: upload Captures, track jobs, fetch Reconstructions and run Queries."""
-
 import io
 import logging
 import secrets
@@ -57,18 +55,6 @@ def create_app(
     caption_encoder: CaptionEncoder,
     query_parser: QueryParser,
 ) -> FastAPI:
-    """Build the SceneTIQ API.
-
-    Args:
-        settings: Storage root, shared token, Query ranking and CORS origins.
-        pipeline: Turns an uploaded Capture into a Reconstruction.
-        text_encoder: Encodes Query text for matching against Instance image embeddings.
-        caption_encoder: Encodes Query text for matching against Instance Captions.
-        query_parser: Splits every Query into objects and Relations (ADR 0009).
-
-    Returns:
-        A FastAPI app; every route requires ``Authorization: Bearer <token>``.
-    """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -102,12 +88,10 @@ def create_app(
 
     @app.get("/health")
     def health(request: Request) -> dict[str, str | bool]:
-        """Report that the backend is up and whether a job holds the single job slot."""
         return {"status": "ok", "job_running": request.app.state.runner.busy}
 
     @app.get("/options")
     def get_options() -> OptionsOut:
-        """Report the settings the frontend configures itself from."""
         return OptionsOut(
             min_views=settings.min_views,
             max_views=settings.max_views,
@@ -119,7 +103,6 @@ def create_app(
 
     @app.post("/captures", status_code=status.HTTP_201_CREATED)
     def start_capture(request: Request, body: CaptureIn) -> dict[str, str]:
-        """Start staging a Capture, refusing it before any View is sent if it cannot run."""
         if not settings.min_views <= body.view_count <= settings.max_views:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -138,7 +121,6 @@ def create_app(
         index: Annotated[int, Form(ge=0)],
         image: Annotated[UploadFile, File()],
     ) -> None:
-        """Validate and store one View; sending the same ``index`` again replaces it."""
         store: SceneStore = request.app.state.store
         filename = image.filename or ""
         try:
@@ -158,7 +140,6 @@ def create_app(
 
     @app.post("/scenes", status_code=status.HTTP_201_CREATED)
     def create_scene(request: Request, body: SceneIn) -> dict[str, str]:
-        """Create a Scene from a fully received Capture and start reconstructing it."""
         runner: JobRunner = request.app.state.runner
         store: SceneStore = request.app.state.store
         try:
@@ -188,7 +169,6 @@ def create_app(
 
     @app.get("/jobs/{job_id}")
     def get_job(request: Request, job_id: str) -> JobOut:
-        """Report a job's status, current stage, error, stage timings and notes."""
         store: SceneStore = request.app.state.store
         record = store.get_job(job_id)
         if record is None:
@@ -214,7 +194,6 @@ def create_app(
 
     @app.post("/jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
     def cancel_job(request: Request, job_id: str) -> dict[str, str]:
-        """Ask a queued or running job to stop at its next checkpoint; returns at once."""
         record = request.app.state.store.get_job(job_id)
         if record is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown job")
@@ -227,12 +206,10 @@ def create_app(
 
     @app.get("/scenes")
     def list_scenes(request: Request) -> list[SceneOut]:
-        """List every Scene, newest first."""
         return [_scene_summary(r) for r in request.app.state.store.list_scenes()]
 
     @app.delete("/scenes/{scene_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_scene(request: Request, scene_id: str) -> None:
-        """Delete a Scene and all its data; refused while its job is unfinished."""
         store: SceneStore = request.app.state.store
         record = store.get_scene(scene_id)
         if record is None:
@@ -243,19 +220,16 @@ def create_app(
 
     @app.get("/scenes/{scene_id}/points")
     def get_points(request: Request, scene_id: str) -> FileResponse:
-        """Return the Reconstruction's point cloud as binary PLY (xyz metres, rgb)."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         return FileResponse(directory / POINTS_FILE, media_type="application/octet-stream")
 
     @app.get("/scenes/{scene_id}/instance-ids")
     def get_instance_ids(request: Request, scene_id: str) -> FileResponse:
-        """Return the Instance id of every point (little-endian int32, PLY order, -1 = none)."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         return FileResponse(directory / INSTANCE_IDS_FILE, media_type="application/octet-stream")
 
     @app.get("/scenes/{scene_id}/instances")
     def get_instances(request: Request, scene_id: str) -> list[InstanceOut]:
-        """List the Scene's Instances with centroid, bounding box (metres) and Caption Name."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         return [
             InstanceOut(
@@ -270,7 +244,6 @@ def create_app(
 
     @app.post("/scenes/{scene_id}/query")
     def query_scene(request: Request, scene_id: str, body: QueryIn) -> QueryOut:
-        """Find the Instances that match a free-text Query, honouring its Relations."""
         directory = _ready_reconstruction_dir(request.app.state.store, scene_id)
         text = body.text.strip()
         if not text:
@@ -338,14 +311,6 @@ def create_app(
 
 
 class OptionsOut(BaseModel):
-    """What the frontend configures itself from.
-
-    The View limits of a Capture; how the frontend prepares photos (ADR 0010): it shrinks
-    every photo so that its long side is at most ``upload_max_side`` pixels and re-encodes
-    it as JPEG at ``upload_jpeg_quality`` in (0, 1]; and how many Matches a Query returns
-    by default and at most.
-    """
-
     min_views: int
     max_views: int
     upload_max_side: int
@@ -355,26 +320,15 @@ class OptionsOut(BaseModel):
 
 
 class CaptureIn(BaseModel):
-    """The size of a Capture about to be staged."""
-
     view_count: int
 
 
 class SceneIn(BaseModel):
-    """A name for a new Scene and the staged Capture to create it from."""
-
     name: str = Field(min_length=1, max_length=200)
     capture_id: str = Field(pattern=_ID_PATTERN)
 
 
 class SceneOut(BaseModel):
-    """One Scene in the list.
-
-    ``started_at`` and ``finished_at`` (ISO 8601 UTC) are null until its job starts and
-    ends; ``finished_at`` stays null for a job interrupted by a restart.
-    ``instance_count`` is null unless its job succeeded.
-    """
-
     scene_id: str
     job_id: str
     name: str
@@ -386,30 +340,18 @@ class SceneOut(BaseModel):
 
 
 class StageOut(BaseModel):
-    """When one Stage of a job started and ended (null while it runs)."""
-
     stage: str
     started_at: str
     finished_at: str | None
 
 
 class NoteOut(BaseModel):
-    """One note of a job, with the Stage running when it was recorded."""
-
     at: str
     stage: str | None
     message: str
 
 
 class JobOut(BaseModel):
-    """A job's status and what it reported.
-
-    ``stages`` lists every Stage that started, in order; a Stage ends when the next starts
-    or the job ends. ``notes`` are in the order recorded. Timestamps are ISO 8601 UTC;
-    ``started_at`` and ``finished_at`` are null until the job starts and ends.
-    ``cancel_requested`` is true while an unfinished job has been asked to stop.
-    """
-
     job_id: str
     scene_id: str
     status: str
@@ -423,8 +365,6 @@ class JobOut(BaseModel):
 
 
 class InstanceOut(BaseModel):
-    """An Instance's position and extent, in metres, and its Caption's Name (or null)."""
-
     instance_id: int
     centroid: list[float]
     bbox_min: list[float]
@@ -433,30 +373,16 @@ class InstanceOut(BaseModel):
 
 
 class QueryIn(BaseModel):
-    """A free-text Query, and the most Matches it asks for (all semantic matches when null)."""
-
     text: str = Field(max_length=500)
     top_k: int | None = None
 
 
 class AnchorOut(BaseModel):
-    """An Instance a Match was measured against, and the phrase of the object it stands for."""
-
     instance_id: int
     phrase: str
 
 
 class MatchOut(BaseModel):
-    """One Match: an Instance id, its score, the per-channel similarities and its Anchors.
-
-    ``score`` is the fused value as a fraction of the best Match's, so the best scores 1,
-    or the assignment score when Relations were applied (ADR 0009); either way it is
-    relative to one Query. ``caption_score`` is the
-    similarity of the best-matching Description and ``caption_aspect`` its Aspect; both are
-    null for an Instance without a Caption. When Relations were applied, the similarities are
-    those of the wanted object's phrase. ``anchors`` is empty when they were not.
-    """
-
     instance_id: int
     score: float
     image_score: float
@@ -466,19 +392,6 @@ class MatchOut(BaseModel):
 
 
 class QueryOut(BaseModel):
-    """The Matches for a Query, best first, and what of the Query was taken into account.
-
-    At most ``top_k`` Matches, and at least one when the Scene has Instances (ADR 0011).
-
-    ``relations_applied`` is true when the Query's Relations decided the Matches.
-    ``relations_stated`` is true when the parsed Query had at least one Relation, so stated
-    but not applied means no assignment was valid and the Query was answered as a plain
-    Query. ``unsupported`` lists the parts of the Query the Relation set cannot express, as
-    the parser quoted them; they are never applied. ``parse_failed`` is true when the parser
-    could not read the Query, which was then answered as a plain Query; the other three
-    are then false and empty.
-    """
-
     matches: list[MatchOut]
     relations_applied: bool
     relations_stated: bool
@@ -487,13 +400,6 @@ class QueryOut(BaseModel):
 
 
 def _plain_object(text: str, parsed: ParsedQuery | None) -> QueryObject:
-    """What a plain Query is ranked by (ADR 0011).
-
-    The wanted object of the parsed Query, with its English phrase and Aspects, when the
-    Query names one object or states Relations. A Query that could not be parsed, or that
-    lists several objects without relating them, is ranked by its original text on every
-    Aspect, since no single phrase stands for it.
-    """
     if parsed is None or (len(parsed.objects) > 1 and not parsed.constraints):
         return QueryObject("a", text)
     return next(o for o in parsed.objects if o.object_id == parsed.target)

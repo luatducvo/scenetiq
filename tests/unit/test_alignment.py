@@ -88,7 +88,6 @@ def test_applying_a_rotation_leaves_depth_and_images_alone():
 
 
 def _up_at_degrees(degrees: float) -> list[float]:
-    """A unit vector tilted from -Y towards +X."""
     rad = np.deg2rad(degrees)
     return [float(np.sin(rad)), float(-np.cos(rad)), 0.0]
 
@@ -135,8 +134,6 @@ def test_no_estimates_have_no_consensus():
 
 
 class _FixedUps:
-    """An up estimator that answers with given vectors and records what it was asked."""
-
     def __init__(self, ups: list[list[float]]) -> None:
         self.ups = np.array(ups, dtype=np.float32)
         self.images: np.ndarray | None = None
@@ -149,7 +146,6 @@ class _FixedUps:
 
 
 def _views(count: int) -> ViewData:
-    """``count`` level Views; each View's pixels hold its index, so a test can tell them apart."""
     base = _view_data(np.eye(4))
     return ViewData(
         images=np.stack([np.full((100, 100, 3), i, dtype=np.uint8) for i in range(count)]),

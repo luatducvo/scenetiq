@@ -1,9 +1,3 @@
-"""The candidate margin of a spatial Query's objects (ADR 0009).
-
-Similarities are chosen to be exact in binary floating point (multiples of 1/128), so an
-Instance placed exactly at the margin really is at it.
-"""
-
 from scenetiq.domain import Aspect
 from scenetiq.query import Match
 from scenetiq.spatial import apply_candidate_margin

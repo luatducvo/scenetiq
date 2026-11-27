@@ -1,14 +1,3 @@
-"""Fusing stage: TSDF-fuse the per-View depth into one mesh (ADR 0002).
-
-The mesh vertices become the Reconstruction's point cloud, so the points that
-Instances are made of are exactly the points the user sees.
-
-This uses Open3D's tensor ``VoxelBlockGrid``. Do not go back to the legacy
-``ScalableTSDFVolume``: in Open3D 0.20.0, the only release with Python 3.13 wheels, it
-divides metric depth by 1000 when activating blocks, so only surfaces within about one
-block of a camera survive (https://github.com/isl-org/Open3D/issues/7592).
-"""
-
 import numpy as np
 
 from scenetiq.config import FusionOptions
@@ -17,14 +6,6 @@ from scenetiq.pipeline.view_data import FusedGeometry, ViewData
 
 
 def fuse(view_data: ViewData, options: FusionOptions | None = None) -> FusedGeometry:
-    """Integrate every View's depth into a TSDF volume and extract its mesh.
-
-    The Reconstructing stage has already dropped depth beyond ``DA3Options.max_depth``,
-    so everything left in ``view_data`` is fused. A View with no depth left adds nothing.
-
-    Raises:
-        RuntimeError: If fusion yields an empty mesh (e.g. no reliable depth).
-    """
     import open3d as o3d
 
     opts = options or FusionOptions()

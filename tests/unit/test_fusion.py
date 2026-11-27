@@ -1,8 +1,3 @@
-"""TSDF fusion on Open3D itself; skipped where the GPU stack (open3d) is not installed.
-
-Run it on a CPU machine with: uv run --with open3d==0.20.0 pytest tests/unit/test_fusion.py
-"""
-
 import numpy as np
 import pytest
 

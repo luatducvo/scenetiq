@@ -1,5 +1,3 @@
-"""GET /options: the settings the frontend configures itself from."""
-
 from collections.abc import Callable
 from pathlib import Path
 

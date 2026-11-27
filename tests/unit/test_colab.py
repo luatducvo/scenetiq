@@ -490,7 +490,6 @@ class _AlwaysOk(BaseHTTPRequestHandler):
 
 @pytest.fixture
 def other_server() -> Iterator[int]:
-    """An unrelated server that answers every request, as an old backend would."""
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _AlwaysOk)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -688,7 +687,6 @@ def test_install_progress_reaches_done_after_installed_or_audited():
 
 
 def _fake_uv(monkeypatch, tmp_path, *, export: str, install: str) -> list[list[str]]:
-    """Replace the uv commands of an install by Python scripts; return the commands asked."""
     (tmp_path / "uv.lock").write_text(LOCK, encoding="utf-8")
     monkeypatch.setattr(colab.shutil, "which", lambda _: "/usr/bin/uv")
     monkeypatch.setattr(colab, "held_constraints", lambda: "torch==2.11.0\n")

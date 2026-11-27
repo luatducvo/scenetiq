@@ -1,5 +1,3 @@
-"""The real Pipeline: chains the GPU stages behind the ``Pipeline`` interface."""
-
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -37,17 +35,6 @@ from scenetiq.pipeline.superpoints import mesh_superpoints
 
 @dataclass
 class RealPipelineOptions:
-    """Tuning of the stages that are plain functions (models carry their own options).
-
-    Attributes:
-        fusion: TSDF Fusing stage (ADR 0002).
-        alignment: Aligning stage (ADR 0007).
-        superpoints: Superpoints stage.
-        merging: MV3DIS Merging stage.
-        embedding: SigLIP2 Embedding stage.
-        captioning: Captioning stage (ADR 0008).
-    """
-
     fusion: FusionOptions = field(default_factory=FusionOptions)
     alignment: AlignmentOptions = field(default_factory=AlignmentOptions)
     superpoints: SuperpointOptions = field(default_factory=SuperpointOptions)
@@ -57,23 +44,6 @@ class RealPipelineOptions:
 
 
 class RealPipeline:
-    """Turns a Capture into a Reconstruction with the real model stack.
-
-    Args:
-        reconstructor: The Reconstructing stage (DA3 by default, ADR 0001).
-        masker: The Masking stage (SAM2 automatic masks by default, ADR 0003).
-        image_encoder: Image tower of the Embedding stage (SigLIP2 by default). Pass
-            the same encoder the API uses for Query text.
-        options: Settings of the remaining stages.
-        up_estimator: The Aligning stage's source of up vectors (GeoCalib by default,
-            ADR 0007).
-        captioner: The Captioning stage's vision-language model (Qwen3-VL by default,
-            ADR 0008). It stays on the GPU after the stage: pass the captioner built in
-            ``server.build_components``.
-        caption_encoder: Embeds Captions (Qwen3-Embedding by default). Pass the same
-            encoder the API uses for Query text.
-    """
-
     def __init__(
         self,
         reconstructor: Reconstructor | None = None,
@@ -84,7 +54,6 @@ class RealPipeline:
         captioner: Captioner | None = None,
         caption_encoder: CaptionEncoder | None = None,
     ) -> None:
-        """Assemble the stages; models load lazily on the first run."""
         self.reconstructor = reconstructor or DA3Reconstructor()
         self.masker = masker or SAM2Masker()
         self.image_encoder = image_encoder or SigLIP2Encoder()
@@ -94,7 +63,6 @@ class RealPipeline:
         self.caption_encoder = caption_encoder or Qwen3TextEmbedder()
 
     def run(self, capture: Capture, reporter: JobReporter) -> Reconstruction:
-        """Run every stage on ``capture``, reporting each one through ``reporter``."""
         opts = self.options
         # A job that ran out of memory could only be collected after its exception was handled.
         free_gpu_memory()

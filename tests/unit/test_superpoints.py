@@ -4,7 +4,6 @@ from scenetiq.pipeline.superpoints import mesh_superpoints
 
 
 def _grid(n: int, to_xyz) -> tuple[np.ndarray, np.ndarray]:
-    """An n x n vertex grid mapped by ``to_xyz(u, v)``, triangulated."""
     u, v = np.meshgrid(np.linspace(0, 1, n), np.linspace(0, 1, n))
     verts = np.stack(to_xyz(u.ravel(), v.ravel()), axis=1)
     idx = np.arange(n * n).reshape(n, n)

@@ -1,5 +1,3 @@
-"""Geometry helpers on point sets."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -14,17 +12,6 @@ def build_instances(
     embeddings: dict[int, FloatArray] | None = None,
     captions: dict[int, EmbeddedCaption] | None = None,
 ) -> list[Instance]:
-    """Build an Instance for every non-negative id in ``instance_ids``.
-
-    Args:
-        points: ``(N, 3)`` positions in metres.
-        instance_ids: ``(N,)`` Instance id per point, ``-1`` for none.
-        embeddings: Optional image embedding per Instance id.
-        captions: Optional Caption, with its Description embeddings, per Instance id.
-
-    Returns:
-        Instances sorted by id, each with its centroid and axis-aligned bounding box.
-    """
     embeddings = embeddings or {}
     captions = captions or {}
     instances: list[Instance] = []
@@ -48,7 +35,6 @@ def build_instances(
 
 
 def l2_normalize(vector: npt.ArrayLike) -> FloatArray:
-    """Return ``vector`` scaled to unit length as float32 (zero vectors stay zero)."""
     arr = np.asarray(vector, dtype=np.float32)
     norm = float(np.linalg.norm(arr))
     return arr if norm == 0.0 else (arr / norm).astype(np.float32)

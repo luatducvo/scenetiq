@@ -1,5 +1,3 @@
-"""Queries with a Relation, through the HTTP API with the fake parser (ADR 0009)."""
-
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -108,11 +106,6 @@ def _box_scene(
     boxes: dict[int, tuple[list[float], list[float], FloatArray]],
     captions: dict[int, EmbeddedCaption] | None = None,
 ) -> Reconstruction:
-    """Instances drawn as their two corner points ``low`` and ``high``, so each Instance's
-    bounding box is exactly ``low``-``high`` and its centroid the box's centre.
-
-    Up is -Y (ADR 0007): a box's top is its smaller y, its footprint its X-Z rectangle.
-    """
     points, ids = [], []
     for iid, (low, high, _) in boxes.items():
         points += [low, high]
@@ -130,20 +123,12 @@ def _box_scene(
 
 
 def _flat_scene(boxes: dict[int, tuple[list[float], FloatArray]]) -> Reconstruction:
-    """Instances drawn as two corner points on z = 0, each box ``(x, y)`` to ``(x+1, y+1)``.
-
-    Every scene here spans x 0-8 and y 0-6, so its extent is sqrt(8^2 + 6^2) = 10 and the
-    default falloff scale is 0.1 * 10 = 1 metre: near = exp(-gap).
-    """
     return _box_scene(
         {i: ([x, y, 0.0], [x + 1, y + 1, 0.0], e) for i, ((x, y), e) in boxes.items()}
     )
 
 
 WIDE = (2.0, 2.0)
-"""Candidate margins wider than any difference of two cosines, so every shortlisted Instance
-stays a candidate. For tests about something other than the margin, whose scenes rank a
-poor second candidate for a phrase."""
 
 # The lamp at (0-1, 0-1); the second-ranked chair at (2-3, 0-1), 1 m from it; the first-ranked
 # chair in the far corner at (7-8, 5-6), 6 m along x and 4 m along y from it.
@@ -163,10 +148,6 @@ def _client(
     top_k: int,
     margins: tuple[float, float] | None = None,
 ) -> tuple[TestClient, str]:
-    """A client with ``scene`` (flat boxes for :func:`_flat_scene`, or a Reconstruction).
-
-    ``margins`` are the Caption and image candidate margins; the defaults when omitted.
-    """
     spatial = SpatialOptions(candidates_per_object=candidates)
     if margins is not None:
         spatial = SpatialOptions(
@@ -612,8 +593,6 @@ CHAIR_IMAGE_06 = l2_normalize([0.75, 0, 0, 0, 0.661438, 0, 0, 0])  # 0.6
 
 
 def _chair_caption(similarity: float) -> EmbeddedCaption:
-    """A Caption whose Identity Description has ``similarity`` to the Caption query "chair"
-    (the first basis vector of the fake Caption space)."""
     embedding = l2_normalize([similarity, (1 - similarity**2) ** 0.5, 0, 0, 0, 0, 0])
     return EmbeddedCaption(Caption("chair", identity="A chair."), {Aspect.IDENTITY: embedding})
 

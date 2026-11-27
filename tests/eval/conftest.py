@@ -10,7 +10,6 @@ SMOKE_CAPTURE_ENV = "SCENETIQ_SMOKE_CAPTURE"
 
 @pytest.fixture(scope="session")
 def smoke_capture() -> Capture:
-    """A small real Capture: a directory of 10+ JPG/PNG photos named by SCENETIQ_SMOKE_CAPTURE."""
     root = os.environ.get(SMOKE_CAPTURE_ENV)
     if not root:
         pytest.skip(f"set {SMOKE_CAPTURE_ENV} to a directory of photos of one static Scene")

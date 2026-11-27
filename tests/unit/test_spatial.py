@@ -369,7 +369,6 @@ def test_a_relation_without_a_scoring_function_fails_loudly(monkeypatch: pytest.
 
 
 def _cube(iid: int, x: float, side: float) -> Instance:
-    """A cube of ``side`` metres standing on y = 0 (its bottom), at ``x`` along X."""
     return _box(iid, [x, -side, 0], [x + side, 0, side])
 
 
