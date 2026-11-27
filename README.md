@@ -8,11 +8,12 @@ Turns uncalibrated photos of a static scene into a metric 3D point cloud split i
 
 | Path | What |
 |---|---|
-| `src/scenetiq/` | FastAPI backend: API, storage, Query ranking, spatial solver |
-| `src/scenetiq/pipeline/` | GPU stages: DA3 → TSDF fusion → gravity alignment → SAM2 + MV3DIS → SigLIP2 + Qwen3-VL Captions |
+| `src/scenetiq/` | Backend: `api/` (HTTP + jobs), `storage/`, `query/` (ranking, parser, spatial solver), `evaluation/`, `deployment/` |
+| `src/scenetiq/pipeline/` | GPU stages: DA3 → TSDF fusion → gravity alignment → SAM2 + MV3DIS → SigLIP2 + Qwen3-VL Captions; `models/` holds the shared resident models |
 | `frontend/` | React + Vite + TypeScript viewer |
 | `notebooks/` | Starts the backend on a GPU runtime |
-| `tests/` | `api/` and `unit/` run on CPU; `eval/` needs a GPU |
+| `tests/` | `unit/` and `integration/` run on CPU |
+| `evaluation/` | The real Pipeline on a GPU, and how to score Queries against hand-labelled Instances |
 | `GLOSSARY.md`, `docs/adr/` | Domain terms and design decisions |
 
 ## Local development

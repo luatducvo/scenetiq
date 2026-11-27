@@ -1,0 +1,4 @@
+[
+  { "scene_id": "<scene id>", "query": "red chair", "instance_ids": [3] },
+  { "scene_id": "<scene id>", "query": "the lamp on the table", "instance_ids": [7, 9] }
+]

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from scenetiq.domain import Constraint, Instance, Relation
-from scenetiq.spatial import (
+from scenetiq.query.spatial import (
     RELATION_SCORES,
     RelationContext,
     UnsupportedRelationError,

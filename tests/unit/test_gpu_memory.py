@@ -1,7 +1,6 @@
 import json
-from pathlib import Path
 
-import scenetiq
+from scenetiq.deployment.processes import LOG_CONFIG_PATH
 from scenetiq.pipeline.gpu_memory import GPU_LOGGER, format_merge_input, format_stage_memory
 
 
@@ -16,8 +15,8 @@ def test_merge_input_line_names_both_counts():
     assert format_merge_input(1_200_000, 30_000) == "merge-input points=1200000 primitives=30000"
 
 
-def test_colab_logging_lets_memory_lines_reach_stdout():
-    path = Path(scenetiq.__file__).with_name("colab_logging.json")
+def test_logging_config_lets_memory_lines_reach_stdout():
+    path = LOG_CONFIG_PATH
     logger = json.loads(path.read_text(encoding="utf-8"))["loggers"][GPU_LOGGER]
     assert logger["level"] == "INFO"
     assert logger["handlers"] == ["progress"]

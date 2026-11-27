@@ -8,7 +8,8 @@ Python 3.13 with **uv** (never `uv sync` on the GPU runtime, see [GPU stack](#gp
 uv run pre-commit install         # once per clone: lint + ty on commit, pytest + frontend build on push
 uv run ruff check . && uv run ruff format --check .
 uv run ty check
-uv run pytest                      # CPU suite; `-m gpu` = GPU smoke tests (GPU runtime only)
+uv run pytest                      # unit + integration, on CPU
+uv run pytest evaluation           # evaluation suite: the real Pipeline (GPU runtime only)
 npm --prefix frontend run lint && npm --prefix frontend run typecheck && npm --prefix frontend run build
 SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 8001   # local backend, fake Pipeline
 ```
@@ -18,7 +19,7 @@ SCENETIQ_TOKEN=dev uv run uvicorn --factory scenetiq.server:build_app --port 800
 - Name things with the `GLOSSARY.md` terms and steer clear of its *Avoid* list.
 - Respect `docs/adr/`; when a decision changes, update or supersede its ADR in the same change.
 - Import `torch`, `open3d`, `sam2`, `transformers`, `xgrammar` and `depth_anything_3` only inside functions, so the package imports and tests on CPU.
-- Done means: every command above passes (frontend ones when `frontend/` changed), tests sit at the right [seam](#tests), and this file records any new non-obvious constraint (never what the code already says).
+- Done means: every command above passes (frontend ones when `frontend/` changed), tests sit at the right [layer](#tests), and this file records any new non-obvious constraint (never what the code already says).
 - Commit no model weights.
 - Write no docstrings (outside `src/scenetiq/vendor/`); when the *why* is not obvious, use a `#` comment.
 
@@ -40,8 +41,9 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/doma
 
 ### Tests
 
-- **Seam A**, `tests/api/`: the HTTP API through TestClient, with the fakes of `scenetiq.fakes` on a temp storage root. Most behaviour is tested here. **Unit**, `tests/unit/`: pure, model-free functions. **Seam B**, `tests/eval/`: the real Pipeline, `@pytest.mark.gpu`, deselected by default.
-- Model-loading code (DA3, SAM2, SigLIP2, Qwen3-VL, Qwen3-Embedding, MV3DIS, `RealPipeline.run`) is covered by Seam B alone. Elsewhere stand it in only with `scenetiq.fakes`, at Seam A. Constructing those classes is fine anywhere: models load on first use.
+- Three layers (ADR 0008). **Unit**, `tests/unit/`: pure, model-free functions. **Integration**, `tests/integration/`: the HTTP API through TestClient, with the fakes of `scenetiq.fakes` on a temp storage root; most behaviour is tested here. **Evaluation**, `evaluation/` at the root, outside `testpaths`: the real Pipeline on a GPU, skipped as a whole without CUDA.
+- Model-loading code (DA3, SAM2, SigLIP2, Qwen3-VL, Qwen3-Embedding, MV3DIS, `RealPipeline.run`) is covered by the evaluation suite alone. Elsewhere stand it in only with `scenetiq.fakes`, at the integration layer. Constructing those classes is fine anywhere: models load on first use.
+- Shared test helpers live in a `helpers.py` or `support.py` next to the tests; a `conftest.py` holds fixtures only and is never imported.
 - Derive every expectation from hand-worked values, so a test checks the formula instead of restating it.
 - `tests/unit/test_fusion.py` and `test_plane_search.py` need open3d: `uv run --with open3d==0.20.0 pytest tests/unit/test_fusion.py tests/unit/test_plane_search.py`.
 
@@ -75,10 +77,10 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the root. See `docs/agents/doma
 
 ### Deployment and configuration
 
-- Deployment is the notebook in `notebooks/` only; its logic belongs in the package's deployment module. That module, `scenetiq.config` and `scenetiq.runtime_log` use only the standard library: the notebook imports them before installing anything.
-- Logs never go to files. The logging config JSON in `src/scenetiq/` decides what reaches stdout, so anything the owner must see goes through a logger it lets through.
+- Deployment is the notebook in `notebooks/` only; its logic belongs in `scenetiq.deployment`. That package, `scenetiq.config` and `scenetiq.runtime_log` use only the standard library: the notebook imports them before installing anything.
+- Logs never go to files. `src/scenetiq/deployment/logging.json` decides what reaches stdout, so anything the owner must see goes through a logger it lets through.
 - Every default lives in `scenetiq.config`; pass a new setting to its stage in `server.build_components`. The notebook overrides them through `SCENETIQ_CONFIG`; only the token travels separately.
 
 ### Unverified
 
-Nothing has run end to end on a GPU. The ranking and spatial defaults named in ADR 0006 and ADR 0007, and DA3 from the fork on numpy 2 without xformers, are guesses until `pytest -m gpu` and `python -m scenetiq.evaluation` say otherwise.
+Nothing has run end to end on a GPU. The ranking and spatial defaults named in ADR 0006 and ADR 0007, and DA3 from the fork on numpy 2 without xformers, are guesses until `pytest evaluation` and `python -m scenetiq.evaluation` say otherwise.

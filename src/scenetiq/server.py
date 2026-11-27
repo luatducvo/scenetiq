@@ -2,7 +2,7 @@ from typing import NamedTuple
 
 from fastapi import FastAPI
 
-from scenetiq.api import create_app
+from scenetiq.api.app import create_app
 from scenetiq.config import Settings
 from scenetiq.domain import CaptionEncoder, Pipeline, QueryParser, TextEncoder
 from scenetiq.fakes import FakeCaptionEncoder, FakePipeline, FakeQueryParser, FakeTextEncoder
@@ -22,12 +22,12 @@ def build_components(settings: Settings) -> Components:
         )
     if settings.pipeline == "real":
         from scenetiq.pipeline.masking import SAM2Masker
-        from scenetiq.pipeline.qwen_embedding import Qwen3TextEmbedder
-        from scenetiq.pipeline.qwen_vl import QwenVLCaptioner
-        from scenetiq.pipeline.real import RealPipeline, RealPipelineOptions
-        from scenetiq.pipeline.reconstruct import DA3Reconstructor
-        from scenetiq.pipeline.siglip import SigLIP2Encoder
-        from scenetiq.query_parser import VLMQueryParser
+        from scenetiq.pipeline.models.qwen3_embedding import Qwen3TextEmbedder
+        from scenetiq.pipeline.models.qwen3_vl import QwenVLCaptioner
+        from scenetiq.pipeline.models.siglip2 import SigLIP2Encoder
+        from scenetiq.pipeline.real_pipeline import RealPipeline, RealPipelineOptions
+        from scenetiq.pipeline.reconstructing import DA3Reconstructor
+        from scenetiq.query.parser import VLMQueryParser
 
         encoder = SigLIP2Encoder(settings.siglip)  # one model for Instance crops and Query text
         caption_encoder = Qwen3TextEmbedder(settings.caption_embedding)  # Descriptions, Queries

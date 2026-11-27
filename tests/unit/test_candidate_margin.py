@@ -1,6 +1,6 @@
 from scenetiq.domain import Aspect
-from scenetiq.query import Match
-from scenetiq.spatial import apply_candidate_margin
+from scenetiq.query.ranking import Match
+from scenetiq.query.spatial import apply_candidate_margin
 
 CAPTION_MARGIN = 0.25
 IMAGE_MARGIN = 0.125

@@ -2,13 +2,12 @@ import json
 import logging
 from dataclasses import replace
 from functools import partial
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-import scenetiq
 from scenetiq.config import AlignmentOptions
+from scenetiq.deployment.processes import LOG_CONFIG_PATH
 from scenetiq.domain import Camera
 from scenetiq.pipeline.alignment import (
     ALIGNMENT_LOGGER,
@@ -348,8 +347,8 @@ def test_without_consensus_no_plane_is_searched_for():
     np.testing.assert_array_equal(aligned.vertices, geometry.vertices)
 
 
-def test_colab_logging_lets_the_alignment_line_reach_stdout():
-    path = Path(scenetiq.__file__).with_name("colab_logging.json")
+def test_logging_config_lets_the_alignment_line_reach_stdout():
+    path = LOG_CONFIG_PATH
     logger = json.loads(path.read_text(encoding="utf-8"))["loggers"][ALIGNMENT_LOGGER]
     assert logger["level"] == "INFO"
     assert logger["handlers"] == ["progress"]

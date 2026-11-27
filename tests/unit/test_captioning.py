@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from PIL import Image
 
-import scenetiq
 from scenetiq.config import CaptioningOptions
+from scenetiq.deployment.processes import LOG_CONFIG_PATH
 from scenetiq.domain import Aspect, Camera, Caption
 from scenetiq.pipeline.captioning import (
     CAPTION_SCHEMA,
@@ -236,8 +236,8 @@ def test_each_instance_is_described_once_from_its_first_views(
     assert "captioning captioned=1 uncaptioned=2" in caplog.messages
 
 
-def test_colab_logging_lets_the_captioning_line_reach_stdout():
-    path = Path(scenetiq.__file__).with_name("colab_logging.json")
+def test_logging_config_lets_the_captioning_line_reach_stdout():
+    path = LOG_CONFIG_PATH
     logger = json.loads(path.read_text(encoding="utf-8"))["loggers"][CAPTIONING_LOGGER]
     assert logger["level"] == "INFO"
     assert logger["handlers"] == ["progress"]
@@ -245,7 +245,7 @@ def test_colab_logging_lets_the_captioning_line_reach_stdout():
 
 
 def test_images_are_shrunk_to_the_pixel_budget_keeping_their_shape():
-    from scenetiq.pipeline.qwen_vl import fit_pixels
+    from scenetiq.pipeline.models.qwen3_vl import fit_pixels
 
     assert fit_pixels(100, 80, 8000) == (100, 80)
     # 400 x 300 = 120,000 px; a 30,000 px budget halves each side.

@@ -17,8 +17,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# GPU model stack of the real Pipeline. `uv sync` does not select it; Colab installs it from the
-# exported lock (see CLAUDE.md, GPU stack). torch and torchvision come from Colab, not from here.
+# GPU model stack of the real Pipeline. `uv sync` does not select it; the GPU runtime installs it
+# from the exported lock (see CLAUDE.md, GPU stack). torch and torchvision come from the runtime.
 gpu = [
     "open3d==0.20.0",
     # Depth Anything 3 from our fork, which fixes its packaging (ADR 0001); the fork declares its
@@ -97,9 +97,8 @@ select = [
 exclude = ["src/scenetiq/vendor", "notebooks", "frontend"]
 
 [tool.pytest.ini_options]
+# The evaluation suite (evaluation/) needs a CUDA GPU: run it with `uv run pytest evaluation`.
 testpaths = ["tests"]
-markers = ["gpu: needs a CUDA GPU and the real model stack (run on Colab)"]
-addopts = "-m 'not gpu'"
 
 [tool.ty.analysis]
 # GPU-only model stack from the gpu extra, imported lazily inside pipeline stages.
@@ -111,6 +110,6 @@ allowed-unresolved-imports = [
     "geocalib.**",
     "depth_anything_3.**",
     "xgrammar.**",
-    # Preinstalled in the Colab kernel; scenetiq.colab imports it lazily for live output.
+    # Preinstalled in the GPU runtime's kernel; scenetiq.deployment.display imports it lazily.
     "IPython.**",
 ]

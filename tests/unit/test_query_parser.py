@@ -10,7 +10,7 @@ from scenetiq.domain import (
     QueryParseError,
     Relation,
 )
-from scenetiq.query_parser import PARSE_SCHEMA, parse_prompt, read_parsed_query
+from scenetiq.query.parser import PARSE_SCHEMA, parse_prompt, read_parsed_query
 
 # The schema of the spec, written out by hand.
 SPEC_SCHEMA = {

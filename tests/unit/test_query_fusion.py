@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from scenetiq.domain import Aspect, Caption, Instance
-from scenetiq.query import best_description, is_semantic_match, run_query, standardize
+from scenetiq.query.ranking import best_description, is_semantic_match, run_query, standardize
 
 
 def _instance(iid: int, image: list[float], caption: list[float] | None = None) -> Instance:

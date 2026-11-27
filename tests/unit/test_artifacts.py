@@ -2,8 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
-from scenetiq.artifacts import CAPTION_EMBEDDINGS_FILE, load_instances, save_reconstruction
 from scenetiq.domain import Aspect, Caption, Instance, Reconstruction
+from scenetiq.storage.artifacts import CAPTION_EMBEDDINGS_FILE, load_instances, save_reconstruction
 
 
 def _instance(iid: int, caption: Caption | None = None, **vectors: list[float]) -> Instance:
