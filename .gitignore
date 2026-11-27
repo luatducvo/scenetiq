@@ -29,6 +29,9 @@ env/
 htmlcov/
 coverage.xml
 
+# Local storage root (Scenes, job database)
+/data/
+
 # Jupyter
 .ipynb_checkpoints/
 
